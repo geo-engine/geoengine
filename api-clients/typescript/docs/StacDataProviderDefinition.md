@@ -22,6 +22,7 @@ Name | Type
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
+`datetimeFrequencyAggregation` | boolean
 
 ## Example
 
@@ -46,6 +47,7 @@ const example = {
   "cacheTtlSecs": null,
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
+  "datetimeFrequencyAggregation": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

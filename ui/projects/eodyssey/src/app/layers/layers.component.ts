@@ -172,7 +172,7 @@ function formatDate(timeMs: number): string {
             </div>
             @if (eodysseyLayerService.selectedPreset(); as preset) {
                 <p class="coverage-status">
-                    <span class="stripe-swatch" [class.outline-swatch]="shown() === 'preset'" aria-hidden="true"></span>
+                    <span class="stripe-swatch" [class.light-swatch]="shown() === 'preset'" aria-hidden="true"></span>
                     Scenes of {{ preset.displayName }} on {{ formattedTime() }}
                 </p>
             }
@@ -320,10 +320,13 @@ function formatDate(timeMs: number): string {
                 );
             }
 
-            // over imagery the map draws the boxes as outlines only
-            .stripe-swatch.outline-swatch {
-                background: none;
-                border-width: 2px;
+            // over imagery the map draws the boxes with faint stripes and no fill
+            .stripe-swatch.light-swatch {
+                background: repeating-linear-gradient(
+                    45deg,
+                    color-mix(in srgb, var(--geoengine-accent-color) 45%, transparent) 0 2px,
+                    transparent 2px 5px
+                );
             }
 
             .availability-heading {
@@ -766,7 +769,7 @@ export class LayersComponent {
         // the panel shows the dates all the time
         this.footprintsService.datesNeeded.set(true);
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
-        // the boxes of the availability lie alone or, as outlines, over the imagery
+        // the boxes of the availability lie alone or, drawn lighter, over the imagery
         effect(() => {
             this.footprintsService.overlayVisible.set(this.availabilityShown());
             this.footprintsService.overlayLight.set(this.shown() === 'preset');

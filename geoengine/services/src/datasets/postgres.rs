@@ -21,6 +21,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use futures::{StreamExt, future, stream};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
@@ -37,7 +38,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
+    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::Transaction;
@@ -1008,7 +1010,7 @@ where
             }
         })?;
 
-        let mut time_steps = create_gap_free_time_steps(
+        let time_steps = create_gap_free_time_steps(
             self.dataset_id,
             query.query_rectangle.time_interval(),
             &conn,
@@ -1018,18 +1020,76 @@ where
             source: Box::new(e),
         })?;
 
-        // A long time range gets the files of the first steps only, so the source does not hold
-        // the files of all steps at once. It asks for `next` when it gets there.
-        // shortcut: each part computes the gap-free steps of the whole rest again, O(steps² / part
-        // size) rows for irregular datasets; limit that query to the part if long ranges get slow.
-        let mut files_time = query.query_rectangle.time_interval();
-        let mut next = None;
-        if time_steps.len() > self.part_steps {
-            let part_end = time_steps[self.part_steps - 1].end();
-            time_steps.truncate(self.part_steps);
-            next = TimeInterval::new(part_end, files_time.end()).ok();
-            files_time = TimeInterval::new(files_time.start(), part_end)?;
-        }
+        // A long time range is answered in parts of `part_steps` time steps, so the source does
+        // not hold the files of all steps at once. The first part is read here, on the connection
+        // of the time steps, so a query of few steps takes one connection as before. The files of
+        // each later part are read when the source gets there.
+        let mut parts = time_steps.chunks(self.part_steps).map(<[_]>::to_vec);
+        let Some(first) = parts.next() else {
+            return Ok(stream::empty().boxed());
+        };
+        let first = self.part(&conn, first, &query).await?;
+        drop(conn);
+
+        let provider = self.clone();
+        let rest = stream::iter(parts.collect::<Vec<_>>()).then(move |time_steps| {
+            let provider = provider.clone();
+            let query = query.clone();
+            async move {
+                let conn = provider.db.conn_pool.get().await.map_err(|e| {
+                    geoengine_operators::error::Error::MetaData {
+                        source: Box::new(e),
+                    }
+                })?;
+                provider.part(&conn, time_steps, &query).await
+            }
+        });
+
+        Ok(stream::once(future::ready(Ok(first))).chain(rest).boxed())
+    }
+
+    async fn result_descriptor(
+        &self,
+    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<
+        dyn MetaData<
+                MultiBandGdalLoadingInfo,
+                RasterResultDescriptor,
+                MultiBandGdalLoadingInfoQueryRectangle,
+            >,
+    > {
+        Box::new(self.clone())
+    }
+}
+
+impl<Tls> MultiBandGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    /// One part of the answer to `query`: some of its time steps in a row and their files.
+    async fn part(
+        &self,
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        time_steps: Vec<TimeInterval>,
+        query: &MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> Result<MultiBandGdalLoadingInfoPart, geoengine_operators::error::Error> {
+        // the queried time within the time steps of this part
+        let query_time = query.query_rectangle.time_interval();
+        let files_time = match (time_steps.first(), time_steps.last()) {
+            (Some(first), Some(last)) => TimeInterval::new(
+                query_time.start().max(first.start()),
+                query_time.end().min(last.end()),
+            )?,
+            _ => query_time,
+        };
 
         let files = if matches!(
             query.detail,
@@ -1092,30 +1152,11 @@ where
             vec![]
         };
 
-        Ok(MultiBandGdalLoadingInfo::new(
+        Ok(MultiBandGdalLoadingInfoPart::new(
             time_steps,
             files,
             self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
-        )
-        .with_next(next))
-    }
-
-    async fn result_descriptor(
-        &self,
-    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
-    > {
-        Box::new(self.clone())
+        ))
     }
 }
 

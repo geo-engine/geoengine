@@ -31,7 +31,7 @@ class RasterFootprints(BaseModel):
     """ # noqa: E501
     spatial_reference: StrictStr = Field(description="The spatial reference of the `bounds`, which is the one of the processing graph. It is part of the answer so that a client can project the boxes onto its map without asking for the metadata of the graph first.", alias="spatialReference")
     steps: List[TimeStepFootprint]
-    next: Optional[TimeInterval] = Field(default=None, description="The next time step to ask for, if more steps exist within the requested time interval.")
+    next: Optional[TimeInterval] = Field(default=None, description="The rest of the requested time interval, if it has more time steps than were answered. Send it as `timeInterval` to get the next steps.")
     __properties: ClassVar[List[str]] = ["spatialReference", "steps", "next"]
 
     model_config = ConfigDict(

@@ -1,6 +1,10 @@
 use super::GdalDatasetParameters;
-use crate::engine::RasterResultDescriptor;
+use crate::engine::{MetaData, RasterResultDescriptor, StaticMetaData};
 use crate::source::gdal_read::TilePlan;
+use futures::{
+    StreamExt, future,
+    stream::{self, BoxStream},
+};
 use geoengine_datatypes::{
     primitives::{
         CacheHint, CacheTtlSeconds, SpatialPartition2D, SpatialPartitioned, TimeInterval,
@@ -19,22 +23,45 @@ pub struct GdalMultiBand {
     pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
+/// The loading info of a query: its parts in time order, which together have the gap-free time
+/// steps of the queried time. A provider answers a long time range in several parts, so that the
+/// files of all time steps are never held at once. It is a stream and not a cursor in the answer,
+/// so that a caller cannot stop after the first part by mistake and the provider can keep its
+/// state between the parts.
+pub type MultiBandGdalLoadingInfo =
+    BoxStream<'static, crate::util::Result<MultiBandGdalLoadingInfoPart>>;
+
+/// One part of a [`MultiBandGdalLoadingInfo`]: some time steps in a row and their files.
 #[derive(Debug, Clone)]
-pub struct MultiBandGdalLoadingInfo {
+pub struct MultiBandGdalLoadingInfoPart {
     files: Vec<TileFile>,
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
-    /// The queried time after this answer, as one interval from the end of this answer to the end
-    /// of the query, if the provider answered only the first part of a long time range. Query it
-    /// for the next part. That answer can have a `next` again, so follow it until there is none.
-    /// It is part of the answer, because only the provider knows how far its answer reaches.
-    next: Option<TimeInterval>,
     /// For each time step whether it has data, if the provider could tell without the files.
-    /// The answer then has no files. This holds for the whole answer: either every time step has
-    /// an entry, or the answer has files. Each part of a long time range (see `next`) decides
-    /// this for itself.
+    /// The part then has no files. This holds for the whole part: either every time step has
+    /// an entry, or the part has files. Each part of a long time range decides this for itself.
     availability: Option<Vec<bool>>,
+}
+
+/// Static metadata answers with its one part, e.g. in tests and benches.
+#[async_trait::async_trait]
+impl<Q> MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>
+    for StaticMetaData<MultiBandGdalLoadingInfoPart, RasterResultDescriptor, Q>
+where
+    Q: std::fmt::Debug + Clone + Send + Sync + 'static,
+{
+    async fn loading_info(&self, _query: Q) -> crate::util::Result<MultiBandGdalLoadingInfo> {
+        Ok(stream::once(future::ready(Ok(self.loading_info.clone()))).boxed())
+    }
+
+    async fn result_descriptor(&self) -> crate::util::Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(&self) -> Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>> {
+        Box::new(self.clone())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -46,7 +73,7 @@ pub struct TileFile {
     pub params: GdalDatasetParameters,
 }
 
-impl MultiBandGdalLoadingInfo {
+impl MultiBandGdalLoadingInfoPart {
     pub fn new(
         time_steps: Vec<TimeInterval>,
         files: Vec<TileFile>,
@@ -85,12 +112,11 @@ impl MultiBandGdalLoadingInfo {
             files,
             time_steps,
             cache_ttl,
-            next: None,
             availability: None,
         }
     }
 
-    /// Marks this answer as telling for each time step whether it has data, without its files.
+    /// Marks this part as telling for each time step whether it has data, without its files.
     ///
     /// # Errors
     /// If `has_data` does not have one entry per time step, because a missing entry would read as
@@ -112,19 +138,6 @@ impl MultiBandGdalLoadingInfo {
         self.availability
             .as_ref()
             .and_then(|has_data| has_data.get(time_step_index).copied())
-    }
-
-    /// Marks this answer as covering only the start of the queried time. `next` is the rest.
-    #[must_use]
-    pub fn with_next(mut self, next: Option<TimeInterval>) -> Self {
-        self.next = next;
-        self
-    }
-
-    /// The queried time after this answer, as one interval, if any. Its answer can have a `next`
-    /// again, so the parts form a chain.
-    pub fn next(&self) -> Option<TimeInterval> {
-        self.next
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -198,7 +211,7 @@ mod tests {
     #[test]
     fn it_rejects_an_availability_without_one_entry_per_time_step() {
         let info = || {
-            MultiBandGdalLoadingInfo::new(
+            MultiBandGdalLoadingInfoPart::new(
                 vec![
                     TimeInterval::new_unchecked(0, 5),
                     TimeInterval::new_unchecked(5, 10),

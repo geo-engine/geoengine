@@ -48,6 +48,9 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(rename = "maxConcurrentCellSearches", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub max_concurrent_cell_searches: Option<Option<i32>>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it which time steps have items instead of searching them. Omitted values do not use it.
+    #[serde(rename = "datetimeFrequencyAggregation", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub datetime_frequency_aggregation: Option<Option<bool>>,
 }
 
 impl StacDataProviderDefinition {
@@ -69,6 +72,7 @@ impl StacDataProviderDefinition {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
         }
     }
 }

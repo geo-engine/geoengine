@@ -58,7 +58,7 @@ pub(crate) struct StacQueryCache {
     datasets: Mutex<Vec<StacProviderDataset>>,
     max_bytes: usize,
     ttl: Duration,
-    search_chunk_steps: u32,
+    search_chunk_steps: std::num::NonZeroU32,
     max_footprint_searches: usize,
     availability_search_cells: usize,
 }
@@ -142,7 +142,7 @@ impl StacQueryCache {
             datasets: Mutex::new(Vec::new()),
             max_bytes,
             ttl,
-            search_chunk_steps: 30,
+            search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
             availability_search_cells: 0,
         }
@@ -160,7 +160,7 @@ impl StacQueryCache {
         self
     }
 
-    pub(crate) fn search_chunk_steps(&self) -> u32 {
+    pub(crate) fn search_chunk_steps(&self) -> std::num::NonZeroU32 {
         self.search_chunk_steps
     }
 

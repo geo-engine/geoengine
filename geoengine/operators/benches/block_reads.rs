@@ -94,8 +94,9 @@ use geoengine_operators::{
     },
     source::{
         GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
-        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
-        MultiBandGdalSourceParameters, TileFile, gdal_worker_process::PoolRequestStats,
+        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart,
+        MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource, MultiBandGdalSourceParameters,
+        TileFile, gdal_worker_process::PoolRequestStats,
     },
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
@@ -309,7 +310,7 @@ fn add_multi_band_dataset(
                 MultiBandGdalLoadingInfoQueryRectangle,
             >,
     > = Box::new(StaticMetaData {
-        loading_info: MultiBandGdalLoadingInfo::new(
+        loading_info: MultiBandGdalLoadingInfoPart::new(
             vec![TimeInterval::default()],
             tile_files,
             None,

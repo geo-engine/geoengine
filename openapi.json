@@ -13356,7 +13356,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/TimeInterval",
-                "description": "The next time step to ask for, if more steps exist within the requested time interval."
+                "description": "The rest of the requested time interval, if it has more time steps than were answered.\nSend it as `timeInterval` to get the next steps."
               },
               {
                 "type": "null"
@@ -15094,6 +15094,13 @@
             ],
             "format": "int32",
             "description": "STAC searches one loading info request runs in parallel; omitted values use 8."
+          },
+          "datetimeFrequencyAggregation": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket\nsize it is asked for with `datetime_frequency_interval`. Footprint requests then ask it\nwhich time steps have items instead of searching them. Omitted values do not use it."
           }
         }
       },

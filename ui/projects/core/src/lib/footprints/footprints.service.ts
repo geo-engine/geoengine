@@ -94,7 +94,7 @@ export class FootprintsService {
     /** The app shows the dates of the layer outside of the calendar, e.g. next to the date with arrows. Set by the app. */
     readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
-    /** Draw the boxes as outlines only, e.g. while imagery of the layer lies below them. Set by the app. */
+    /** Draw the boxes with faint stripes and no fill, e.g. while imagery of the layer lies below them. Set by the app. */
     readonly overlayLight = signal(false);
     /** Its own signal, so opening the calendar does not load dates again that the app shows already. */
     private readonly datesWanted = computed(() => this.calendarOpen() || this.datesNeeded());
@@ -260,10 +260,10 @@ export class FootprintsService {
     readonly overlayLayer = new OlLayerVector({
         source: new OlSourceVector<OlFeature<OlGeometry>>({wrapX: false}),
         // OpenLayers asks for the style of every box in every frame
-        style: (): Style[] => (this.overlayStyleCache ??= overlayStyle(this.overlayLight())),
+        style: (): Style => (this.overlayStyleCache ??= overlayStyle(this.overlayLight())),
     });
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
-    private overlayStyleCache?: Style[];
+    private overlayStyleCache?: Style;
     /** The date whose boxes the overlay shows. */
     private overlayDate?: number;
 

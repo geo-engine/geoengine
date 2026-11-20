@@ -19,8 +19,8 @@ list_limit = 20
 [dataset_service]
 list_limit = 20
 json_size_limit = 10240000 # 10MB
-# Time steps a dataset answers at once. A raster source reads a longer time range in parts of this
-# many steps and reads the next part while it loads the tiles of the current one.
+# Time steps of one part of a dataset's answer. A raster source reads a longer time range in parts
+# of this many steps and reads the next part while it loads the tiles of the current one.
 loading_info_part_steps = 32
 
 [layer_service]
@@ -382,17 +382,19 @@ ttl_secs = 3600
 # e.g. of a calendar, one search asks the STAC server for the steps of a chunk of one grid cell at once
 # and stores the result per step. The chunks start at the origin of the dataset's time axis, so they do
 # not follow the months. More steps mean fewer requests for a long window, but each one returns more
-# items (up to the pages of a whole chunk) even if only a few days are looked at.
+# items (up to the pages of a whole chunk) even if only a few days are looked at. Must not be 0.
 search_chunk_steps = 30
 # A footprint request needing more STAC searches than this for one chunk of `search_chunk_steps` time steps
 # fails as too large (`FootprintQueryTooLarge`). The limit counts per chunk, because the provider answers
-# chunk by chunk and keeps no state in between. A request covers at most 100 time steps, so with the defaults
+# chunk by chunk. A request covers at most 100 time steps, so with the defaults
 # it needs at most five chunks of 50 searches. A request of one time step (the coverage of a date on the map)
-# has no limit, because it runs the searches the map tiles of that date run anyway.
+# runs the searches the map tiles of that date run. It counts only the ones that are not cached yet, so it costs
+# nothing where the map was loaded, and it is refused for a large area that nobody has looked at.
 # It also bounds the grid cells for which the days without items of an aggregation are stored in the cache.
 max_footprint_searches = 50
 # A calendar request for at most this many grid cells searches the files (exact days, warms the map's cache);
-# for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates
+# for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates.
+# Aggregations are only asked from providers that are set up with `datetimeFrequencyAggregation`; all others search.
 availability_search_cells = 4
 
 [provider_cache]
