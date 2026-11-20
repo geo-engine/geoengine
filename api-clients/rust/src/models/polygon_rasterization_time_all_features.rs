@@ -10,17 +10,17 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// PolygonRasterizationTimeIgnore : One time slice that is valid forever and contains all features, regardless of their times.
+/// PolygonRasterizationTimeAllFeatures : One time slice that is valid forever and contains all features, regardless of their times.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PolygonRasterizationTimeIgnore {
+pub struct PolygonRasterizationTimeAllFeatures {
     #[serde(rename = "type")]
     pub r#type: Type,
 }
 
-impl PolygonRasterizationTimeIgnore {
+impl PolygonRasterizationTimeAllFeatures {
     /// One time slice that is valid forever and contains all features, regardless of their times.
-    pub fn new(r#type: Type) -> PolygonRasterizationTimeIgnore {
-        PolygonRasterizationTimeIgnore {
+    pub fn new(r#type: Type) -> PolygonRasterizationTimeAllFeatures {
+        PolygonRasterizationTimeAllFeatures {
             r#type,
         }
     }
@@ -28,13 +28,13 @@ impl PolygonRasterizationTimeIgnore {
 /// 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Type {
-    #[serde(rename = "ignore")]
-    Ignore,
+    #[serde(rename = "allFeatures")]
+    AllFeatures,
 }
 
 impl Default for Type {
     fn default() -> Type {
-        Self::Ignore
+        Self::AllFeatures
     }
 }
 

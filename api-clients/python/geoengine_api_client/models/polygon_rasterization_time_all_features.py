@@ -23,7 +23,7 @@ from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
 
-class PolygonRasterizationTimeIgnore(BaseModel):
+class PolygonRasterizationTimeAllFeatures(BaseModel):
     """
     One time slice that is valid forever and contains all features, regardless of their times.
     """ # noqa: E501
@@ -33,8 +33,8 @@ class PolygonRasterizationTimeIgnore(BaseModel):
     @field_validator('type')
     def type_validate_enum(cls, value):
         """Validates the enum"""
-        if value not in set(['ignore']):
-            raise ValueError("must be one of enum values ('ignore')")
+        if value not in set(['allFeatures']):
+            raise ValueError("must be one of enum values ('allFeatures')")
         return value
 
     model_config = ConfigDict(
@@ -55,7 +55,7 @@ class PolygonRasterizationTimeIgnore(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of PolygonRasterizationTimeIgnore from a JSON string"""
+        """Create an instance of PolygonRasterizationTimeAllFeatures from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -80,7 +80,7 @@ class PolygonRasterizationTimeIgnore(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of PolygonRasterizationTimeIgnore from a dict"""
+        """Create an instance of PolygonRasterizationTimeAllFeatures from a dict"""
         if obj is None:
             return None
 
