@@ -8,7 +8,7 @@ import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
 import {of} from 'rxjs';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, Mock, vi} from 'vitest';
 import {LayersService, SpatialReference, Time, UserService} from '@geoengine/common';
 import {
     CoreModule,
@@ -79,6 +79,7 @@ describe('EOdyssey debug reprojection', () => {
                         mapTileLayer: vi.fn().mockReturnValue({dataConnectorId: 'data', layerId: 'layer'}),
                         catalogueLoading: vi.fn().mockReturnValue(false),
                         appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
+                        selectedMinTileMatrixIndex: vi.fn().mockReturnValue(6),
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
@@ -157,6 +158,27 @@ describe('EOdyssey debug reprojection', () => {
         fixture.componentRef.setInput('debug', 'false');
         fixture.detectChanges();
         expect(tms()).toBe('CustomWebMercator');
+    });
+
+    it('keeps the selected layer hidden while its data is off and asks for no coverage where its tiles would not load', () => {
+        const layers = TestBed.inject(EOdysseyLayerService) as unknown as {mapTileLayer: Mock; selectedPreset: Mock};
+        layers.mapTileLayer.mockReturnValue(undefined);
+        layers.selectedPreset.mockReturnValue({connectorId: 'selected', layerId: 'preset'});
+        fixture.detectChanges();
+        const tileLayer = fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer'));
+        expect(tileLayer.properties['dataLayerId']).toBe('preset');
+        expect(tileLayer.properties['isVisible']).toBe(false);
+        expect(tileLayer.properties['minTileMatrixIndex']).toBe(6);
+
+        const overlayBlocked = TestBed.inject(FootprintsService).overlayBlocked;
+        // until the layer knows its zoom limit
+        expect(overlayBlocked()).toBe(true);
+        tileLayer.triggerEventHandler('tilesLoadable', true);
+        TestBed.tick();
+        expect(overlayBlocked()).toBe(false);
+        tileLayer.triggerEventHandler('tilesLoadable', false);
+        TestBed.tick();
+        expect(overlayBlocked()).toBe(true);
     });
 
     it('asks to zoom in on the map when the boxes of the coverage need too many catalog searches', () => {

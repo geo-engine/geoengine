@@ -86,6 +86,10 @@ export class EOdysseyLayerService {
         const applied = this.appliedVisualization();
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
     });
+    /** The zoom limit of the selected visualization, also while it is not on the map. */
+    readonly selectedMinTileMatrixIndex = computed(
+        () => this.selectedPreset()?.minTileMatrixIndex ?? this.selectedDataSource()?.minTileMatrixIndex ?? 0,
+    );
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();

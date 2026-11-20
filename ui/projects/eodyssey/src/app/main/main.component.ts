@@ -96,8 +96,25 @@ export class MainComponent {
     readonly tileMatrixSet = computed<TMSId>(() => (this.debug() && this.frontendReprojection() ? 'Custom' : 'CustomWebMercator'));
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
-    readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
+    /**
+     * The layer on the map, or the selected one hidden while its data is off. A hidden layer loads no tiles, but tells
+     * whether its tiles would load at this zoom, so the coverage of a date is not asked for where they would not.
+     */
+    readonly tileLayer = computed(() => {
+        const onMap = this.mapTileLayer();
+        if (onMap) return {...onMap, minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(), isVisible: true};
+        const preset = this.eodysseyLayerService.selectedPreset();
+        return (
+            preset && {
+                dataConnectorId: preset.connectorId,
+                layerId: preset.layerId,
+                minTileMatrixIndex: this.eodysseyLayerService.selectedMinTileMatrixIndex(),
+                isVisible: false,
+            }
+        );
+    });
     readonly zoomRequired = signal(false);
+    readonly tilesLoadable = signal(false);
     readonly coverageZoomRequired = computed(() => this.footprintsService.overlayVisible() && this.footprintsService.overlayTooLarge());
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
@@ -110,8 +127,6 @@ export class MainComponent {
     readonly MeasurementType = MeasurementType;
 
     readonly mapImageLoading = signal(false);
-
-    readonly testIsVisible = signal(true);
 
     constructor() {
         // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map.
@@ -128,13 +143,8 @@ export class MainComponent {
                 },
             );
         });
-        // the zoom limit is known only for the layer on the map, so a selected layer that is not applied yet is not blocked
-        effect(() => {
-            const preset = this.eodysseyLayerService.selectedPreset();
-            const mapLayer = this.eodysseyLayerService.mapTileLayer();
-            const isMapLayer = !preset || (preset.connectorId === mapLayer?.dataConnectorId && preset.layerId === mapLayer.layerId);
-            this.footprintsService.overlayBlocked.set(!!mapLayer && isMapLayer && this.zoomRequired());
-        });
+        // without a limit, the coverage of a date zoomed out would search the catalog over a large area
+        effect(() => this.footprintsService.overlayBlocked.set(!this.tilesLoadable()));
 
         // the stripes would hide the imagery of the layer on the map
         effect(() => this.footprintsService.overlayLight.set(!!this.eodysseyLayerService.mapTileLayer()));
