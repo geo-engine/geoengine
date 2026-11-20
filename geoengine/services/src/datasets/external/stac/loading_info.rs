@@ -561,7 +561,8 @@ impl StacMultiBandMetaData {
     /// How many times coarser than the dataset an asset of this resolution is, if the dataset
     /// reads such assets: 1 for its own resolution, or the factor of a coarser asset.
     fn asset_factor(&self, resolution: SpatialResolution) -> Option<NonZeroU32> {
-        let factor = resolution.integer_multiple_of(self.dataset.resolution)?;
+        let factor =
+            resolution.integer_multiple_of(self.dataset.spatial_grid.spatial_resolution())?;
         (factor.get() == 1
             || self.dataset.bands.iter().any(|band| {
                 band.coarser_assets
@@ -633,9 +634,11 @@ impl StacMultiBandMetaData {
         let Some(factor) = self.asset_factor(geo_transform.spatial_resolution()) else {
             return Ok(());
         };
+        // the grid, not `resolution`: tiles have its pixel size, and harvested datasets store
+        // a square `resolution` next to a grid whose pixels are not exactly square
         let geo_transform = snap_pixel_size(
             geo_transform,
-            self.dataset.resolution.times(factor),
+            self.dataset.spatial_grid.spatial_resolution().times(factor),
             &asset.href,
         )?;
 
@@ -832,7 +835,7 @@ fn asset_file_path(href: &str) -> geoengine_operators::util::Result<PathBuf> {
     }
 }
 
-/// Snaps the pixel size of an asset to `resolution`, a multiple of the dataset's resolution,
+/// Snaps the pixel size of an asset to `resolution`, a multiple of the dataset grid's pixel size,
 /// keeping its origin and signs. The metadata may differ from it by rounding errors, which
 /// grids compare more strictly than metadata.
 fn snap_pixel_size(
@@ -1845,6 +1848,13 @@ mod tests {
         let server = Server::run();
         let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
         let mut dataset = definition.datasets[0].clone();
+        // as harvested: a square `resolution` next to a grid whose y pixel size differs from it
+        // by rounding, which tiles have and files must have too
+        let grid_y_pixel_size = -9.999_999_999_98;
+        dataset.spatial_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, grid_y_pixel_size),
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979])).unwrap(),
+        );
         dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
             asset_band: crate::datasets::external::stac::StacAssetBand {
                 asset_title: "Red (band 4) - 10m".to_owned(),
@@ -1925,11 +1935,17 @@ mod tests {
             PathBuf::from("s3://example/B04_60m.jp2")
         );
         assert_eq!(file.params.geo_transform.x_pixel_size.get(), 60.);
-        assert_eq!(file.params.geo_transform.y_pixel_size.get(), -60.);
+        assert_eq!(
+            file.params.geo_transform.y_pixel_size.get(),
+            grid_y_pixel_size * 6.
+        );
         assert_eq!(
             file.spatial_partition,
-            SpatialPartition2D::new((500_000., 5_800_000.).into(), (500_120., 5_799_880.).into())
-                .unwrap()
+            SpatialPartition2D::new(
+                (500_000., 5_800_000.).into(),
+                (500_120., 5_800_000. + 2. * grid_y_pixel_size * 6.).into()
+            )
+            .unwrap()
         );
     }
 
