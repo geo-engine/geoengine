@@ -119,7 +119,7 @@ export class MainComponent {
     readonly zoomPrompt = computed(() => {
         if (this.mapTileLayer() && this.zoomRequired()) return 'Zoom in further to load the selected layer.';
         const footprints = this.footprintsService;
-        if (footprints.overlayTooLarge() || (footprints.overlayVisible() && footprints.overlayBlocked())) {
+        if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
             return 'Zoom in further to see the data availability.';
         }
         return undefined;
