@@ -10,8 +10,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { PolygonRasterizationTimeAllFeaturesFromJSONTyped, PolygonRasterizationTimeAllFeaturesToJSON, } from './PolygonRasterizationTimeAllFeatures';
 import { PolygonRasterizationTimeFeatureTimesFromJSONTyped, PolygonRasterizationTimeFeatureTimesToJSON, } from './PolygonRasterizationTimeFeatureTimes';
-import { PolygonRasterizationTimeIgnoreFromJSONTyped, PolygonRasterizationTimeIgnoreToJSON, } from './PolygonRasterizationTimeIgnore';
 import { PolygonRasterizationTimeRegularFromJSONTyped, PolygonRasterizationTimeRegularToJSON, } from './PolygonRasterizationTimeRegular';
 export function PolygonRasterizationTimeFromJSON(json) {
     return PolygonRasterizationTimeFromJSONTyped(json, false);
@@ -21,10 +21,10 @@ export function PolygonRasterizationTimeFromJSONTyped(json, ignoreDiscriminator)
         return json;
     }
     switch (json['type']) {
+        case 'allFeatures':
+            return Object.assign({}, PolygonRasterizationTimeAllFeaturesFromJSONTyped(json, true), { type: 'allFeatures' });
         case 'featureTimes':
             return Object.assign({}, PolygonRasterizationTimeFeatureTimesFromJSONTyped(json, true), { type: 'featureTimes' });
-        case 'ignore':
-            return Object.assign({}, PolygonRasterizationTimeIgnoreFromJSONTyped(json, true), { type: 'ignore' });
         case 'regular':
             return Object.assign({}, PolygonRasterizationTimeRegularFromJSONTyped(json, true), { type: 'regular' });
         default:
@@ -39,10 +39,10 @@ export function PolygonRasterizationTimeToJSONTyped(value, ignoreDiscriminator =
         return value;
     }
     switch (value['type']) {
+        case 'allFeatures':
+            return Object.assign({}, PolygonRasterizationTimeAllFeaturesToJSON(value), { 'type': 'allFeatures' });
         case 'featureTimes':
             return Object.assign({}, PolygonRasterizationTimeFeatureTimesToJSON(value), { 'type': 'featureTimes' });
-        case 'ignore':
-            return Object.assign({}, PolygonRasterizationTimeIgnoreToJSON(value), { 'type': 'ignore' });
         case 'regular':
             return Object.assign({}, PolygonRasterizationTimeRegularToJSON(value), { 'type': 'regular' });
         default:

@@ -1543,8 +1543,8 @@ class PolygonRasterizationTime:
                 step=time_dict["step"]["step"],
                 reference=np.datetime64(reference, "ms") if reference is not None else None,
             )
-        if time_dict["type"] == "ignore":
-            return PolygonRasterizationTimeIgnore()
+        if time_dict["type"] == "allFeatures":
+            return PolygonRasterizationTimeAllFeatures()
         raise ValueError(f"Invalid polygon rasterization time type {time_dict['type']}")
 
     @classmethod
@@ -1568,9 +1568,9 @@ class PolygonRasterizationTime:
         return PolygonRasterizationTimeRegular(granularity, step, reference)
 
     @classmethod
-    def ignore(cls) -> PolygonRasterizationTime:
-        """All features are rasterized into one time slice that is valid forever."""
-        return PolygonRasterizationTimeIgnore()
+    def all_features(cls) -> PolygonRasterizationTime:
+        """All features, regardless of their times, are rasterized into one time slice that is valid forever."""
+        return PolygonRasterizationTimeAllFeatures()
 
 
 @dataclass
@@ -1600,11 +1600,11 @@ class PolygonRasterizationTimeRegular(PolygonRasterizationTime):
 
 
 @dataclass
-class PolygonRasterizationTimeIgnore(PolygonRasterizationTime):
-    """All features are rasterized into one time slice that is valid forever."""
+class PolygonRasterizationTimeAllFeatures(PolygonRasterizationTime):
+    """All features, regardless of their times, are rasterized into one time slice that is valid forever."""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "ignore"}
+        return {"type": "allFeatures"}
 
 
 class PolygonRasterization(RasterOperator):

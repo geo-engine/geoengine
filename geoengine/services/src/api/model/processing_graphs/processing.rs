@@ -2355,7 +2355,8 @@ impl TryFrom<Rasterization> for OperatorsRasterization {
 ///   Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.
 ///   This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.
 /// - `regular`: slices of a fixed time step, each containing all features whose time intersects it.
-/// - `ignore`: one slice that is valid forever and contains all features.
+/// - `allFeatures`: one slice that is valid forever and contains all features of the source, regardless of their times.
+///   Every query gets this slice, whatever its time, so the features of all times are read for each tile.
 ///
 /// ## Clipping a raster with polygons
 ///
@@ -2478,7 +2479,7 @@ pub struct PolygonRasterizationParameters {
     #[schema(examples(
         json!({ "type": "featureTimes" }),
         json!({ "type": "regular", "step": { "granularity": "months", "step": 1 } }),
-        json!({ "type": "ignore" })
+        json!({ "type": "allFeatures" })
     ))]
     #[serde(default)]
     pub time: PolygonRasterizationTime,
@@ -2564,7 +2565,7 @@ pub enum PolygonRasterizationAggregation {
 pub enum PolygonRasterizationTime {
     FeatureTimes(PolygonRasterizationTimeFeatureTimes),
     Regular(PolygonRasterizationTimeRegular),
-    Ignore(PolygonRasterizationTimeIgnore),
+    AllFeatures(PolygonRasterizationTimeAllFeatures),
 }
 
 impl Default for PolygonRasterizationTime {
@@ -2597,10 +2598,10 @@ pub struct PolygonRasterizationTimeRegular {
 }
 
 /// One time slice that is valid forever and contains all features, regardless of their times.
-#[type_tag(value = "ignore")]
+#[type_tag(value = "allFeatures")]
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct PolygonRasterizationTimeIgnore {}
+pub struct PolygonRasterizationTimeAllFeatures {}
 
 impl From<PolygonRasterizationValue> for OperatorsBurnValue {
     fn from(value: PolygonRasterizationValue) -> Self {
@@ -2680,7 +2681,7 @@ impl From<PolygonRasterizationTime> for OperatorsRasterizationTime {
                 step: regular.step.into(),
                 reference: regular.reference.map(Into::into),
             },
-            PolygonRasterizationTime::Ignore(_) => Self::Ignore,
+            PolygonRasterizationTime::AllFeatures(_) => Self::AllFeatures,
         }
     }
 }
@@ -2698,8 +2699,8 @@ impl From<OperatorsRasterizationTime> for PolygonRasterizationTime {
                     reference: reference.map(Into::into),
                 })
             }
-            OperatorsRasterizationTime::Ignore => {
-                Self::Ignore(PolygonRasterizationTimeIgnore::default())
+            OperatorsRasterizationTime::AllFeatures => {
+                Self::AllFeatures(PolygonRasterizationTimeAllFeatures::default())
             }
         }
     }

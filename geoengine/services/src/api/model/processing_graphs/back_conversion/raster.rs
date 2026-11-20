@@ -1114,7 +1114,7 @@ mod tests {
             ),
             (
                 OperatorsBurnValue::Count,
-                OperatorsRasterizationTime::Ignore,
+                OperatorsRasterizationTime::AllFeatures,
             ),
             (
                 polygon_rasterization().params.value,

@@ -853,14 +853,14 @@ def regular(
 
 Regular time slices of length `step`, aligned to `reference` (default: Unix epoch).
 
-#### ignore
+#### all\_features
 
 ```python
 @classmethod
-def ignore(cls) -> PolygonRasterizationTime
+def all_features(cls) -> PolygonRasterizationTime
 ```
 
-All features are rasterized into one time slice that is valid forever.
+All features, regardless of their times, are rasterized into one time slice that is valid forever.
 
 ## PolygonRasterizationTimeFeatureTimes Objects
 
@@ -880,14 +880,14 @@ class PolygonRasterizationTimeRegular(PolygonRasterizationTime)
 
 Regular time slices that contain all features whose time intersects them.
 
-## PolygonRasterizationTimeIgnore Objects
+## PolygonRasterizationTimeAllFeatures Objects
 
 ```python
 @dataclass
-class PolygonRasterizationTimeIgnore(PolygonRasterizationTime)
+class PolygonRasterizationTimeAllFeatures(PolygonRasterizationTime)
 ```
 
-All features are rasterized into one time slice that is valid forever.
+All features, regardless of their times, are rasterized into one time slice that is valid forever.
 
 ## PolygonRasterization Objects
 

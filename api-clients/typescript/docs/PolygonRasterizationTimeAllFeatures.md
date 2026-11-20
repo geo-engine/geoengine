@@ -1,5 +1,5 @@
 
-# PolygonRasterizationTimeIgnore
+# PolygonRasterizationTimeAllFeatures
 
 One time slice that is valid forever and contains all features, regardless of their times.
 
@@ -12,12 +12,12 @@ Name | Type
 ## Example
 
 ```typescript
-import type { PolygonRasterizationTimeIgnore } from '@geoengine/api-client'
+import type { PolygonRasterizationTimeAllFeatures } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
   "type": null,
-} satisfies PolygonRasterizationTimeIgnore
+} satisfies PolygonRasterizationTimeAllFeatures
 
 console.log(example)
 
@@ -26,7 +26,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as PolygonRasterizationTimeIgnore
+const exampleParsed = JSON.parse(exampleJSON) as PolygonRasterizationTimeAllFeatures
 console.log(exampleParsed)
 ```
 

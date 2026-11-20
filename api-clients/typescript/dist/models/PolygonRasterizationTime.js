@@ -16,8 +16,8 @@ exports.PolygonRasterizationTimeFromJSON = PolygonRasterizationTimeFromJSON;
 exports.PolygonRasterizationTimeFromJSONTyped = PolygonRasterizationTimeFromJSONTyped;
 exports.PolygonRasterizationTimeToJSON = PolygonRasterizationTimeToJSON;
 exports.PolygonRasterizationTimeToJSONTyped = PolygonRasterizationTimeToJSONTyped;
+const PolygonRasterizationTimeAllFeatures_1 = require("./PolygonRasterizationTimeAllFeatures");
 const PolygonRasterizationTimeFeatureTimes_1 = require("./PolygonRasterizationTimeFeatureTimes");
-const PolygonRasterizationTimeIgnore_1 = require("./PolygonRasterizationTimeIgnore");
 const PolygonRasterizationTimeRegular_1 = require("./PolygonRasterizationTimeRegular");
 function PolygonRasterizationTimeFromJSON(json) {
     return PolygonRasterizationTimeFromJSONTyped(json, false);
@@ -27,10 +27,10 @@ function PolygonRasterizationTimeFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     switch (json['type']) {
+        case 'allFeatures':
+            return Object.assign({}, (0, PolygonRasterizationTimeAllFeatures_1.PolygonRasterizationTimeAllFeaturesFromJSONTyped)(json, true), { type: 'allFeatures' });
         case 'featureTimes':
             return Object.assign({}, (0, PolygonRasterizationTimeFeatureTimes_1.PolygonRasterizationTimeFeatureTimesFromJSONTyped)(json, true), { type: 'featureTimes' });
-        case 'ignore':
-            return Object.assign({}, (0, PolygonRasterizationTimeIgnore_1.PolygonRasterizationTimeIgnoreFromJSONTyped)(json, true), { type: 'ignore' });
         case 'regular':
             return Object.assign({}, (0, PolygonRasterizationTimeRegular_1.PolygonRasterizationTimeRegularFromJSONTyped)(json, true), { type: 'regular' });
         default:
@@ -45,10 +45,10 @@ function PolygonRasterizationTimeToJSONTyped(value, ignoreDiscriminator = false)
         return value;
     }
     switch (value['type']) {
+        case 'allFeatures':
+            return Object.assign({}, (0, PolygonRasterizationTimeAllFeatures_1.PolygonRasterizationTimeAllFeaturesToJSON)(value), { 'type': 'allFeatures' });
         case 'featureTimes':
             return Object.assign({}, (0, PolygonRasterizationTimeFeatureTimes_1.PolygonRasterizationTimeFeatureTimesToJSON)(value), { 'type': 'featureTimes' });
-        case 'ignore':
-            return Object.assign({}, (0, PolygonRasterizationTimeIgnore_1.PolygonRasterizationTimeIgnoreToJSON)(value), { 'type': 'ignore' });
         case 'regular':
             return Object.assign({}, (0, PolygonRasterizationTimeRegular_1.PolygonRasterizationTimeRegularToJSON)(value), { 'type': 'regular' });
         default:
