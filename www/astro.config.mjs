@@ -6,6 +6,7 @@ import mermaid from 'astro-mermaid';
 import starlight from '@astrojs/starlight';
 import openApiOperatorsPlugin from './plugins/astro-openapi.ts';
 import pydocPlugin from './plugins/pydoc.ts';
+import notebookPlugin from './plugins/notebook.ts';
 import {generateFavicons} from './plugins/favicon.ts';
 import starlightLinksValidator from 'starlight-links-validator';
 
@@ -44,6 +45,11 @@ export default defineConfig({
         }),
         pydocPlugin({
             outputDir: './src/content/docs/docs/python',
+        }),
+        notebookPlugin({
+            input: '../python/examples/ai_agent_workflow.ipynb',
+            output: './src/content/docs/docs/getting-started/ai-agents.md',
+            sidebarOrder: 2,
         }),
         starlight({
             plugins: [starlightLinksValidator()],
