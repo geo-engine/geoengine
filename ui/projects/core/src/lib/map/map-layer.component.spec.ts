@@ -199,6 +199,17 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(0);
     });
 
+    it('renders again when it is shown again, so the tiles turned away while hidden are asked for', async () => {
+        await setResolution(999);
+        fixture.componentRef.setInput('isVisible', false);
+        await fixture.whenStable();
+        const changed = vi.spyOn(fixture.componentInstance.mapLayer, 'changed');
+
+        fixture.componentRef.setInput('isVisible', true);
+        await fixture.whenStable();
+        expect(changed).toHaveBeenCalled();
+    });
+
     it('is loadable some matrix levels before the zoom limit when asked for', async () => {
         fixture.componentRef.setInput('tilesLoadableLevelsOut', 1);
         await setResolution(1999);
