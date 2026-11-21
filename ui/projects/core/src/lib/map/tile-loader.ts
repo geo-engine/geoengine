@@ -434,10 +434,6 @@ export class TileLoader {
         if (!enabled) this.cancelPending('layer is outside its visibility or resolution restriction');
     }
 
-    isEnabled(): boolean {
-        return this.enabled;
-    }
-
     /** Cancels requests and retries while retaining loaded tiles and metadata URLs for reuse. */
     cancelPending(reason: string): void {
         for (const tile of this.outstanding) {
