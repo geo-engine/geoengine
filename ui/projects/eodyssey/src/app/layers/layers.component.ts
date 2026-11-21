@@ -389,24 +389,27 @@ function formatDate(timeMs: number): string {
             // a box like the buttons around it, in the light blue of the data source list
             .date-strip {
                 position: relative;
-                display: flex;
+                // a grid, so the bars are evenly spaced whatever their number
+                display: grid;
+                grid-auto-flow: column;
+                grid-auto-columns: 1fr;
+                gap: 0.375rem;
                 box-sizing: border-box;
                 height: 2.75rem;
-                padding: 0.25rem;
+                padding: 0.5rem;
                 border-radius: 0.5rem;
                 background: color-mix(in srgb, var(--geoengine-primary-color) 7%, var(--geoengine-card-background-color));
             }
 
             // the bar of a date: tall with scenes, short without, faint where the layer cannot tell
             .tick {
-                flex: 1;
+                position: relative;
                 min-width: 0;
                 display: flex;
                 align-items: flex-end;
-                // the bar is inset in its own button, so the mark of the selected date lies evenly around it
-                padding: 0.25rem 0.1875rem;
+                padding: 0;
                 border: none;
-                border-radius: 0.375rem;
+                border-radius: 0.25rem;
                 background: none;
                 cursor: pointer;
 
@@ -428,28 +431,30 @@ function formatDate(timeMs: number): string {
                     background: color-mix(in srgb, var(--geoengine-primary-color) 12%, transparent);
                 }
 
+                // rings around the bar that take no space, so they lie evenly around it
                 &:hover {
-                    background: color-mix(in srgb, var(--geoengine-primary-color) 12%, transparent);
+                    outline: 2px solid color-mix(in srgb, var(--geoengine-primary-color) 35%, transparent);
+                    outline-offset: 2px;
                 }
 
+                // the selected date: a white box with a dark ring, clear also among tall bars
                 &.tick-selected {
-                    background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
+                    background: var(--geoengine-card-background-color);
+                    outline: 2px solid var(--geoengine-foreground-text-color);
+                    outline-offset: 2px;
+                    box-shadow: 0 0 0 2px var(--geoengine-card-background-color);
                 }
 
-                // a stop line after the date of today: later dates cannot have scenes yet
-                &.tick-today {
-                    position: relative;
-
-                    &::before {
-                        content: '';
-                        position: absolute;
-                        top: -0.25rem;
-                        bottom: -0.25rem;
-                        right: -1px;
-                        width: 2px;
-                        border-radius: 1px;
-                        background: var(--geoengine-accent-color);
-                    }
+                // a stop line after the date of today, in the gap to the next: later dates cannot have scenes yet
+                &.tick-today::before {
+                    content: '';
+                    position: absolute;
+                    top: -0.375rem;
+                    bottom: -0.375rem;
+                    right: calc(-0.1875rem - 1px);
+                    width: 2px;
+                    border-radius: 1px;
+                    background: var(--geoengine-accent-color);
                 }
             }
 

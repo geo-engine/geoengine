@@ -297,6 +297,23 @@ describe('FootprintsService overlay', () => {
             expect(new Set(starts).size).toBe(starts.length);
         });
 
+        it('moves the window of dates with the layer, so a layer with longer steps has its steps before the time too', async () => {
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(getFootprints.mock.calls[0][1].timeInterval?.split('/')[0]).toBe('2026-03-01T00:00:00.000Z');
+
+            // another layer with yearly steps, on the same selected 1 April 2026
+            getFootprints.mockClear();
+            service.layer.set({key: 'provider/yearly', processingGraphId: () => registerLayer('provider', 'yearly')});
+            service.timeStepOverride.set({durationAmount: 1, durationUnit: 'years'});
+            await settle();
+            // a first request with the old window may go out before the window moves; it is aborted
+            const starts = getFootprints.mock.calls.map(([, query]) => query.timeInterval?.split('/')[0]);
+            expect(starts).toContain('2019-04-01T00:00:00.000Z');
+            expect(service.steps()).toEqual([]);
+        });
+
         it('asks the month first for daily steps, but the whole window at once for steps of a month or more', async () => {
             const service = createService();
             service.datesNeeded.set(true);
