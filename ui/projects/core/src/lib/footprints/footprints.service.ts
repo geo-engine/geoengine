@@ -56,6 +56,11 @@ function nextStepStart(timeMs: number, timeStep: TimeStepDuration): number {
     return new Time(new Date(timeMs)).add(timeStep.durationAmount, timeStep.durationUnit).start.valueOf();
 }
 
+/** The time `count` steps before `timeMs`. */
+function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
+    return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
+}
+
 /** The raster layer an app wants to know the footprints of. */
 export interface FootprintLayer {
     /** Identifies the layer, so its graph and metadata are asked for once. */
@@ -138,8 +143,14 @@ export class FootprintsService {
             const fullEnd = Math.max(window.end, minimalEnd.start.valueOf());
             // nothing after today has data, so the window ends with the step of today, unless it starts later or
             // the calendar shows more
-            const todayEnd = nextStepStart(Date.now(), timeStep);
+            const todayEnd = Date.now() + 1;
             const end = window.start < todayEnd ? Math.min(fullEnd, Math.max(todayEnd, window.end)) : fullEnd;
+            // a window of long steps cut at today reaches back instead, so a strip of dates has steps around the
+            // selected one and not just the step of today; short steps keep the month of the start first, see below
+            const start =
+                end < fullEnd && !isShorterThanMonth(timeStep.durationUnit)
+                    ? Math.min(window.start, minusSteps(end, timeStep, WINDOW_TIME_STEPS))
+                    : window.start;
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -159,10 +170,10 @@ export class FootprintsService {
 
             // the month of the start first, so the visible month shows soonest, then the server's cursor is followed;
             // a month holds one step of a month or more, so then the window is asked at once
-            const startDate = new Date(window.start);
+            const startDate = new Date(start);
             const monthEnd = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1);
             const firstEnd = isShorterThanMonth(timeStep.durationUnit) ? Math.min(monthEnd, end) : end;
-            let range = {start: window.start, end: firstEnd};
+            let range = {start, end: firstEnd};
             let footprints: Footprints | undefined;
             for (let request = 0; request < MAX_WINDOW_REQUESTS; request++) {
                 const part = await get(range);
