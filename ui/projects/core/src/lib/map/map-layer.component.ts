@@ -685,7 +685,11 @@ export class OlOgcApiMapTileLayerComponent
             const blocked = valid && this.viewport().resolution >= maxResolution;
             this._mapLayer.setMaxResolution(maxResolution ?? 0);
             this._mapLayer.setVisible(this.isVisible());
-            this.loader?.setEnabled(valid && this.isVisible() && !blocked);
+            const enabled = valid && this.isVisible() && !blocked;
+            const wasEnabled = this.loader?.isEnabled();
+            this.loader?.setEnabled(enabled);
+            // the tiles turned away while the loader was off are idle again, and are only asked for when the layer renders anew
+            if (enabled && wasEnabled === false) this._mapLayer.changed();
             this.zoomRequired.emit(blocked);
             // shortcut: assumes that the resolution halves per matrix level, as in our tile matrix sets; read the grid if one differs
             this.tilesLoadable.emit(valid && this.viewport().resolution < maxResolution * 2 ** this.tilesLoadableLevelsOut());
