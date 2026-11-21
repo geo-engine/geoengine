@@ -146,13 +146,6 @@ function formatDate(timeMs: number): string {
                             <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
                         }
                     </div>
-                    <!-- what the bars mean; each bar names its date and status itself, so screen readers skip this -->
-                    <p class="catalogue-message strip-legend" aria-hidden="true">
-                        <span><span class="legend-bar legend-data"></span>Scenes</span>
-                        <span><span class="legend-bar legend-empty"></span>None</span>
-                        <span><span class="legend-bar legend-unknown"></span>Not known</span>
-                        <span><span class="legend-today"></span>Today</span>
-                    </p>
                     @if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes for {{ preset.displayName }}</p>
                     }
@@ -443,9 +436,20 @@ function formatDate(timeMs: number): string {
                     background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
                 }
 
-                // a line in the accent color above the bar, where the archive ends
+                // a stop line after the date of today: later dates cannot have scenes yet
                 &.tick-today {
-                    box-shadow: inset 0 2px 0 var(--geoengine-accent-color);
+                    position: relative;
+
+                    &::before {
+                        content: '';
+                        position: absolute;
+                        top: -0.25rem;
+                        bottom: -0.25rem;
+                        right: -1px;
+                        width: 2px;
+                        border-radius: 1px;
+                        background: var(--geoengine-accent-color);
+                    }
                 }
             }
 
@@ -462,49 +466,6 @@ function formatDate(timeMs: number): string {
                 bottom: 0.125rem;
                 // the bar is 100 % wide by default, which would reach past the right inset
                 width: auto;
-            }
-
-            .strip-legend {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.25rem 0.75rem;
-
-                > span {
-                    display: inline-flex;
-                    align-items: flex-end;
-                    gap: 0.25rem;
-                }
-            }
-
-            // small copies of the bars of the strip
-            .legend-bar {
-                display: inline-block;
-                width: 0.375rem;
-                height: 0.75rem;
-                margin-bottom: 0.1875rem;
-                border-radius: 0.125rem;
-
-                &.legend-data {
-                    background: var(--geoengine-primary-color);
-                }
-
-                &.legend-empty {
-                    height: 0.25rem;
-                    background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
-                }
-
-                &.legend-unknown {
-                    height: 0.25rem;
-                    background: color-mix(in srgb, var(--geoengine-primary-color) 12%, transparent);
-                }
-            }
-
-            .legend-today {
-                display: inline-block;
-                width: 0.75rem;
-                height: 2px;
-                margin-bottom: 0.625rem;
-                background: var(--geoengine-accent-color);
             }
 
             .catalogue-error {

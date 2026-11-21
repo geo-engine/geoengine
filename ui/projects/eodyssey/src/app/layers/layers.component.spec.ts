@@ -431,7 +431,6 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.date-strip')).not.toBeNull();
             expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(0);
             expect(element.querySelector('.date-strip .strip-loading')).not.toBeNull();
-            expect(element.querySelector('.strip-legend')).not.toBeNull();
             expect(element.querySelector('.date-strip')?.getAttribute('aria-busy')).toBe('true');
 
             // the dates of an earlier view stay, faded, while those of a moved view load
