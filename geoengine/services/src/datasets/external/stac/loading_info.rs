@@ -624,8 +624,22 @@ impl StacMultiBandMetaData {
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return None;
         };
+        // the whole chunk, so that the parts of a window share one aggregation
+        let chunk = self
+            .chunk_dimension(regular)
+            .intersecting_intervals(time_interval)
+            .ok()?
+            .next()
+            .unwrap_or(time_interval);
+        let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
         let with_items = self
-            .intervals_with_items(items_url, regular.step, time_interval, view_bbox)
+            .query_cache
+            .get_or_aggregate(
+                dataset_id,
+                view_bbox,
+                chunk,
+                self.intervals_with_items(items_url, regular.step, chunk, view_bbox),
+            )
             .await?;
         let inside: Vec<_> = cell_bboxes
             .iter()
@@ -633,7 +647,6 @@ impl StacMultiBandMetaData {
             .copied()
             .collect();
         if inside.len() <= self.query_cache.max_footprint_searches() {
-            let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
             self.store_empty_steps(dataset_id, time_steps, &with_items, &inside)
                 .await;
         }
@@ -3939,7 +3952,7 @@ mod grid_request_tests {
         let starts = new_starts();
         expect_aggregation(
             &server,
-            "2026-01-03T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         // only the day with items needs a search afterwards. A search for the other day would be
@@ -3990,6 +4003,40 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
+    async fn availability_aggregates_a_chunk_of_a_view_once() {
+        let server = Server::run();
+        // a second aggregation of the chunk would be unexpected and fail; nothing is seeded, as
+        // the view lies inside its cell, so only the kept aggregation answers the second window
+        expect_aggregation_in(
+            &server,
+            "0.10000,0.00000,0.40000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            &["2026-01-05T00:00:00.000Z"],
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let month = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 4)))
+            .await
+            .unwrap();
+        assert_eq!(month.has_data(0), Some(false));
+
+        let rest = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(4, 6)))
+            .await
+            .unwrap();
+        assert_eq!(rest.has_data(0), Some(false));
+        assert_eq!(rest.has_data(1), Some(true));
+    }
+
+    #[tokio::test]
     async fn availability_of_a_view_inside_a_cell_aggregates_the_view_and_seeds_nothing() {
         let server = Server::run();
         let starts = new_starts();
@@ -3997,7 +4044,7 @@ mod grid_request_tests {
         expect_aggregation_in(
             &server,
             "0.10000,0.00000,0.40000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         // a day without items in the view may have items elsewhere in the cell: it is searched

@@ -1,7 +1,7 @@
 use crate::config::{StacCache, get_config_element};
 use crate::datasets::external::stac::{StacProviderDataset, StacTileFile};
 use futures::FutureExt;
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, TimeInterval};
 use geoengine_datatypes::raster::GridIdx2D;
 use geoengine_operators::{error::Error, source::gdal_worker_process::GdalMetadataMapping};
 use moka::future::Cache;
@@ -60,6 +60,16 @@ pub(crate) struct StacQueryCache {
     ttl: Duration,
     search_chunk_steps: std::num::NonZeroU32,
     max_footprint_searches: usize,
+    /// the steps with items per search box and chunk, from the aggregation of the calendar
+    aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct AggregationKey {
+    dataset_id: u64,
+    bbox: [u64; 4],
+    time_start: i64,
+    time_end: i64,
 }
 
 impl std::fmt::Debug for StacQueryCache {
@@ -123,6 +133,7 @@ impl StacQueryCache {
     pub(crate) async fn clear(&self) {
         self.cache.invalidate_all();
         self.cache.run_pending_tasks().await;
+        self.aggregations.invalidate_all();
     }
 
     /// A cache of the given size, for tests and benches: the planning values are fixed so that
@@ -142,7 +153,40 @@ impl StacQueryCache {
             ttl,
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
+            aggregations: Cache::builder()
+                .max_capacity(10_000)
+                .time_to_live(ttl)
+                .build(),
         }
+    }
+
+    /// The steps with items of an aggregation over `bbox` and `range`, aggregated once for
+    /// concurrent callers and kept while the server tells something.
+    pub(crate) async fn get_or_aggregate(
+        &self,
+        dataset_id: u64,
+        bbox: geoengine_datatypes::primitives::BoundingBox2D,
+        range: TimeInterval,
+        aggregate: impl Future<Output = Option<Vec<TimeInterval>>>,
+    ) -> Option<Arc<Vec<TimeInterval>>> {
+        let (ll, ur) = (bbox.lower_left(), bbox.upper_right());
+        let key = AggregationKey {
+            dataset_id,
+            bbox: [
+                ll.x.to_bits(),
+                ll.y.to_bits(),
+                ur.x.to_bits(),
+                ur.y.to_bits(),
+            ],
+            time_start: range.start().inner(),
+            time_end: range.end().inner(),
+        };
+        if !self.stores_results() {
+            return aggregate.await.map(Arc::new);
+        }
+        self.aggregations
+            .optionally_get_with(key, async move { aggregate.await.map(Arc::new) })
+            .await
     }
 
     #[cfg(test)]
