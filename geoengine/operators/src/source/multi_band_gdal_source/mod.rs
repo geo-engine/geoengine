@@ -131,6 +131,8 @@ impl LoadingInfoDetail {
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub detail: LoadingInfoDetail,
+    /// The answer is shown to a user, see [`crate::engine::QueryContext::footprints_for_display`].
+    pub for_display: bool,
     /// The resolution the source produces its tiles in: the native resolution or an
     /// overview level.
     ///
@@ -169,8 +171,15 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             detail,
+            for_display: false,
             resolution: LoadingInfoResolution::Native,
         }
+    }
+
+    #[must_use]
+    pub fn for_display(mut self) -> Self {
+        self.for_display = true;
+        self
     }
 
     /// Sets the resolution the source produces its tiles in.
@@ -447,14 +456,16 @@ where
             FootprintPrecision::Availability => LoadingInfoDetail::Availability,
             FootprintPrecision::Coverage => LoadingInfoDetail::Coverage,
         };
-        let parts = self
-            .loading_info_parts(raster_query_rectangle_to_loading_info_query_rectangle(
-                &query,
-                tiling_grid,
-                LoadingInfoResolution::Native,
-                detail,
-            ))
-            .await?;
+        let mut loading_info_query = raster_query_rectangle_to_loading_info_query_rectangle(
+            &query,
+            tiling_grid,
+            LoadingInfoResolution::Native,
+            detail,
+        );
+        if ctx.footprints_for_display() {
+            loading_info_query = loading_info_query.for_display();
+        }
+        let parts = self.loading_info_parts(loading_info_query).await?;
 
         Ok(parts
             .map_ok(move |loading_info| {

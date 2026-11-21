@@ -427,35 +427,50 @@ where
         let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
             tiling_grid_definition.generate_data_tiling_strategy();
 
-        let input_geo_transform = in_spatial_grid
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_geo_transform();
+        let sub_query = self.sub_query(ctx);
 
-        let output_geo_transform = tiling_grid_definition.tiling_geo_transform();
-
-        let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_geo_transform,
-            output_geo_transform,
-            fold_fn: fold_future,
-            tiling_specification: self.tiling_specification,
-            phantom: PhantomData,
-            _phantom_pixel_type: PhantomData,
-        };
-
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
-        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            tiling_strategy,
-            ctx,
-            sub_query,
-            time_stream,
-        )))
+        Ok(Box::pin(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
+                &self.source,
+                query,
+                tiling_strategy,
+                ctx,
+                sub_query,
+            )
+            .await?,
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.out_result_descriptor
+    }
+}
+
+impl<Q, P, I> InterploationProcessor<Q, P, I>
+where
+    P: Pixel,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
+{
+    /// How a tile of the output is computed from the source
+    fn sub_query<'a>(
+        &self,
+        ctx: &dyn crate::engine::QueryContext,
+    ) -> impl crate::adapters::SubQueryTileAggregator<'a, P> + 'static + use<'a, Q, P, I> {
+        let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
+        let out_spatial_grid = self.result_descriptor().spatial_grid_descriptor();
+        InterpolationSubQuery::<_, P, I> {
+            input_geo_transform: in_spatial_grid
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+            output_geo_transform: out_spatial_grid
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+            fold_fn: fold_future,
+            tiling_specification: self.tiling_specification,
+            phantom: PhantomData,
+            _phantom_pixel_type: PhantomData,
+        }
     }
 }
 
@@ -475,6 +490,40 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
     {
         self.source.time_query(query, ctx).await
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
+        let out_spatial_grid = self.result_descriptor().spatial_grid_descriptor();
+        // the same grid: the tiles are those of the source, as in `_query`
+        if in_spatial_grid == out_spatial_grid {
+            return self.source.footprint_query(query, precision, ctx).await;
+        }
+        let tiling_grid = out_spatial_grid.tiling_grid_definition(ctx.tiling_specification());
+        // an output pixel reads the input pixel under it and at most its neighbours
+        let output_bounds = crate::adapters::source_box_mapping(
+            [1, 1],
+            in_spatial_grid
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+            tiling_grid.tiling_geo_transform(),
+            None,
+        );
+        crate::adapters::subquery_footprints(
+            &self.source,
+            query,
+            tiling_grid.generate_data_tiling_strategy(),
+            &self.sub_query(ctx),
+            precision,
+            ctx,
+            output_bounds,
+        )
+        .await
     }
 }
 
@@ -1317,5 +1366,32 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_has_footprints_where_its_tiles_read_data() {
+        use crate::engine::footprint_test_util::{
+            assert_footprints_follow_the_data, one_of_four_tiles_source,
+        };
+
+        for interpolation in [
+            InterpolationMethod::NearestNeighbor,
+            InterpolationMethod::BiLinear,
+        ] {
+            assert_footprints_follow_the_data(
+                Interpolation {
+                    params: InterpolationParams {
+                        interpolation,
+                        output_resolution: InterpolationResolution::Resolution(
+                            SpatialResolution::new_unchecked(0.5, 0.5),
+                        ),
+                        output_origin_reference: None,
+                    },
+                    sources: one_of_four_tiles_source().into(),
+                }
+                .typed(),
+            )
+            .await;
+        }
     }
 }

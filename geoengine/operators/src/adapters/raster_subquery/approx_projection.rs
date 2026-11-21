@@ -124,6 +124,67 @@ impl<'p, P: CoordinateProjection> ApproxProjection<'p, P> {
         );
     }
 
+    /// The largest error of [`Self::line_bounds`] in pixels of the grid: the threshold, or GDAL's
+    /// default of an eighth of a pixel if coordinates are projected exactly, as a line cannot be
+    /// split forever.
+    pub fn line_bounds_error_px(&self) -> f64 {
+        self.max_error_px.get().max(0.125)
+    }
+
+    /// The smallest and the largest coordinates of the projection of the line from `start` to
+    /// `end`, at most [`Self::line_bounds_error_px`] pixels of the grid too small. `None` if a
+    /// coordinate of the line cannot be projected.
+    ///
+    /// Like the rows, the line is split until the projection of the middle of a part lies within
+    /// the threshold of the straight line between the projections of its ends. The projection of
+    /// a line bends, so its extremes can lie between its ends; a fixed number of points along
+    /// the line misses them by an unknown amount.
+    pub fn line_bounds(
+        &self,
+        start: Coordinate2D,
+        end: Coordinate2D,
+    ) -> Option<(Coordinate2D, Coordinate2D)> {
+        // a part of the line that is still bent after this many halvings is taken as it is
+        const MAX_DEPTH: u32 = 16;
+
+        let project = |coordinate: Coordinate2D| {
+            self.projector
+                .project_coordinate(coordinate)
+                .ok()
+                .filter(is_finite)
+        };
+        let middle_of = |a: Coordinate2D, b: Coordinate2D| {
+            Coordinate2D::new(f64::midpoint(a.x, b.x), f64::midpoint(a.y, b.y))
+        };
+
+        let (projected_start, projected_end) = (project(start)?, project(end)?);
+        let mut min = projected_start;
+        let mut max = projected_start;
+        let mut extend = |coordinate: Coordinate2D| {
+            min = Coordinate2D::new(min.x.min(coordinate.x), min.y.min(coordinate.y));
+            max = Coordinate2D::new(max.x.max(coordinate.x), max.y.max(coordinate.y));
+        };
+        extend(projected_end);
+
+        let mut parts = vec![(start, end, projected_start, projected_end, 0)];
+        while let Some((a, b, projected_a, projected_b, depth)) = parts.pop() {
+            let middle = middle_of(a, b);
+            let projected_middle = project(middle)?;
+            extend(projected_middle);
+
+            let straight = middle_of(projected_a, projected_b);
+            let error_px = (straight.x - projected_middle.x).abs() / self.in_pixel_size.0.get()
+                + (straight.y - projected_middle.y).abs() / self.in_pixel_size.1.get();
+            // the first halving is always done: the middle alone can lie on the straight line
+            // of a line that bends to both sides
+            if (depth == 0 || error_px > self.line_bounds_error_px()) && depth < MAX_DEPTH {
+                parts.push((a, middle, projected_a, projected_middle, depth + 1));
+                parts.push((middle, b, projected_middle, projected_b, depth + 1));
+            }
+        }
+        Some((min, max))
+    }
+
     fn project_exactly(&self, row: &[Coordinate2D], projected: &mut [Option<Coordinate2D>]) {
         if let Ok(coordinates) = self.projector.project_coordinates(row) {
             for (projected, coordinate) in projected.iter_mut().zip(coordinates) {
@@ -197,6 +258,46 @@ mod tests {
             "the error {max_error_px} exceeds the threshold"
         );
         assert!(interpolated > 0, "no coordinate was interpolated");
+    }
+
+    /// The upper edge of a view of 500 km in EPSG:3857 bends in UTM zone 32: its lowest y lies
+    /// between its ends, where seven points along the edge miss it by 48 m.
+    #[test]
+    fn it_bounds_a_line_that_bends() {
+        let projector = DefaultCoordinateProjector::from_known_srs(
+            SpatialReference::web_mercator(),
+            SpatialReference::new(
+                geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                32632,
+            ),
+        )
+        .unwrap();
+        // a UTM grid of 10 m pixels
+        let utm = GeoTransform::new_unchecked((0., 0.).into(), 10., -10.);
+        let approx = ApproxProjection::new(&projector, &utm, THRESHOLD);
+
+        for y in [6_400_000., 6_700_000.] {
+            let (start, end) = (
+                Coordinate2D::new(800_000., y),
+                Coordinate2D::new(1_300_000., y),
+            );
+            let (min, max) = approx.line_bounds(start, end).unwrap();
+
+            let dense: Vec<Coordinate2D> = (0..=5000)
+                .map(|i| Coordinate2D::new(start.x + f64::from(i) * 100., y))
+                .collect();
+            let exact = projector.project_coordinates(&dense).unwrap();
+            let tolerance = approx.line_bounds_error_px() * 10.;
+            for coordinate in exact {
+                assert!(
+                    coordinate.x >= min.x - tolerance
+                        && coordinate.x <= max.x + tolerance
+                        && coordinate.y >= min.y - tolerance
+                        && coordinate.y <= max.y + tolerance,
+                    "{coordinate:?} is outside of {min:?} to {max:?}"
+                );
+            }
+        }
     }
 
     #[test]

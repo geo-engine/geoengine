@@ -68,7 +68,7 @@ pub async fn raster_footprints<C: SessionContext>(
         .tiling_geo_transform();
     let query_bounds = geo_transform.spatial_to_grid_bounds(&spatial_bounds);
 
-    let query_ctx = ctx.query_context(processing_graph_id, ComputationId::new())?;
+    let query_ctx = ctx.footprints_query_context(processing_graph_id, ComputationId::new())?;
     let processor = initialized_operator.query_processor()?;
 
     let limit = limit.clamp(1, MAX_FOOTPRINT_TIME_STEPS);

@@ -63,6 +63,11 @@ multi_band_gdal_source_read_ahead = 16
 # The number of time steps has no limit here, because footprints are produced step by step. The
 # endpoint returns at most 100 time steps per request.
 footprint_boxes_per_step_limit = 64
+# Operators that query their source once per output tile (Warp, reprojection, neighborhood aggregate,
+# downsampling, interpolation) first ask the source where it has data and skip the tiles without. This saves the reads of
+# sparse data, e.g. satellite swaths, and costs one footprint query per query. On a STAC source that query
+# searches the catalogue for the whole area the query reads.
+footprint_skipping = false
 # Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
 # tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
 # it is still reading. Warp estimates the worst case when it is initialized and rejects the
