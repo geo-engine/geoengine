@@ -92,6 +92,8 @@ Claude Code only reads `.claude/skills/`, which is a symlink to `.agents/skills/
 
 - `new-migration`: add a database migration to the backend.
 - `update-dependencies`: update the dependencies of all projects as a stack of PRs, one per project.
+- `use-geoengine`: use a Geo Engine server through the Python library, e.g. in notebooks.
+  It points to the guide for AI agents in the docs, which is generated from the notebook `python/examples/ai_agent_workflow.ipynb`.
 
 ## Testing new features
 
