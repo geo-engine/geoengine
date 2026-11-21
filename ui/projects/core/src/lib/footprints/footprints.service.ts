@@ -51,16 +51,6 @@ const OVERLAY_MARGIN = 0.25;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
 
-/** The time one step after `timeMs`. */
-function nextStepStart(timeMs: number, timeStep: TimeStepDuration): number {
-    return new Time(new Date(timeMs)).add(timeStep.durationAmount, timeStep.durationUnit).start.valueOf();
-}
-
-/** The time `count` steps before `timeMs`. */
-function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
-    return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
-}
-
 /** The raster layer an app wants to know the footprints of. */
 export interface FootprintLayer {
     /** Identifies the layer, so its graph and metadata are asked for once. */
@@ -140,17 +130,7 @@ export class FootprintsService {
             if (!query) return undefined;
 
             const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
-            const fullEnd = Math.max(window.end, minimalEnd.start.valueOf());
-            // nothing after today has data, so the window ends with the step of today, unless it starts later or
-            // the calendar shows more
-            const todayEnd = Date.now() + 1;
-            const end = window.start < todayEnd ? Math.min(fullEnd, Math.max(todayEnd, window.end)) : fullEnd;
-            // a window of long steps cut at today reaches back instead, so a strip of dates has steps around the
-            // selected one and not just the step of today; short steps keep the month of the start first, see below
-            const start =
-                end < fullEnd && !isShorterThanMonth(timeStep.durationUnit)
-                    ? Math.min(window.start, minusSteps(end, timeStep, WINDOW_TIME_STEPS))
-                    : window.start;
+            const end = Math.max(window.end, minimalEnd.start.valueOf());
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -170,10 +150,10 @@ export class FootprintsService {
 
             // the month of the start first, so the visible month shows soonest, then the server's cursor is followed;
             // a month holds one step of a month or more, so then the window is asked at once
-            const startDate = new Date(start);
+            const startDate = new Date(window.start);
             const monthEnd = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1);
             const firstEnd = isShorterThanMonth(timeStep.durationUnit) ? Math.min(monthEnd, end) : end;
-            let range = {start, end: firstEnd};
+            let range = {start: window.start, end: firstEnd};
             let footprints: Footprints | undefined;
             for (let request = 0; request < MAX_WINDOW_REQUESTS; request++) {
                 const part = await get(range);
@@ -246,15 +226,6 @@ export class FootprintsService {
     readonly datesStale = computed(() => !this.currentFootprints() && this.footprints() !== undefined);
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
     readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
-    /**
-     * The start of the time step of the selected date, if the date lies inside it but is not its start, e.g. 1 April
-     * in a yearly step. Only from the dates of this view, so the dates of another layer never move it.
-     */
-    readonly selectedStepStart = computed(() => {
-        const time = this.time();
-        const step = time && stepAt(this.freshSteps(), time.start.valueOf());
-        return step && step.time.start !== time.start.valueOf() ? step.time.start : undefined;
-    });
     /**
      * The selected date certainly has no data in this view, so an app need not load its tiles. Only from the dates of
      * this view: while they load, or where the layer cannot tell, this is false and tiles load as usual.
@@ -340,15 +311,6 @@ export class FootprintsService {
         });
     }
 
-    /** Whether a later time step can still have data: not once the selected step reaches today. */
-    canGoLater(): boolean {
-        const time = this.time();
-        const timeStep = this.timeStep();
-        if (!time || !timeStep) return true;
-        const end = stepAt(this.steps(), time.start.valueOf())?.time.end ?? nextStepStart(time.start.valueOf(), timeStep);
-        return end <= Date.now();
-    }
-
     /**
      * The nearest time step with data before (-1) or after (1) the selected time, in the loaded window.
      * shortcut: no search beyond the window (100 steps), the caller goes on at `dateBeyondLoaded` then and the window follows.
@@ -369,13 +331,11 @@ export class FootprintsService {
     /**
      * Where to look on when `dateWithData` finds nothing: the first time step after (1) the loaded ones or the last
      * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
-     * Undefined after the loaded ones too once they reach today, since nothing later has data.
      */
     dateBeyondLoaded(direction: 1 | -1): Time | undefined {
         const steps = this.steps();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
-        if (direction === 1 && steps[steps.length - 1].time.end > Date.now()) return undefined;
         return direction === 1
             ? new Time(new Date(steps[steps.length - 1].time.end))
             : new Time(new Date(steps[0].time.start)).subtract(timeStep.durationAmount, timeStep.durationUnit);

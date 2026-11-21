@@ -405,49 +405,6 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
-        it('loads and goes no further than today, since nothing later has data', async () => {
-            // today is 10 April, the selected date 1 April; the clock still runs, which the debounce of the view needs
-            vi.useFakeTimers({toFake: ['Date'], shouldAdvanceTime: true, now: Date.UTC(2026, 3, 10, 12)});
-            try {
-                // the server answers up to the step of today
-                answerDates([...steps, day(10, TimeStepFootprintStatus.Empty)]);
-                const service = createService();
-                service.datesNeeded.set(true);
-                await settle();
-
-                // today, not 100 days after the first of April
-                const ends = getFootprints.mock.calls.map(([, query]) => Date.parse((query.timeInterval ?? '').split('/')[1]));
-                expect(Math.max(...ends)).toBeGreaterThan(Date.UTC(2026, 3, 10, 12));
-                expect(Math.max(...ends)).toBeLessThan(Date.UTC(2026, 3, 10, 13));
-                // the loaded dates reach today
-                expect(service.dateBeyondLoaded(1)).toBeUndefined();
-                expect(service.dateBeyondLoaded(-1)).toBeDefined();
-                expect(service.canGoLater()).toBe(true);
-
-                // the step of today has nothing after it
-                vi.setSystemTime(Date.UTC(2026, 3, 1, 12));
-                expect(service.canGoLater()).toBe(false);
-            } finally {
-                vi.useRealTimers();
-            }
-        });
-
-        it('reaches back from today for long steps, so the step of today is not alone', async () => {
-            vi.useFakeTimers({toFake: ['Date'], shouldAdvanceTime: true, now: Date.UTC(2026, 3, 10, 12)});
-            try {
-                const service = createService();
-                service.timeStepOverride.set({durationAmount: 1, durationUnit: 'years'});
-                service.datesNeeded.set(true);
-                await settle();
-
-                const [start, end] = (getFootprints.mock.calls[0][1].timeInterval ?? '').split('/').map((time) => Date.parse(time));
-                expect(end).toBeLessThan(Date.UTC(2026, 3, 10, 13));
-                expect(start).toBeLessThan(Date.UTC(1930, 0, 1));
-            } finally {
-                vi.useRealTimers();
-            }
-        });
-
         it('finds no date with data beyond the loaded window', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Data)]);
             const service = createService();
@@ -497,25 +454,6 @@ describe('FootprintsService overlay', () => {
             await settle();
             expect(service.steps()).toHaveLength(2);
             expect(service.selectedDateEmpty()).toBe(false);
-        });
-
-        it('names the start of the step of the selected date where the date is inside a longer step', async () => {
-            // the selected date is 1 April, the step the year
-            answerDates([
-                {time: {start: Date.UTC(2026, 0, 1), end: Date.UTC(2027, 0, 1)}, status: TimeStepFootprintStatus.Empty, bounds: []},
-            ]);
-            const service = createService();
-            service.datesNeeded.set(true);
-            await settle();
-            expect(service.selectedStepStart()).toBe(Date.UTC(2026, 0, 1));
-        });
-
-        it('names no other start where the selected date starts its step', async () => {
-            answerDates(steps);
-            const service = createService();
-            service.datesNeeded.set(true);
-            await settle();
-            expect(service.selectedStepStart()).toBeUndefined();
         });
 
         it('does not call a date empty that the layer cannot tell', async () => {

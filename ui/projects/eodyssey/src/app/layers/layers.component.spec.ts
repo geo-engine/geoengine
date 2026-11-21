@@ -159,12 +159,10 @@ describe('LayersComponent', () => {
                         dateFilter: (): boolean => true,
                         dateWithData: vi.fn(),
                         dateBeyondLoaded: vi.fn(),
-                        canGoLater: vi.fn().mockReturnValue(true),
                         stepsAround: vi.fn().mockReturnValue([]),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
                         datesStale: signal(false),
-                        selectedStepStart: signal(undefined),
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
@@ -349,11 +347,9 @@ describe('LayersComponent', () => {
             datesNeeded: WritableSignal<boolean>;
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
-            canGoLater: Mock;
             stepsAround: Mock;
             isLoading: WritableSignal<boolean>;
             datesStale: WritableSignal<boolean>;
-            selectedStepStart: WritableSignal<number | undefined>;
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
@@ -479,34 +475,6 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 2, 31)));
-        });
-
-        it('offers no later date once the selected one reaches today', async () => {
-            footprints().canGoLater.mockReturnValue(false);
-            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
-            fixture.detectChanges();
-            await fixture.whenStable();
-
-            const forward = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.time-forward');
-            expect(forward?.textContent?.replace(/navigate_\w+/, '').trim()).toBe('No later dates');
-            expect(forward?.disabled).toBe(true);
-            setTime.mockClear();
-            await fixture.componentInstance.timeForward();
-            expect(setTime).not.toHaveBeenCalled();
-            // backwards still goes on
-            expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.time-backwards')?.disabled).toBe(false);
-        });
-
-        it('moves the date to the start of its time step, e.g. after switching to yearly data', async () => {
-            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
-            fixture.detectChanges();
-            await fixture.whenStable();
-            setTime.mockClear();
-
-            footprints().selectedStepStart.set(Date.UTC(2026, 0, 1));
-            TestBed.tick();
-
-            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 0, 1)));
         });
 
         it('goes to the next date with data', async () => {
