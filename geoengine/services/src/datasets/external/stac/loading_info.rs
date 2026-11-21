@@ -367,10 +367,8 @@ impl StacMultiBandMetaData {
         let cell_bboxes = self.cell_bboxes(grid, cells)?;
 
         // The calendar only needs to know which steps have items. One aggregation over the view
-        // tells it, with no search. Up to `availability_search_cells` cells are searched instead,
-        // which warms the cache of the map. Without aggregation the files are searched as well.
+        // tells it at any zoom, with no search. Without aggregation the files are searched instead.
         if query.detail == LoadingInfoDetail::Availability
-            && cell_bboxes.len() > self.query_cache.availability_search_cells()
             && let Some(view_bbox) = view_bbox
             && let Some(view_bbox) = stac_query_bbox(view_bbox, self.dataset.projection)?
             && let Some(has_data) = self
@@ -594,7 +592,8 @@ impl StacMultiBandMetaData {
                 let files = self.query_cache.get(dataset_id, *cell, *step).await?;
                 // an item on the closed end of a search belongs to the next step
                 step_has_data |= files.iter().any(|file| {
-                    file.file.time == *step && file.file.spatial_partition.intersects(&spatial_bounds)
+                    file.file.time == *step
+                        && file.file.spatial_partition.intersects(&spatial_bounds)
                 });
             }
             has_data.push(step_has_data);
@@ -3400,7 +3399,12 @@ mod grid_request_tests {
     }
 
     /// The aggregation of the days with items in `bbox`: each given day has two items.
-    fn expect_aggregation_in(server: &Server, bbox: &str, datetime: &str, days_with_items: &[&str]) {
+    fn expect_aggregation_in(
+        server: &Server,
+        bbox: &str,
+        datetime: &str,
+        days_with_items: &[&str],
+    ) {
         // like CODE-DE: the buckets from the first to the last day with items, the others empty
         let day_of = |day: &str| chrono::DateTime::parse_from_rfc3339(day).unwrap();
         let mut buckets = Vec::new();
@@ -4133,49 +4137,6 @@ mod grid_request_tests {
             .await
             .unwrap();
 
-        assert_eq!(info.has_data(0), None);
-        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
-        assert_eq!(starts.lock().unwrap().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn availability_of_few_cells_searches_the_files_without_aggregation() {
-        let server = Server::run();
-        let starts = new_starts();
-        // The aggregation of the window itself would be unexpected and fail. The search plans with
-        // the one of its chunk and then looks at the day with items.
-        expect_aggregation(
-            &server,
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
-            &["2026-01-03T00:00:00.000Z"],
-        );
-        expect_search_at(
-            &server,
-            "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
-            vec![item("found", 0.)],
-            Duration::ZERO,
-            starts.clone(),
-        );
-        let mut provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
-        provider.query_cache = Arc::new(
-            StacQueryCache::new(1024 * 1024, Duration::from_mins(1))
-                .with_availability_search_cells(1),
-        );
-        let meta = metadata(&provider, 0).await;
-
-        let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
-            .await
-            .unwrap();
-
-        // the files tell, so the map finds them cached
         assert_eq!(info.has_data(0), None);
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(starts.lock().unwrap().len(), 1);

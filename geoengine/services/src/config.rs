@@ -946,11 +946,6 @@ pub struct StacCache {
     /// cells of one time step that are not cached, are rejected as too large, see
     /// `Settings-default.toml`.
     pub max_footprint_searches: usize,
-    /// A calendar request for at most this many grid cells searches the files, which warms the
-    /// cache of the map but takes a search per cell and chunk. For more cells, one aggregation over
-    /// the view counts its items. 0 always aggregates. Only providers with
-    /// `datetime_frequency_aggregation` are asked for aggregations.
-    pub availability_search_cells: usize,
 }
 
 impl TestDefault for StacCache {
@@ -960,7 +955,6 @@ impl TestDefault for StacCache {
             ttl_secs: 3_600,
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 50,
-            availability_search_cells: 0,
         }
     }
 }

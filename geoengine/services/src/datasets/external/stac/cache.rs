@@ -60,7 +60,6 @@ pub(crate) struct StacQueryCache {
     ttl: Duration,
     search_chunk_steps: std::num::NonZeroU32,
     max_footprint_searches: usize,
-    availability_search_cells: usize,
 }
 
 impl std::fmt::Debug for StacQueryCache {
@@ -106,7 +105,6 @@ impl StacQueryCache {
         Self {
             search_chunk_steps: config.search_chunk_steps,
             max_footprint_searches: config.max_footprint_searches,
-            availability_search_cells: config.availability_search_cells,
             ..Self::new(
                 config.size_in_mb * 1024 * 1024,
                 Duration::from_secs(config.ttl_secs),
@@ -144,7 +142,6 @@ impl StacQueryCache {
             ttl,
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
-            availability_search_cells: 0,
         }
     }
 
@@ -154,22 +151,12 @@ impl StacQueryCache {
         self
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_availability_search_cells(mut self, cells: usize) -> Self {
-        self.availability_search_cells = cells;
-        self
-    }
-
     pub(crate) fn search_chunk_steps(&self) -> std::num::NonZeroU32 {
         self.search_chunk_steps
     }
 
     pub(crate) fn max_footprint_searches(&self) -> usize {
         self.max_footprint_searches
-    }
-
-    pub(crate) fn availability_search_cells(&self) -> usize {
-        self.availability_search_cells
     }
 
     /// `true` if a completed search for this cell and time step is cached. Makes no request.
