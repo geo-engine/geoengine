@@ -166,6 +166,8 @@ export class FootprintsService {
                 this.partialFootprints.set(footprints);
                 range = {start: next, end};
             }
+            // the answer is complete; a partial one left behind would be taken for the next layer's until its load starts
+            this.partialFootprints.set(undefined);
             return footprints;
         },
     });
