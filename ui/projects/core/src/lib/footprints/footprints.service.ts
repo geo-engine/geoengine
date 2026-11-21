@@ -51,11 +51,6 @@ const OVERLAY_MARGIN = 0.25;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
 
-/** The time one step after `timeMs`. */
-function nextStepStart(timeMs: number, timeStep: TimeStepDuration): number {
-    return new Time(new Date(timeMs)).add(timeStep.durationAmount, timeStep.durationUnit).start.valueOf();
-}
-
 /** The raster layer an app wants to know the footprints of. */
 export interface FootprintLayer {
     /** Identifies the layer, so its graph and metadata are asked for once. */
@@ -135,11 +130,7 @@ export class FootprintsService {
             if (!query) return undefined;
 
             const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
-            const fullEnd = Math.max(window.end, minimalEnd.start.valueOf());
-            // nothing after today has data, so the window ends with the step of today, unless it starts later or
-            // the calendar shows more
-            const todayEnd = nextStepStart(Date.now(), timeStep);
-            const end = window.start < todayEnd ? Math.min(fullEnd, Math.max(todayEnd, window.end)) : fullEnd;
+            const end = Math.max(window.end, minimalEnd.start.valueOf());
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -320,15 +311,6 @@ export class FootprintsService {
         });
     }
 
-    /** Whether a later time step can still have data: not once the selected step reaches today. */
-    canGoLater(): boolean {
-        const time = this.time();
-        const timeStep = this.timeStep();
-        if (!time || !timeStep) return true;
-        const end = stepAt(this.steps(), time.start.valueOf())?.time.end ?? nextStepStart(time.start.valueOf(), timeStep);
-        return end <= Date.now();
-    }
-
     /**
      * The nearest time step with data before (-1) or after (1) the selected time, in the loaded window.
      * shortcut: no search beyond the window (100 steps), the caller goes on at `dateBeyondLoaded` then and the window follows.
@@ -349,13 +331,11 @@ export class FootprintsService {
     /**
      * Where to look on when `dateWithData` finds nothing: the first time step after (1) the loaded ones or the last
      * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
-     * Undefined after the loaded ones too once they reach today, since nothing later has data.
      */
     dateBeyondLoaded(direction: 1 | -1): Time | undefined {
         const steps = this.steps();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
-        if (direction === 1 && steps[steps.length - 1].time.end > Date.now()) return undefined;
         return direction === 1
             ? new Time(new Date(steps[steps.length - 1].time.end))
             : new Time(new Date(steps[0].time.start)).subtract(timeStep.durationAmount, timeStep.durationUnit);

@@ -163,7 +163,7 @@ function formatDate(timeMs: number): string {
                     <mat-icon>navigate_before</mat-icon>
                     {{ backwards()?.label }}
                 </button>
-                <button mat-stroked-button type="button" class="time-forward" [disabled]="!forward()?.time" (click)="timeForward()">
+                <button mat-stroked-button type="button" class="time-forward" (click)="timeForward()">
                     {{ forward()?.label }}
                     <mat-icon iconPositionEnd>navigate_next</mat-icon>
                 </button>
@@ -845,13 +845,12 @@ export class LayersComponent {
 
     /**
      * The nearest date with scenes. Without one in the loaded dates, the first date beyond them, whose dates load then.
-     * One time step where the data source cannot tell its dates. Nowhere later once the selected date reaches today.
+     * One time step where the data source cannot tell its dates.
      */
-    private jump(direction: 1 | -1): {time?: Time; label: string} | undefined {
+    private jump(direction: 1 | -1): {time: Time; label: string} | undefined {
         const time = this.currentTime();
         const timeStep = this.footprintsService.timeStep();
         if (!time || !timeStep) return undefined;
-        if (direction === 1 && !this.footprintsService.canGoLater()) return {label: 'No later dates'};
 
         const withData = this.footprintsService.dateWithData(direction);
         if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
@@ -865,8 +864,8 @@ export class LayersComponent {
     }
 
     private async stepTime(direction: 1 | -1): Promise<void> {
-        const target = this.jump(direction)?.time;
-        if (target) await this.projectService.setTime(target);
+        const jump = this.jump(direction);
+        if (jump) await this.projectService.setTime(jump.time);
     }
 
     async selectTime(start: number): Promise<void> {

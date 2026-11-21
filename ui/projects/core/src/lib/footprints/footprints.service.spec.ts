@@ -405,33 +405,6 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
-        it('loads and goes no further than today, since nothing later has data', async () => {
-            // today is 10 April, the selected date 1 April; the clock still runs, which the debounce of the view needs
-            vi.useFakeTimers({toFake: ['Date'], shouldAdvanceTime: true, now: Date.UTC(2026, 3, 10, 12)});
-            try {
-                // the server answers up to the step of today
-                answerDates([...steps, day(10, TimeStepFootprintStatus.Empty)]);
-                const service = createService();
-                service.datesNeeded.set(true);
-                await settle();
-
-                // one day after today, not 100 days after the first of April
-                const ends = getFootprints.mock.calls.map(([, query]) => Date.parse((query.timeInterval ?? '').split('/')[1]));
-                expect(Math.max(...ends)).toBeGreaterThanOrEqual(Date.UTC(2026, 3, 11, 12));
-                expect(Math.max(...ends)).toBeLessThan(Date.UTC(2026, 3, 11, 13));
-                // the loaded dates reach today
-                expect(service.dateBeyondLoaded(1)).toBeUndefined();
-                expect(service.dateBeyondLoaded(-1)).toBeDefined();
-                expect(service.canGoLater()).toBe(true);
-
-                // the step of today has nothing after it
-                vi.setSystemTime(Date.UTC(2026, 3, 1, 12));
-                expect(service.canGoLater()).toBe(false);
-            } finally {
-                vi.useRealTimers();
-            }
-        });
-
         it('finds no date with data beyond the loaded window', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Data)]);
             const service = createService();
