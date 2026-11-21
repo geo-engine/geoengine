@@ -12,7 +12,7 @@ const STRIPE_WIDTH = 3;
  * Diagonal stripes over the faded accent color. The map stays readable through them, and boxes that
  * overlap are told apart from one big box by the stripes meeting.
  */
-function stripePattern(fill: string | undefined, stripe: string, stripeAlpha: number): CanvasPattern | undefined {
+function stripePattern(fill: string | undefined, stripe: string, stripeAlpha: number, fillAlpha = 1): CanvasPattern | undefined {
     const ratio = window.devicePixelRatio || 1;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = STRIPE_PERIOD * ratio;
@@ -21,6 +21,7 @@ function stripePattern(fill: string | undefined, stripe: string, stripeAlpha: nu
 
     context.scale(ratio, ratio);
     if (fill) {
+        context.globalAlpha = fillAlpha;
         context.fillStyle = fill;
         context.fillRect(0, 0, STRIPE_PERIOD, STRIPE_PERIOD);
     }
@@ -50,7 +51,8 @@ export function overlayStyle(light: boolean): Style {
     const color = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
     const accent = color('--geoengine-accent-color', '#ffc107');
     const faded = color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)');
-    const fill = light ? (stripePattern(undefined, accent, 0.85) ?? 'transparent') : (stripePattern(faded, accent, 1) ?? faded);
+    // alone, the boxes may cover the whole view, so fill and stripes stay light enough to read the map below them
+    const fill = light ? (stripePattern(undefined, accent, 0.85) ?? 'transparent') : (stripePattern(faded, accent, 0.6, 0.55) ?? faded);
     return new Style({fill: new Fill({color: fill}), stroke: new Stroke({color: accent, width: 2})});
 }
 
