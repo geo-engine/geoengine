@@ -22,6 +22,8 @@ Name | Type
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
+`itemTime` | [StacItemTime](StacItemTime.md)
+`maxConcurrentAssetProbes` | number
 
 ## Example
 
@@ -46,6 +48,8 @@ const example = {
   "cacheTtlSecs": null,
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
+  "itemTime": null,
+  "maxConcurrentAssetProbes": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

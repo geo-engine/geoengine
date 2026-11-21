@@ -382,6 +382,7 @@ __all__ = [
     "StacCoarserAsset",
     "StacDataProviderDefinition",
     "StacGrid",
+    "StacItemTime",
     "StacProviderAuthentication",
     "StacProviderDataset",
     "StacProviderDatasetBand",
@@ -870,6 +871,7 @@ from geoengine_api_client.models.stac_asset_band import StacAssetBand as StacAss
 from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset as StacCoarserAsset
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
 from geoengine_api_client.models.stac_grid import StacGrid as StacGrid
+from geoengine_api_client.models.stac_item_time import StacItemTime as StacItemTime
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication as StacProviderAuthentication
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset as StacProviderDataset
 from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand as StacProviderDatasetBand

@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.stac_grid import StacGrid
+from geoengine_api_client.models.stac_item_time import StacItemTime
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config
@@ -50,7 +51,9 @@ class StacDataProviderDefinition(BaseModel):
     cache_ttl_secs: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Optional output cache lifetime; omitted values use the global cache default.", alias="cacheTtlSecs")
     stac_grid: Optional[StacGrid] = Field(default=None, description="Target number of square search cells per dataset CRS projected area of use; omitted values use 512.", alias="stacGrid")
     max_concurrent_cell_searches: Optional[StrictInt] = Field(default=None, description="STAC searches one loading info request runs in parallel; omitted values use 8.", alias="maxConcurrentCellSearches")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid", "maxConcurrentCellSearches"]
+    item_time: Optional[StacItemTime] = Field(default=None, description="Which item time decides the layer time steps an item belongs to; omitted values use `datetime`.", alias="itemTime")
+    max_concurrent_asset_probes: Optional[Annotated[int, Field(le=65535, strict=True, ge=1)]] = Field(default=None, description="Asset file headers one STAC search reads in parallel to complete grid metadata the STAC items lack, as for `NetCDF` assets; omitted values use 8.", alias="maxConcurrentAssetProbes")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid", "maxConcurrentCellSearches", "itemTime", "maxConcurrentAssetProbes"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -146,6 +149,16 @@ class StacDataProviderDefinition(BaseModel):
         if self.max_concurrent_cell_searches is None and "max_concurrent_cell_searches" in self.model_fields_set:
             _dict['maxConcurrentCellSearches'] = None
 
+        # set to None if item_time (nullable) is None
+        # and model_fields_set contains the field
+        if self.item_time is None and "item_time" in self.model_fields_set:
+            _dict['itemTime'] = None
+
+        # set to None if max_concurrent_asset_probes (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_concurrent_asset_probes is None and "max_concurrent_asset_probes" in self.model_fields_set:
+            _dict['maxConcurrentAssetProbes'] = None
+
         return _dict
 
     @classmethod
@@ -173,7 +186,9 @@ class StacDataProviderDefinition(BaseModel):
             "pageLimit": obj.get("pageLimit"),
             "cacheTtlSecs": obj.get("cacheTtlSecs"),
             "stacGrid": StacGrid.from_dict(obj["stacGrid"]) if obj.get("stacGrid") is not None else None,
-            "maxConcurrentCellSearches": obj.get("maxConcurrentCellSearches")
+            "maxConcurrentCellSearches": obj.get("maxConcurrentCellSearches"),
+            "itemTime": obj.get("itemTime"),
+            "maxConcurrentAssetProbes": obj.get("maxConcurrentAssetProbes")
         })
         return _obj
 

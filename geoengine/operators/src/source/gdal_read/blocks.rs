@@ -845,6 +845,8 @@ mod tests {
             data_type: geoengine_datatypes::raster::RasterDataType::U16,
             spatial_reference:
                 geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced,
+            geo_transform: None,
+            no_data_value: None,
             levels,
         }
     }
