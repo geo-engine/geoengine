@@ -607,6 +607,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Updates the dataset\'s provenance.
      */
     updateDatasetProvenanceHandlerRaw(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -616,6 +617,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Updates the dataset\'s provenance.
      */
     updateDatasetProvenanceHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {

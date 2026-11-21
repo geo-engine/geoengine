@@ -75,7 +75,7 @@ CREATE TYPE "SpatialGridDescriptor" AS (
     "state" "SpatialGridDescriptorState",
     spatial_grid "SpatialGridDefinition",
     -- overview levels 2 .. max_overview_level exist in every file,
-    -- NULL: unknown
+    -- 1: the files have no overviews, NULL: unknown. Never below 1.
     max_overview_level integer
 );
 
@@ -892,9 +892,15 @@ CREATE TYPE "StacAssetBand" AS (
     band_name text
 );
 
+CREATE TYPE "StacCoarserAsset" AS (
+    factor bigint,
+    asset_band "StacAssetBand"
+);
+
 CREATE TYPE "StacProviderDatasetBand" AS (
     asset_band "StacAssetBand",
-    band_descriptor "RasterBandDescriptor"
+    band_descriptor "RasterBandDescriptor",
+    coarser_assets "StacCoarserAsset" []
 );
 
 CREATE TYPE "StacProviderDataset" AS (

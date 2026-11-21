@@ -10,18 +10,18 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './ColumnRangeFilter';
-import { LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
+import { instanceOfColumnRangeFilter, ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './ColumnRangeFilter';
+import { instanceOfLineSimplification, LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
 import { instanceOfMockPointSource, MockPointSourceFromJSONTyped, MockPointSourceToJSON, } from './MockPointSource';
-import { OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
-import { PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
+import { instanceOfOgrSource, OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
+import { instanceOfPointInPolygonFilter, PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
 import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
-import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
-import { TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
-import { TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
-import { VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
-import { VectorJoinFromJSONTyped, VectorJoinToJSON, } from './VectorJoin';
-import { VisualPointClusteringFromJSONTyped, VisualPointClusteringToJSON, } from './VisualPointClustering';
+import { instanceOfReprojection, ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
+import { instanceOfTimeProjection, TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
+import { instanceOfTimeShift, TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
+import { instanceOfVectorExpression, VectorExpressionFromJSONTyped, VectorExpressionToJSON, } from './VectorExpression';
+import { instanceOfVectorJoin, VectorJoinFromJSONTyped, VectorJoinToJSON, } from './VectorJoin';
+import { instanceOfVisualPointClustering, VisualPointClusteringFromJSONTyped, VisualPointClusteringToJSON, } from './VisualPointClustering';
 export function VectorOperatorFromJSON(json) {
     return VectorOperatorFromJSONTyped(json, false);
 }
@@ -98,6 +98,16 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the VectorOperator interface.
 */
 export function instanceOfVectorOperator(value) {
-    return instanceOfMockPointSource(value)
-        || instanceOfRasterVectorJoin(value);
+    return instanceOfColumnRangeFilter(value)
+        || instanceOfLineSimplification(value)
+        || instanceOfMockPointSource(value)
+        || instanceOfOgrSource(value)
+        || instanceOfPointInPolygonFilter(value)
+        || instanceOfRasterVectorJoin(value)
+        || instanceOfReprojection(value)
+        || instanceOfTimeProjection(value)
+        || instanceOfTimeShift(value)
+        || instanceOfVectorExpression(value)
+        || instanceOfVectorJoin(value)
+        || instanceOfVisualPointClustering(value);
 }

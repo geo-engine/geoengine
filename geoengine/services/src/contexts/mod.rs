@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers::spatial_references::SpatialReferenceCache,
     api::model::services::Volume,
     config::{Cache, QuotaTrackingMode, get_config_element},
     datasets::{
@@ -83,6 +84,9 @@ pub trait ApplicationContext: 'static + Send + Sync + Clone + UserAuth {
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
 
     fn oidc_manager(&self) -> &OidcManager;
+
+    /// The spatial reference specifications that PROJ resolved for this application
+    fn spatial_reference_cache(&self) -> &SpatialReferenceCache;
 
     /// Clear processing, provider metadata and GDAL caches. Requires an administrator.
     async fn clear_caches(&self, session: Self::Session) -> Result<()>;
@@ -299,6 +303,8 @@ where
     default_cache_ttl: CacheTtlSeconds,
     ort_environment: OrtEnvironment,
     expression_environment: ExpressionEnvironment,
+    warp_mode_max_memory_per_tile: usize,
+    reprojection_approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -315,6 +321,8 @@ where
         default_cache_ttl: CacheTtlSeconds,
         ort_environment: OrtEnvironment,
         expression_environment: ExpressionEnvironment,
+        warp_mode_max_memory_per_tile: usize,
+        reprojection_approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     ) -> Self {
         Self {
             db,
@@ -325,6 +333,8 @@ where
             default_cache_ttl,
             ort_environment,
             expression_environment,
+            warp_mode_max_memory_per_tile,
+            reprojection_approximation_error,
         }
     }
 }
@@ -483,6 +493,14 @@ where
 
     fn expression_environment(&self) -> &ExpressionEnvironment {
         &self.expression_environment
+    }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile
+    }
+
+    fn reprojection_approximation_error(&self) -> geoengine_datatypes::util::NonNegativeFiniteF64 {
+        self.reprojection_approximation_error
     }
 }
 

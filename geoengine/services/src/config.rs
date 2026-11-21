@@ -1,13 +1,15 @@
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
-use config::{Config, Environment, File};
+use config::{Config, ConfigError, Environment, File, Map, Source, Value, ValueKind};
+use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::new_raster_cache::{
     BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
 };
 use geoengine_operators::processing::ExpressionCacheConfig;
+use geoengine_operators::util::WarpMethods;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -32,11 +34,11 @@ fn init_settings() -> RwLock<Config> {
     #[cfg(not(test))]
     let files = ["Settings-default.toml", "Settings.toml"];
 
-    let files: Vec<File<_, _>> = files
+    let files: Vec<WorkerOptionNamesInLowerCase<File<_, _>>> = files
         .iter()
         .map(|f| dir.join(f))
         .filter(|p| p.exists())
-        .map(File::from)
+        .map(|p| WorkerOptionNamesInLowerCase(File::from(p)))
         .collect();
 
     settings = settings.add_source(files);
@@ -51,6 +53,49 @@ fn init_settings() -> RwLock<Config> {
         .build()
         .expect("it should crash the program if this fails");
     RwLock::new(config)
+}
+
+/// A settings file whose GDAL options and environment variables of the workers
+/// (`gdal_process_pool.worker.gdal_config_options` and `.environment`) are named in lower case.
+///
+/// GDAL ignores the case of an option's name, the settings do not; the workers get the names in
+/// upper case. Environment variables always
+/// arrive in lower case, while `Settings-default.toml` spells the options in upper case, so an
+/// override by `GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE`
+/// became a second option next to the default. With the names of the files in lower case too,
+/// each option is one key, and the order of the settings decides as for any other key:
+/// `Settings-default.toml`, then `Settings.toml`, then the environment.
+#[derive(Debug, Clone)]
+struct WorkerOptionNamesInLowerCase<S>(S);
+
+impl<S: Source + Clone + Send + Sync + 'static> Source for WorkerOptionNamesInLowerCase<S> {
+    fn clone_into_box(&self) -> Box<dyn Source + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn collect(&self) -> std::result::Result<Map<String, Value>, ConfigError> {
+        fn table<'a>(value: Option<&'a mut Value>, key: &str) -> Option<&'a mut Value> {
+            match &mut value?.kind {
+                ValueKind::Table(table) => table.get_mut(key),
+                _ => None,
+            }
+        }
+
+        let mut settings = self.0.collect()?;
+        for options in ["gdal_config_options", "environment"] {
+            let options = table(
+                table(settings.get_mut("gdal_process_pool"), "worker"),
+                options,
+            );
+            if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
+                *options = std::mem::take(options)
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_lowercase(), value))
+                    .collect();
+            }
+        }
+        Ok(settings)
+    }
 }
 
 /// test may run in subdirectory
@@ -208,9 +253,23 @@ pub struct QueryContext {
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
     /// Sub-queries of one query that may run at once, see `QueryParallelism`
     pub available_parallelism_per_query: usize,
+    /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
+    /// output tile
+    pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
+    /// The largest error in input pixels of the approximate coordinate transformation of a raster
+    /// reprojection, for a `Warp` without `approximationErrorThreshold`; `0` projects exactly
+    pub reprojection_approximation_error_px: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl QueryContext {
+    /// The upper limit in bytes for the memory that a `Warp` with the downsampling method `mode`
+    /// keeps per output tile
+    pub fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile_mb
+            .get()
+            .saturating_mul(1024 * 1024)
+    }
+
     pub fn gdal_read_ahead(&self) -> geoengine_operators::engine::GdalReadAhead {
         geoengine_operators::engine::GdalReadAhead {
             gdal_source: self.gdal_source_read_ahead.get(),
@@ -381,6 +440,32 @@ pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
     pub tiles: Option<OgcApiTilesConfig>,
     pub cors: Option<CorsConfig>,
+    /// How WMS `GetMap` and OGC API tiles resample rasters onto the requested grid
+    #[serde(default)]
+    pub map_resampling: MapResampling,
+}
+
+/// How rendered maps (WMS `GetMap`, OGC API tiles) resample rasters onto the requested grid.
+/// WCS always uses nearest neighbor, as it returns data values.
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum MapResampling {
+    /// The methods for the colorizer: the most common class for a palette, the average and
+    /// bilinear interpolation for gradients and RGB composites
+    #[default]
+    Symbology,
+    /// Nearest neighbor, which is faster
+    Nearest,
+}
+
+impl MapResampling {
+    /// The methods for rendering with `colorizer`
+    pub fn methods(self, colorizer: &RasterColorizer) -> WarpMethods {
+        match self {
+            Self::Symbology => WarpMethods::for_symbology(colorizer),
+            Self::Nearest => WarpMethods::NEAREST,
+        }
+    }
 }
 
 impl ConfigElement for Ogc {
@@ -534,32 +619,18 @@ impl GdalProcessPool {
 }
 
 /// Configuration for GDAL worker processes, passed from the main process at spawn time.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<std::collections::HashMap<String, String>>,
+    /// Environment variables of each worker process, set when it starts. Names are applied in
+    /// upper case.
+    #[serde(default)]
+    pub environment: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
-    /// Size of the `OpenBLAS` and OpenMP thread pools of each worker process.
-    #[serde(default = "default_blas_threads")]
-    pub blas_threads: NonZeroUsize,
-}
-
-fn default_blas_threads() -> NonZeroUsize {
-    NonZeroUsize::MIN
-}
-
-impl Default for GdalProcessPoolWorkerConfig {
-    fn default() -> Self {
-        Self {
-            gdal_config_options: None,
-            logging: WorkerLoggingConfig::default(),
-            open_telemetry: OpenTelemetryConfig::default(),
-            blas_threads: default_blas_threads(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -613,7 +684,20 @@ impl From<GdalProcessPoolWorkerConfig>
         config: GdalProcessPoolWorkerConfig,
     ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
         geoengine_operators::source::gdal_worker_process::WorkerConfig {
-            gdal_config_options: config.gdal_config_options.map(|m| m.into_iter().collect()),
+            // GDAL ignores the case; the settings name the options in lower case
+            gdal_config_options: config.gdal_config_options.map(|options| {
+                options
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                    .collect()
+            }),
+            // the settings name the variables in lower case, the environment is case-sensitive
+            environment: config
+                .environment
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                .collect(),
             logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
                 log_spec: config.logging.log_spec,
                 log_to_file: config.logging.log_to_file,
@@ -625,7 +709,6 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
-            blas_threads: config.blas_threads.get(),
         }
     }
 }
@@ -907,11 +990,11 @@ mod tests {
     /// `Settings-default.toml` alone, without the overrides of `Settings-test.toml`
     fn default_settings() -> Config {
         Config::builder()
-            .add_source(File::from(
+            .add_source(WorkerOptionNamesInLowerCase(File::from(
                 retrieve_settings_dir()
                     .unwrap()
                     .join("Settings-default.toml"),
-            ))
+            )))
             .build()
             .unwrap()
     }
@@ -924,6 +1007,41 @@ mod tests {
 
         assert_eq!(config.max_cache_size_in_bytes, 1024 * 1024 * 1024);
         assert_eq!(config.workspace_path, PathBuf::from("expression_workspace"));
+    }
+
+    #[test]
+    fn it_resamples_maps_by_symbology_unless_configured_otherwise() {
+        use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+
+        let config: Ogc = default_settings().get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Symbology);
+
+        let config = Config::builder()
+            .add_source(default_settings())
+            .set_override("ogc.map_resampling", "nearest")
+            .unwrap()
+            .build()
+            .unwrap();
+        let config: Ogc = config.get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Nearest);
+
+        let palette = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: Colorizer::palette(
+                [(1.0.try_into().unwrap(), RgbaColor::white())].into(),
+                RgbaColor::transparent(),
+                RgbaColor::black(),
+            )
+            .unwrap(),
+        };
+        assert_eq!(
+            MapResampling::Symbology.methods(&palette),
+            WarpMethods::CLASSES
+        );
+        assert_eq!(
+            MapResampling::Nearest.methods(&palette),
+            WarpMethods::NEAREST
+        );
     }
 
     #[test]
@@ -972,6 +1090,116 @@ mod tests {
         assert!(pool(32, 8, 16).validate().is_ok());
     }
 
+    /// The worker config from `Settings-default.toml`, a `Settings.toml` with `local`, and the
+    /// environment variable `GEOENGINE__GDAL_PROCESS_POOL__WORKER__{variable}` set to `env`.
+    fn worker_config(
+        local: Option<&str>,
+        variable: &str,
+        env: Option<&str>,
+    ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
+        let mut config = Config::builder().add_source(default_settings());
+        if let Some(local) = local {
+            config = config.add_source(WorkerOptionNamesInLowerCase(File::from_str(
+                local,
+                config::FileFormat::Toml,
+            )));
+        }
+        let variable = format!("GEOENGINE__GDAL_PROCESS_POOL__WORKER__{variable}");
+        let config = config
+            .add_source(
+                Environment::with_prefix("geoengine")
+                    .separator("__")
+                    .source(Some(
+                        env.map(|env| (variable, env.to_string()))
+                            .into_iter()
+                            .collect(),
+                    )),
+            )
+            .build()
+            .unwrap();
+        let pool: GdalProcessPool = config.get(GdalProcessPool::KEY).unwrap();
+        pool.worker.into()
+    }
+
+    /// The chunk sizes the workers get from `Settings-default.toml`, a `Settings.toml` with
+    /// `local` and the environment variable set to `env`.
+    fn worker_chunk_sizes(local: Option<&str>, env: Option<&str>) -> Vec<(String, String)> {
+        worker_config(local, "GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE", env)
+            .gdal_config_options
+            .unwrap()
+            .into_iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
+            .collect()
+    }
+
+    #[test]
+    fn it_lets_the_order_of_the_settings_decide_a_worker_environment_variable() {
+        let gaps = |local: Option<&str>, env: Option<&str>| {
+            worker_config(local, "ENVIRONMENT__OPJ_PLT_MIN_GAP", env)
+                .environment
+                .into_iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("OPJ_PLT_MIN_GAP"))
+                .collect::<Vec<_>>()
+        };
+        let gap = |size: &str| vec![("OPJ_PLT_MIN_GAP".to_string(), size.to_string())];
+        let local =
+            |name: &str| format!("[gdal_process_pool.worker.environment]\n{name} = \"131072\"\n");
+
+        // the default sets no such variable, but one BLAS thread; a local table keeps those
+        assert_eq!(gaps(None, None), vec![]);
+        for local in [None, Some(local("OPJ_PLT_MIN_GAP"))] {
+            let mut environment =
+                worker_config(local.as_deref(), "ENVIRONMENT__OPJ_PLT_MIN_GAP", None).environment;
+            environment.retain(|(name, _)| name.ends_with("_NUM_THREADS"));
+            environment.sort();
+            assert_eq!(
+                environment,
+                [("OMP_NUM_THREADS", "1"), ("OPENBLAS_NUM_THREADS", "1")]
+                    .map(|(name, value)| (name.to_string(), value.to_string()))
+            );
+        }
+        assert_eq!(gaps(None, Some("65536")), gap("65536"));
+        // a local file sets it in any spelling, as one upper-case name; the environment wins
+        for name in ["OPJ_PLT_MIN_GAP", "opj_plt_min_gap", "Opj_Plt_Min_Gap"] {
+            assert_eq!(gaps(Some(&local(name)), None), gap("131072"), "{name}");
+            assert_eq!(
+                gaps(Some(&local(name)), Some("65536")),
+                gap("65536"),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_lets_the_order_of_the_settings_decide_a_worker_gdal_option() {
+        let chunk_size =
+            |size: &str| vec![("CPL_VSIL_CURL_CHUNK_SIZE".to_string(), size.to_string())];
+        let local = |name: &str| {
+            format!("[gdal_process_pool.worker.gdal_config_options]\n{name} = \"262144\"\n")
+        };
+
+        assert_eq!(worker_chunk_sizes(None, None), chunk_size("1048576"));
+        // the environment overrides the default file, which spells the name in upper case
+        assert_eq!(worker_chunk_sizes(None, Some("65536")), chunk_size("65536"));
+        // a local file overrides the default in any spelling, the environment overrides both
+        for name in [
+            "CPL_VSIL_CURL_CHUNK_SIZE",
+            "cpl_vsil_curl_chunk_size",
+            "Cpl_Vsil_Curl_Chunk_Size",
+        ] {
+            assert_eq!(
+                worker_chunk_sizes(Some(&local(name)), None),
+                chunk_size("262144"),
+                "{name}"
+            );
+            assert_eq!(
+                worker_chunk_sizes(Some(&local(name)), Some("65536")),
+                chunk_size("65536"),
+                "{name}"
+            );
+        }
+    }
+
     fn default_element<T: ConfigElement + for<'a> Deserialize<'a>>() -> T {
         default_settings().get(T::KEY).unwrap()
     }
@@ -1017,6 +1245,33 @@ mod tests {
         assert!(rejects::<QueryContext>(
             "multi_band_gdal_source_read_ahead",
             0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_warp_mode_memory_to_the_operators_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.warp_mode_max_memory_per_tile(),
+            geoengine_operators::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE
+        );
+        assert!(rejects::<QueryContext>(
+            "warp_mode_max_memory_per_tile_mb",
+            0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_reprojection_approximation_error_to_gdals_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.reprojection_approximation_error_px.get(),
+            0.125,
+            "GDAL's default for `gdalwarp -et`"
+        );
+        assert!(rejects::<QueryContext>(
+            "reprojection_approximation_error_px",
+            -1
         ));
     }
 

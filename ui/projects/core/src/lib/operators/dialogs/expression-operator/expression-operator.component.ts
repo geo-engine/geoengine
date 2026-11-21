@@ -1,14 +1,15 @@
-import {AsyncPipe} from '@angular/common';
-import {AfterViewInit, ChangeDetectionStrategy, Component, inject, input, viewChild} from '@angular/core';
-import {AbstractControl, FormControl, FormGroup, ValidationErrors, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
+import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatCheckbox} from '@angular/material/checkbox';
 import {MatIcon} from '@angular/material/icon';
 import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
-import {BehaviorSubject, combineLatest, from, Observable, of} from 'rxjs';
-import {map, mergeMap} from 'rxjs/operators';
+import {Completion} from '@codemirror/autocomplete';
+import {combineLatest, from, Observable, of} from 'rxjs';
+import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {Measurement, ProcessingGraph, RasterDataType as ApiRasterDataType} from '@geoengine/api-client';
 import {
     GeoEngineError,
@@ -17,16 +18,16 @@ import {
     RasterDataType,
     RasterDataTypes,
     RasterLayer,
-    RasterLayerMetadata,
     RasterSymbology,
     ResultTypes,
     SingleBandRasterColorizer,
     geoengineValidators,
     CommonModule,
-    AsyncStringSanitizer,
-    AsyncValueDefault,
     errorToText,
     errorMessage,
+    expressionBandVariables,
+    EXPRESSION_FUNCTIONS,
+    EXPRESSION_KEYWORDS,
 } from '@geoengine/common';
 import {UUID} from '../../../backend/backend.model';
 import {SymbologyCreationType, SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
@@ -34,9 +35,17 @@ import {LayoutService, SidenavConfig} from '../../../layout.service';
 import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {LetterNumberConverter} from '../helpers/multi-layer-selection/multi-layer-selection.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
+
+/**
+ * A raster band and the variable that refers to it in the expression.
+ */
+interface BandVariable {
+    variable: string;
+    bandName: string;
+    index: number;
+}
 
 interface ExpressionForm {
     rasterLayer: FormControl<RasterLayer | undefined>;
@@ -76,9 +85,6 @@ interface ExpressionForm {
         MatError,
         SymbologyCreatorComponent,
         MatButton,
-        AsyncPipe,
-        AsyncStringSanitizer,
-        AsyncValueDefault,
     ],
 })
 export class ExpressionOperatorComponent implements AfterViewInit {
@@ -91,142 +97,116 @@ export class ExpressionOperatorComponent implements AfterViewInit {
     readonly dataListConfig = input<SidenavConfig>();
 
     readonly measurementComponent = viewChild(MeasurementComponent);
-
-    readonly RASTER_TYPE = [ResultTypes.RASTER];
-    readonly form: FormGroup<ExpressionForm>;
-
-    readonly outputDataTypes$: Observable<Array<[RasterDataType, string]>>;
-
-    readonly rasterVariables$: Observable<Array<string>>;
-
-    readonly fnSignature: Observable<string>;
-
-    readonly lastError$ = new BehaviorSubject<string | undefined>(undefined);
-    readonly projectHasRasterLayers$: Observable<boolean>;
-
-    readonly loading$ = new BehaviorSubject<boolean>(false);
-
     readonly symbologyCreator = viewChild.required(SymbologyCreatorComponent);
 
-    /**
-     * DI of services and setup of observables for the template
-     */
+    readonly RASTER_TYPE = [ResultTypes.RASTER];
+
+    readonly form = new FormGroup<ExpressionForm>({
+        rasterLayer: new FormControl<RasterLayer | undefined>(undefined, {
+            nonNullable: true,
+            validators: [Validators.required],
+        }),
+        expression: new FormControl<string>('', {
+            nonNullable: true,
+            validators: [Validators.required],
+        }),
+        dataType: new FormControl(undefined, {
+            nonNullable: true,
+            validators: [Validators.required],
+        }),
+        mapNoData: new FormControl(false, {
+            nonNullable: true,
+            validators: [Validators.required],
+        }),
+        name: new FormControl('Expression', {
+            nonNullable: true,
+            validators: [Validators.required, geoengineValidators.notOnlyWhitespace],
+        }),
+        outputBandName: new FormControl('band', {
+            nonNullable: true,
+            validators: [Validators.required, geoengineValidators.notOnlyWhitespace],
+        }),
+        outputMeasurement: new FormControl<Measurement | undefined>(undefined, {
+            nonNullable: true,
+        }),
+        symbologyCreation: new FormControl(SymbologyCreationType.AS_INPUT, {
+            nonNullable: true,
+            validators: [Validators.required],
+        }),
+    });
+
+    readonly projectHasRasterLayers = toSignal(
+        this.projectService.getLayerStream().pipe(map((layers: Array<Layer>) => layers.some((layer) => layer.layerType === 'raster'))),
+        {initialValue: false},
+    );
+
+    /** The metadata of the selected raster layer. */
+    private readonly rasterLayerMetadata = toSignal(
+        this.form.controls.rasterLayer.valueChanges.pipe(
+            switchMap((rasterLayer: RasterLayer | undefined) =>
+                rasterLayer ? this.projectService.getRasterLayerMetadata(rasterLayer) : of(undefined),
+            ),
+        ),
+        {initialValue: undefined},
+    );
+
+    readonly outputDataTypes = computed<Array<[RasterDataType, string]>>(() => {
+        const inputDataType = this.rasterLayerMetadata()?.dataType;
+        return RasterDataTypes.ALL_DATATYPES.map((dataType) => [dataType, dataType === inputDataType ? '(like input)' : '']);
+    });
+
+    private readonly bandVariables = computed<Array<BandVariable>>(() => {
+        const bandNames = this.rasterLayerMetadata()?.bands.map((band) => band.name) ?? [];
+        return expressionBandVariables(bandNames).map((variable, index) => ({
+            variable,
+            bandName: bandNames[index],
+            index,
+        }));
+    });
+
+    readonly fnSignature = computed(
+        () =>
+            `fn(${this.bandVariables()
+                .map((band) => band.variable)
+                .join(', ')}):`,
+    );
+
+    readonly completions = computed(() => expressionCompletions(this.bandVariables()));
+
+    readonly lastError = signal<string | undefined>(undefined);
+    readonly loading = signal(false);
+
+    /** The expression that was suggested last. It is only replaced as long as the user does not change it. */
+    private suggestedExpression = '';
+
     constructor() {
-        this.form = new FormGroup<ExpressionForm>({
-            rasterLayer: new FormControl<RasterLayer | undefined>(undefined, {
-                nonNullable: true,
-                validators: [Validators.required],
-            }),
-            expression: new FormControl<string>('1 * A', {
-                nonNullable: true,
-                validators: [Validators.required],
-            }),
-            dataType: new FormControl(undefined, {
-                nonNullable: true,
-                validators: [Validators.required],
-            }),
-            mapNoData: new FormControl(false, {
-                nonNullable: true,
-                validators: [Validators.required],
-            }),
-            name: new FormControl('Expression', {
-                nonNullable: true,
-                validators: [Validators.required, geoengineValidators.notOnlyWhitespace],
-            }),
-            outputBandName: new FormControl('band', {
-                nonNullable: true,
-                validators: [Validators.required, geoengineValidators.notOnlyWhitespace],
-            }),
-            outputMeasurement: new FormControl<Measurement | undefined>(undefined, {
-                nonNullable: true,
-            }),
-            symbologyCreation: new FormControl(SymbologyCreationType.AS_INPUT, {
-                nonNullable: true,
-                validators: [Validators.required],
-            }),
-            // TODO: add unit related inputs
+        // use the data type of the input as the default output data type
+        effect(() => {
+            const inputDataType = this.rasterLayerMetadata()?.dataType;
+            if (inputDataType) {
+                this.form.controls.dataType.setValue(inputDataType);
+            }
         });
 
-        // TODO on selected raster update the data type (like input)
-        this.outputDataTypes$ = this.form.controls.rasterLayer.valueChanges.pipe(
-            mergeMap((rasterLayer: RasterLayer | undefined) => {
-                if (!rasterLayer) {
-                    return of(undefined);
-                }
-
-                return this.projectService.getRasterLayerMetadata(rasterLayer);
-            }),
-            map((rasterLayer: RasterLayerMetadata | undefined) => {
-                const outputDataTypes: Array<[RasterDataType, string]> = RasterDataTypes.ALL_DATATYPES.map((dataType: RasterDataType) => [
-                    dataType,
-                    '',
-                ]);
-
-                if (!rasterLayer) {
-                    return outputDataTypes;
-                }
-
-                for (const output of outputDataTypes) {
-                    const outputDataType = output[0];
-
-                    if (outputDataType === rasterLayer?.dataType) {
-                        output[1] = '(like input)';
-
-                        const dataTypeControl = this.form.controls.dataType;
-                        setTimeout(() => {
-                            dataTypeControl.setValue(outputDataType);
-                        });
-                    }
-                }
-
-                return outputDataTypes;
-            }),
-        );
-
-        this.rasterVariables$ = this.form.controls.rasterLayer.valueChanges.pipe(
-            mergeMap((rasterLayer: RasterLayer | undefined) => {
-                if (!rasterLayer) {
-                    return of([]);
-                }
-
-                return this.projectService
-                    .getRasterLayerMetadata(rasterLayer)
-                    .pipe(map((meta) => meta.bands.map((_, index) => LetterNumberConverter.toLetters(index + 1))));
-            }),
-        );
-
-        this.fnSignature = this.rasterVariables$.pipe(map((vars: string[]) => `fn(${vars.join(', ')}):`));
-
-        this.projectHasRasterLayers$ = this.projectService
-            .getLayerStream()
-            .pipe(map((layers: Array<Layer>) => layers.filter((layer) => layer.layerType === 'raster').length > 0));
+        // suggest an expression with the first band, unless the user has changed the expression
+        effect(() => {
+            const firstBand = this.bandVariables().at(0);
+            const expressionControl = this.form.controls.expression;
+            if (!firstBand || expressionControl.value !== this.suggestedExpression) {
+                return;
+            }
+            this.suggestedExpression = `1 * ${firstBand.variable}`;
+            expressionControl.setValue(this.suggestedExpression);
+        });
     }
 
     ngAfterViewInit(): void {
         setTimeout(() =>
-            this.form.controls['rasterLayer'].updateValueAndValidity({
+            this.form.controls.rasterLayer.updateValueAndValidity({
                 onlySelf: false,
                 emitEvent: true,
             }),
         );
-    }
-
-    /*
-    ngOnDestroy(): void {
-        // TODO: incorporate unit again
-        // this.unitSubscription.unsubscribe();
-    }
-    */
-
-    validateNoData(control: AbstractControl): ValidationErrors | null {
-        const value = control.value as string;
-        if (!isNaN(parseFloat(value)) || value.toLowerCase() === 'nan') {
-            return null;
-        } else {
-            return {
-                error: true,
-            };
-        }
     }
 
     /**
@@ -234,31 +214,22 @@ export class ExpressionOperatorComponent implements AfterViewInit {
      * The resulting layer is added to the map.
      */
     add(): void {
-        if (this.loading$.value) {
+        if (this.loading()) {
             return; // don't add while loading
         }
-        const name: string = this.form.controls['name'].value;
-        const dataType: RasterDataType | undefined = this.form.controls['dataType'].value;
-        const expression: string = this.form.controls['expression'].value;
-        const rasterLayer: RasterLayer | undefined = this.form.controls['rasterLayer'].value;
-        const mapNoData: boolean = this.form.controls['mapNoData'].value;
-        const outputBandName: string = this.form.controls['outputBandName'].value;
 
-        let outputMeasurement: Measurement | undefined = undefined;
-
-        const measurementComponent = this.measurementComponent();
-        if (measurementComponent) {
-            outputMeasurement = measurementComponent.measurement();
-        }
-
-        const outputBand = {
-            name: outputBandName,
-            measurement: outputMeasurement ?? {type: 'unitless'},
-        };
+        const {name, dataType, expression, rasterLayer, mapNoData, outputBandName} = this.form.getRawValue();
 
         if (!dataType || !rasterLayer) {
             return; // checked by form validator
         }
+
+        const outputBand = {
+            name: outputBandName,
+            measurement: this.measurementComponent()?.measurement() ?? {type: 'unitless'},
+        };
+
+        this.loading.set(true);
 
         from(this.projectService.getProcessingGraph(rasterLayer.workflowId))
             .pipe(
@@ -312,13 +283,13 @@ export class ExpressionOperatorComponent implements AfterViewInit {
             .subscribe({
                 next: () => {
                     // everything worked well
-                    this.lastError$.next(undefined);
-                    this.loading$.next(false);
+                    this.lastError.set(undefined);
+                    this.loading.set(false);
                 },
                 error: (error) => {
                     void errorToText(error, errorMessage(error)).then((errorMsg) => {
-                        this.lastError$.next(errorMsg);
-                        this.loading$.next(false);
+                        this.lastError.set(errorMsg);
+                        this.loading.set(false);
                     });
                 },
             });
@@ -332,4 +303,33 @@ export class ExpressionOperatorComponent implements AfterViewInit {
 
         this.layoutService.setSidenavContentComponent(dataListConfig);
     }
+}
+
+/**
+ * Suggestions for the expression editor: the band variables, the functions and the keywords.
+ */
+function expressionCompletions(bands: ReadonlyArray<BandVariable>): Array<Completion> {
+    const variables: Array<Completion> = bands.map((band) => ({
+        label: band.variable,
+        type: 'variable',
+        detail: `band ${band.index + 1}`,
+        info: band.bandName !== band.variable ? `band name: ${band.bandName}` : undefined,
+        boost: 2,
+    }));
+
+    const functions: Array<Completion> = EXPRESSION_FUNCTIONS.map((fn) => ({
+        label: fn.name,
+        type: 'function',
+        detail: fn.signature,
+        info: fn.description,
+        apply: `${fn.name}(`,
+        boost: 1,
+    }));
+
+    const keywords: Array<Completion> = EXPRESSION_KEYWORDS.map((keyword) => ({
+        label: keyword === 'nodata' ? 'NODATA' : keyword === 'is' ? 'IS NODATA' : keyword,
+        type: 'keyword',
+    }));
+
+    return [...variables, ...functions, ...keywords];
 }

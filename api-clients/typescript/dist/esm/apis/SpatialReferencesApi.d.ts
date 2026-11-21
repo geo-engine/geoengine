@@ -25,9 +25,11 @@ export declare class SpatialReferencesApi extends runtime.BaseAPI {
      */
     getSpatialReferenceSpecificationHandlerRequestOpts(requestParameters: GetSpatialReferenceSpecificationHandlerRequest): Promise<runtime.RequestOpts>;
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     getSpatialReferenceSpecificationHandlerRaw(requestParameters: GetSpatialReferenceSpecificationHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SpatialReferenceSpecification>>;
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     getSpatialReferenceSpecificationHandler(requestParameters: GetSpatialReferenceSpecificationHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SpatialReferenceSpecification>;
 }

@@ -15,7 +15,7 @@ All URIs are relative to *https://geoengine.io/api*
 | [**listVolumesHandler**](DatasetsApi.md#listvolumeshandler) | **GET** /dataset/volumes | Lists available volumes. |
 | [**suggestMetaDataHandler**](DatasetsApi.md#suggestmetadatahandler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified. |
 | [**updateDatasetHandler**](DatasetsApi.md#updatedatasethandler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name. |
-| [**updateDatasetProvenanceHandler**](DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance |  |
+| [**updateDatasetProvenanceHandler**](DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance | Updates the dataset\&#39;s provenance. |
 | [**updateDatasetSymbologyHandler**](DatasetsApi.md#updatedatasetsymbologyhandler) | **PUT** /dataset/{dataset}/symbology | Updates the dataset\&#39;s symbology |
 | [**updateLoadingInfoHandler**](DatasetsApi.md#updateloadinginfohandler) | **PUT** /dataset/{dataset}/loadingInfo | Updates the dataset\&#39;s loading info |
 
@@ -812,7 +812,7 @@ example().catch(console.error);
 
 > updateDatasetProvenanceHandler(dataset, provenances)
 
-
+Updates the dataset\&#39;s provenance.
 
 ### Example
 

@@ -67,7 +67,7 @@ describe('polygonRasterizationParams', () => {
     });
 
     it('creates the parameters of the time', () => {
-        expect(polygonRasterizationParams({...defaults, timeMode: 'ignore'}).time).toEqual({type: 'ignore'});
+        expect(polygonRasterizationParams({...defaults, timeMode: 'allFeatures'}).time).toEqual({type: 'allFeatures'});
 
         expect(polygonRasterizationParams({...defaults, timeMode: 'regular', granularity: 'years', step: 2}).time).toEqual({
             type: 'regular',

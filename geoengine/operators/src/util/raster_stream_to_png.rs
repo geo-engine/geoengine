@@ -1,11 +1,15 @@
 use super::abortable_query_execution;
+use crate::engine::RasterResultDescriptor;
 use crate::engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessorExt};
 use crate::util::{Result, spawn_query_task};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::operations::image::{ColorMapper, RasterColorizer, RgbParams};
-use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess, RasterTile2D};
+use geoengine_datatypes::primitives::Measurement;
+use geoengine_datatypes::raster::{
+    FromIndexFn, GridIndexAccess, GridShapeAccess, RasterDataType, RasterTile2D,
+};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
@@ -15,6 +19,7 @@ use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::convert::TryInto;
 use tracing::{Instrument, Level, span};
+use typed_floats::tf64::NonNaN;
 
 /// # Panics
 /// Panics if not three bands were queried.
@@ -29,13 +34,9 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)> {
+    // the tiles of a position arrive in ascending band order, because the band selection is always sorted
     debug_assert!(
-        query_rect.attributes().count() <= 3
-            || query_rect
-                .attributes()
-                .as_slice()
-                .windows(2)
-                .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
+        query_rect.attributes().count() <= 3 && query_rect.attributes().as_slice().is_sorted(),
         "bands must be sorted and at most three bands can be queried"
     );
 
@@ -283,6 +284,74 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Colorizer {
         RgbaColor::black(),
     )
     .expect("we know the min and max value are valid")
+}
+
+/// The colorizer for rendering the first band of a raster with `result_descriptor` without a
+/// given one: a palette with one color per class for a classification, otherwise a gradient from
+/// black to white over the range of the data type (see [`default_colorizer_gradient`]).
+pub fn default_raster_colorizer(result_descriptor: &RasterResultDescriptor) -> RasterColorizer {
+    let measurement = result_descriptor
+        .bands
+        .iter()
+        .next()
+        .map(|band| &band.measurement);
+    let band_colorizer = match measurement {
+        Some(Measurement::Classification(classification)) if !classification.classes.is_empty() => {
+            class_palette(classification.classes.keys().copied())
+        }
+        _ => match result_descriptor.data_type {
+            RasterDataType::U8 => default_colorizer_gradient::<u8>(),
+            RasterDataType::U16 => default_colorizer_gradient::<u16>(),
+            RasterDataType::U32 => default_colorizer_gradient::<u32>(),
+            RasterDataType::U64 => default_colorizer_gradient::<u64>(),
+            RasterDataType::I8 => default_colorizer_gradient::<i8>(),
+            RasterDataType::I16 => default_colorizer_gradient::<i16>(),
+            RasterDataType::I32 => default_colorizer_gradient::<i32>(),
+            RasterDataType::I64 => default_colorizer_gradient::<i64>(),
+            RasterDataType::F32 => default_colorizer_gradient::<f32>(),
+            RasterDataType::F64 => default_colorizer_gradient::<f64>(),
+        },
+    };
+    RasterColorizer::SingleBand {
+        band: 0,
+        band_colorizer,
+    }
+}
+
+/// A palette with a distinct color for each of `classes`: hues a golden angle apart, so that
+/// neighbouring classes differ clearly
+fn class_palette(classes: impl Iterator<Item = u8>) -> Colorizer {
+    const GOLDEN_ANGLE: f64 = 137.507_764;
+    let colors = classes
+        .enumerate()
+        .map(|(index, class)| {
+            let hue = (index as f64 * GOLDEN_ANGLE) % 360.;
+            let [red, green, blue] = hsv_to_rgb(hue, 0.65, 0.9);
+            (
+                NonNaN::new(f64::from(class)).expect("a class is a number"),
+                RgbaColor::new(red, green, blue, 255),
+            )
+        })
+        .collect();
+    Colorizer::palette(colors, RgbaColor::transparent(), RgbaColor::black())
+        .expect("the classes of a classification are at most 256 colors")
+}
+
+/// The RGB color of `hue` in degrees, `saturation` and `value` in `[0, 1]`
+fn hsv_to_rgb(hue: f64, saturation: f64, value: f64) -> [u8; 3] {
+    let chroma = value * saturation;
+    let sector = hue / 60.;
+    let x = chroma * (1. - (sector % 2. - 1.).abs());
+    let (red, green, blue) = match sector as u8 {
+        0 => (chroma, x, 0.),
+        1 => (x, chroma, 0.),
+        2 => (0., chroma, x),
+        3 => (0., x, chroma),
+        4 => (x, 0., chroma),
+        _ => (chroma, 0., x),
+    };
+    let to_u8 = |component: f64| ((component + value - chroma) * 255.).round() as u8;
+    [to_u8(red), to_u8(green), to_u8(blue)]
 }
 
 pub fn compute_rgb_tile<P: Pixel>(
@@ -556,5 +625,63 @@ mod tests {
         );
 
         processing.shutdown_background();
+    }
+
+    #[test]
+    fn it_renders_classes_with_a_palette_and_values_with_a_gradient() {
+        use crate::engine::{RasterBandDescriptor, RasterBandDescriptors};
+        use crate::util::raster_stream_to_png::default_raster_colorizer;
+        use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
+        use geoengine_datatypes::primitives::Measurement;
+        use geoengine_datatypes::raster::RasterDataType;
+
+        let descriptor = |data_type, measurement| RasterResultDescriptor {
+            data_type,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                measurement,
+            )])
+            .unwrap(),
+            ..create_ndvi_meta_data().result_descriptor
+        };
+
+        let classes = default_raster_colorizer(&descriptor(
+            RasterDataType::U8,
+            Measurement::classification(
+                "land cover".into(),
+                [
+                    (1, "forest".into()),
+                    (2, "water".into()),
+                    (7, "city".into()),
+                ]
+                .into(),
+            ),
+        ));
+        let RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: Colorizer::Palette { colors, .. },
+        } = classes
+        else {
+            panic!("a classification should get a palette, got {classes:?}");
+        };
+        let mut palette_classes: Vec<f64> = colors
+            .into_inner()
+            .keys()
+            .map(typed_floats::tf64::NonNaN::get)
+            .collect();
+        palette_classes.sort_by(f64::total_cmp);
+        assert_eq!(palette_classes, vec![1., 2., 7.]);
+
+        let values = default_raster_colorizer(&descriptor(
+            RasterDataType::U16,
+            Measurement::continuous("ndvi".into(), None),
+        ));
+        assert_eq!(
+            values,
+            RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: super::default_colorizer_gradient::<u16>(),
+            }
+        );
     }
 }

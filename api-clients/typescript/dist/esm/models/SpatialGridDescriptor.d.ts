@@ -25,9 +25,9 @@ export interface SpatialGridDescriptor {
      */
     descriptor: SpatialGridDescriptorState;
     /**
-     * The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.
-     * Sources read only these and downsample further themselves. Unset: the levels are unknown
-     * and GDAL chooses, which may resample.
+     * The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset;
+     * `1` says that the files have no overviews. Sources read only these and downsample further
+     * themselves. Unset: the levels are unknown and GDAL chooses, which may resample.
      */
     maxOverviewLevel?: number | null;
 }

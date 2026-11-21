@@ -56,6 +56,7 @@ class SpatialReferencesApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     getSpatialReferenceSpecificationHandlerRaw(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -65,6 +66,7 @@ class SpatialReferencesApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     getSpatialReferenceSpecificationHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {

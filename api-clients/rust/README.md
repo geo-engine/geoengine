@@ -38,7 +38,7 @@ Class | Method | HTTP request | Description
 *DatasetsApi* | [**list_volumes_handler**](docs/DatasetsApi.md#list_volumes_handler) | **GET** /dataset/volumes | Lists available volumes.
 *DatasetsApi* | [**suggest_meta_data_handler**](docs/DatasetsApi.md#suggest_meta_data_handler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 *DatasetsApi* | [**update_dataset_handler**](docs/DatasetsApi.md#update_dataset_handler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
-*DatasetsApi* | [**update_dataset_provenance_handler**](docs/DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | 
+*DatasetsApi* | [**update_dataset_provenance_handler**](docs/DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | Updates the dataset's provenance.
 *DatasetsApi* | [**update_dataset_symbology_handler**](docs/DatasetsApi.md#update_dataset_symbology_handler) | **PUT** /dataset/{dataset}/symbology | Updates the dataset's symbology
 *DatasetsApi* | [**update_loading_info_handler**](docs/DatasetsApi.md#update_loading_info_handler) | **PUT** /dataset/{dataset}/loadingInfo | Updates the dataset's loading info
 *GeneralApi* | [**available_handler**](docs/GeneralApi.md#available_handler) | **GET** /available | Server availablity check.
@@ -57,7 +57,7 @@ Class | Method | HTTP request | Description
 *LayersApi* | [**list_collection_handler**](docs/LayersApi.md#list_collection_handler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 *LayersApi* | [**list_providers**](docs/LayersApi.md#list_providers) | **GET** /layerDb/providers | List all providers
 *LayersApi* | [**list_root_collections_handler**](docs/LayersApi.md#list_root_collections_handler) | **GET** /layers/collections | List all layer collections
-*LayersApi* | [**provider_capabilities_handler**](docs/LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | 
+*LayersApi* | [**provider_capabilities_handler**](docs/LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 *LayersApi* | [**remove_collection**](docs/LayersApi.md#remove_collection) | **DELETE** /layerDb/collections/{collection} | Remove a collection
 *LayersApi* | [**remove_collection_from_collection**](docs/LayersApi.md#remove_collection_from_collection) | **DELETE** /layerDb/collections/{parent}/collections/{collection} | Delete a collection from a collection
 *LayersApi* | [**remove_layer**](docs/LayersApi.md#remove_layer) | **DELETE** /layerDb/layers/{layer} | Remove a collection
@@ -70,10 +70,13 @@ Class | Method | HTTP request | Description
 *MlApi* | [**get_ml_model**](docs/MlApi.md#get_ml_model) | **GET** /ml/models/{model_name} | Get ml model by name.
 *MlApi* | [**list_ml_models**](docs/MlApi.md#list_ml_models) | **GET** /ml/models | List ml models.
 *OgcapiApi* | [**collection**](docs/OgcapiApi.md#collection) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
+*OgcapiApi* | [**collection_coverage_tileset**](docs/OgcapiApi.md#collection_coverage_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId} | OGC API Collection Coverage Tileset Metadata
+*OgcapiApi* | [**collection_coverage_tilesets**](docs/OgcapiApi.md#collection_coverage_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles | OGC API Collection Coverage Tilesets List
 *OgcapiApi* | [**collection_tileset**](docs/OgcapiApi.md#collection_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
 *OgcapiApi* | [**collection_tilesets**](docs/OgcapiApi.md#collection_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
 *OgcapiApi* | [**collections**](docs/OgcapiApi.md#collections) | **GET** /ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
 *OgcapiApi* | [**conformance**](docs/OgcapiApi.md#conformance) | **GET** /ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
+*OgcapiApi* | [**coverage_tile**](docs/OgcapiApi.md#coverage_tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Coverage Tile
 *OgcapiApi* | [**landing_page**](docs/OgcapiApi.md#landing_page) | **GET** /ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
 *OgcapiApi* | [**tile**](docs/OgcapiApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
 *OgcapiApi* | [**tile_matrix_set**](docs/OgcapiApi.md#tile_matrix_set) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
@@ -107,8 +110,8 @@ Class | Method | HTTP request | Description
 *SessionApi* | [**register_user_handler**](docs/SessionApi.md#register_user_handler) | **POST** /user | Registers a user.
 *SessionApi* | [**session_handler**](docs/SessionApi.md#session_handler) | **GET** /session | Retrieves details about the current session.
 *SessionApi* | [**session_project_handler**](docs/SessionApi.md#session_project_handler) | **POST** /session/project/{project} | Sets the active project of the session.
-*SessionApi* | [**session_view_handler**](docs/SessionApi.md#session_view_handler) | **POST** /session/view | 
-*SpatialReferencesApi* | [**get_spatial_reference_specification_handler**](docs/SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | 
+*SessionApi* | [**session_view_handler**](docs/SessionApi.md#session_view_handler) | **POST** /session/view | Sets the view (spatial and temporal extent) of the current session.
+*SpatialReferencesApi* | [**get_spatial_reference_specification_handler**](docs/SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | Returns the name, PROJ string, extent and axis order of a spatial reference.
 *TasksApi* | [**abort_handler**](docs/TasksApi.md#abort_handler) | **DELETE** /tasks/{id} | Abort a running task.
 *TasksApi* | [**list_handler**](docs/TasksApi.md#list_handler) | **GET** /tasks/list | Retrieve the status of all tasks.
 *TasksApi* | [**status_handler**](docs/TasksApi.md#status_handler) | **GET** /tasks/{id}/status | Retrieve the status of a task.
@@ -375,8 +378,8 @@ Class | Method | HTTP request | Description
  - [PolygonRasterizationAggregation](docs/PolygonRasterizationAggregation.md)
  - [PolygonRasterizationParameters](docs/PolygonRasterizationParameters.md)
  - [PolygonRasterizationTime](docs/PolygonRasterizationTime.md)
+ - [PolygonRasterizationTimeAllFeatures](docs/PolygonRasterizationTimeAllFeatures.md)
  - [PolygonRasterizationTimeFeatureTimes](docs/PolygonRasterizationTimeFeatureTimes.md)
- - [PolygonRasterizationTimeIgnore](docs/PolygonRasterizationTimeIgnore.md)
  - [PolygonRasterizationTimeRegular](docs/PolygonRasterizationTimeRegular.md)
  - [PolygonRasterizationValue](docs/PolygonRasterizationValue.md)
  - [PolygonRasterizationValueAttribute](docs/PolygonRasterizationValueAttribute.md)
@@ -466,6 +469,7 @@ Class | Method | HTTP request | Description
  - [StRectangle](docs/StRectangle.md)
  - [StacApiRetries](docs/StacApiRetries.md)
  - [StacAssetBand](docs/StacAssetBand.md)
+ - [StacCoarserAsset](docs/StacCoarserAsset.md)
  - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
  - [StacGrid](docs/StacGrid.md)
  - [StacProviderAuthentication](docs/StacProviderAuthentication.md)
@@ -569,6 +573,10 @@ Class | Method | HTTP request | Description
  - [VisualPointClusteringParameters](docs/VisualPointClusteringParameters.md)
  - [Volume](docs/Volume.md)
  - [VolumeFileLayersResponse](docs/VolumeFileLayersResponse.md)
+ - [Warp](docs/Warp.md)
+ - [WarpDownsamplingMethod](docs/WarpDownsamplingMethod.md)
+ - [WarpParameters](docs/WarpParameters.md)
+ - [WarpUpsamplingMethod](docs/WarpUpsamplingMethod.md)
  - [WcsRequest](docs/WcsRequest.md)
  - [WcsService](docs/WcsService.md)
  - [WcsVersion](docs/WcsVersion.md)

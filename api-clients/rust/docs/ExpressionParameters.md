@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**expression** | **String** | Expression script  Example: `\"(A - B) / (A + B)\"` | 
+**expression** | **String** | Expression script  Example: `\"(nir - red) / (nir + red)\"` | 
 **output_type** | [**models::RasterDataType**](RasterDataType.md) | A raster data type for the output | 
 **output_band** | Option<[**models::RasterBandDescriptor**](RasterBandDescriptor.md)> | Description about the output | [optional]
 **map_no_data** | **bool** | Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA. | 

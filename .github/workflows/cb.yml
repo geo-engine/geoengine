@@ -4,8 +4,13 @@ on:
   # For checking performance regressions on pull requests
   pull_request:
       branches: [main]
+      # the benchmarks only cover the backend
+      paths:
+        - 'geoengine/**'
+        - '.github/workflows/cb.yml'
+        - '.github/scripts/compare_benchmarks.py'
   # For generating benchmark data on main branch
-  push: 
+  push:
     branches: [main]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -15,6 +20,14 @@ env:
   BENCH_UPLOAD_NAME: benchmark-results
   BENCH_FILE_PATH: ./benchmark-data.json
   CARGO_BENCH_FILE_PATH: output.txt
+  # retry transient network failures when downloading dependencies
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  PIP_RETRIES: 10
+  UV_HTTP_RETRIES: 10
+  npm_config_fetch_retries: 5
+  npm_config_fetch_retry_mintimeout: 20000
+  npm_config_fetch_retry_maxtimeout: 120000
 
 jobs:
   benchmarks:
@@ -34,26 +47,121 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # a pull request checks out its merge commit, whose first parent is the base to compare against
+          fetch-depth: 2
 
       - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
         run: |
-          (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+          (type -p wget >/dev/null || (sudo apt-get -o Acquire::Retries=5 update && sudo apt-get -o Acquire::Retries=5 install wget -y)) \
           && sudo mkdir -p -m 755 /etc/apt/keyrings \
           && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
           && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
           && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
           && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
           && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-          && sudo apt update \
-          && sudo apt install gh -y
+          && sudo apt-get -o Acquire::Retries=5 update \
+          && sudo apt-get -o Acquire::Retries=5 install gh -y
 
-      - name: Download previous benchmark data
-        # same directory as the benchmark actions, which ignore `defaults.run`
-        working-directory: .
+      - name: Show runner hardware
+        # values of different CPUs are not comparable, so log which one this run had
         run: |
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          lscpu | grep -E '^(Model name|CPU\(s\)|Thread|Core|Socket|L3)' || true
+          free -h
 
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
+
+      # Pull request: measure the base and the pull request on the same runner, so that the comparison
+      # does not depend on the runner. Both build in the same directory, so the second build only
+      # recompiles the crates whose files the pull request changes. The bench executables are copied
+      # aside, so that the rounds can alternate without rebuilding.
+
+      - uses: actions/setup-python@v7
+        if: github.event_name == 'pull_request'
+        with:
+          python-version: "3.x"
+
+      - name: Build benchmarks of the base and the pull request
+        if: github.event_name == 'pull_request'
+        # `bash` runs with `pipefail`, so a failing build fails the step despite the pipe
+        shell: bash
+        run: |
+          # the scripts of the pull request, as the base may not have them
+          cp -r "$GITHUB_WORKSPACE/.github/scripts" "$RUNNER_TEMP/scripts"
+          pr_sha=$(git rev-parse HEAD)
+          echo "BASE_SHA=$(git rev-parse --short HEAD^1)" >> "$GITHUB_ENV"
+          git checkout --detach HEAD^1
+          just bench-ci --no-run --message-format=json-render-diagnostics \
+            | python3 -I "$RUNNER_TEMP/scripts/collect_bench_executables.py" "$RUNNER_TEMP/bench-bin/base"
+          git checkout --detach "$pr_sha"
+          just bench-ci --no-run --message-format=json-render-diagnostics \
+            | python3 -I "$RUNNER_TEMP/scripts/collect_bench_executables.py" "$RUNNER_TEMP/bench-bin/pr"
+
+      - name: Run benchmarks in the order base, PR, PR, base
+        if: github.event_name == 'pull_request'
+        shell: bash
+        # the executables read the test data of the checkout, i.e., of the pull request
+        working-directory: geoengine/operators
+        env:
+          GEOENGINE_BENCH_CI: 1
+        run: |
+          export CRITERION_HOME="$GITHUB_WORKSPACE/geoengine/target/criterion"
+          run() { # run all bench executables of $1 with the Criterion arguments $2…
+            local side="$1"; shift
+            for bench in "$RUNNER_TEMP/bench-bin/$side/bench"/*; do
+              # half the measurement time of a single run: two rounds instead of one long one
+              GDALSOURCE_PROCESS_PATH="$RUNNER_TEMP/bench-bin/$side/gdalsource-process" \
+                "$bench" --bench --measurement-time 1 "$@"
+            done
+          }
+          keep_change() { # move Criterion's `change` directories aside as `change-$1`
+            find "$CRITERION_HOME" -type d -name change -prune -exec mv {} {}-"$1" \;
+          }
+          # lenient: a benchmark that only one side has has no baseline
+          run base --save-baseline r1
+          run pr --baseline-lenient r1
+          keep_change r1
+          run pr --save-baseline r2
+          run base --baseline-lenient r2
+          keep_change r2
+
+      - name: Compare benchmark results
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 -I "$GITHUB_WORKSPACE/.github/scripts/compare_benchmarks.py" target/criterion \
+            --base-ref "$BASE_SHA" --threshold 0.25 --output "$RUNNER_TEMP/benchmark-report.md"
+          cat "$RUNNER_TEMP/benchmark-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the pull request
+        if: github.event_name == 'pull_request'
+        # the token of a pull request from a fork cannot comment; the step summary still has the report
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          report="$RUNNER_TEMP/benchmark-report.md"
+          # update the comment of an earlier run instead of adding one per push
+          comment_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- geoengine-continuous-benchmarking -->"))) | .id' \
+            | tail -n 1)
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -F "body=@$report" > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$report"
+          fi
+
+      # Main branch: append the results to the history, which shows the trend over time. Its entries
+      # come from different runners, so they are not used to judge pull requests.
+
+      - name: Download previous benchmark data
+        if: github.event_name != 'pull_request'
+        # same directory as the benchmark actions, which ignore `defaults.run`
+        working-directory: .
+        run: |
           mkdir -p ${{ env.ARTIFACT_FILE_DIR }}
 
           if gh run download --name ${{ env.BENCH_UPLOAD_NAME }} --dir ${{ env.ARTIFACT_FILE_DIR }} && [ -f "${{ env.ARTIFACT_FILE_PATH }}" ]; then
@@ -67,41 +175,14 @@ jobs:
           ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
           ARTIFACT_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-data.json
 
-      - name: Check that benchmark data is available
-        if: github.event_name == 'pull_request'
-        working-directory: .
-        run: |
-          if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
-            echo "::error::No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
-            exit 1
-          fi
-          echo "Comparing against benchmark data at ${{ env.BENCH_FILE_PATH }}."
-
       - name: Run benchmark
+        if: github.event_name != 'pull_request'
         # `bash` runs with `pipefail`, so a failing bench fails the step despite the `tee`
         shell: bash
         run: just bench-ci -- --output-format bencher | tee ../${{ env.CARGO_BENCH_FILE_PATH }}
 
-      - name: Compare benchmark result
-        if: github.event_name == 'pull_request'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Geo Engine Benchmark
-          tool: 'cargo'
-          output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
-          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          # Show alert with commit comment on detecting possible performance regression
-          alert-threshold: '200%'
-          comment-on-alert: true
-          comment-always: true
-          summary-always: true
-          fail-on-alert: false
-          save-data-file: false
-
       - name: Store benchmark result
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Geo Engine Benchmark
@@ -115,7 +196,7 @@ jobs:
           skip-fetch-gh-pages: true
 
       - uses: actions/upload-artifact@v7
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
           path: ${{ env.BENCH_FILE_PATH }}

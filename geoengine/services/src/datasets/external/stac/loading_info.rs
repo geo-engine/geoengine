@@ -15,9 +15,10 @@ use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
-    TimeDimension, TimeInstance, TimeInterval, TimeStepIter, VectorQueryRectangle,
+    SpatialResolution, TimeDimension, TimeInstance, TimeInterval, TimeStepIter,
+    VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
+use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
     CoordinateProjection, DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
 };
@@ -29,11 +30,13 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoResolution, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
+use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -247,15 +250,29 @@ impl
             .await?;
 
         tile_files.retain(|file| {
-            time_interval.intersects(&file.time)
-                && file.spatial_partition.intersects(&spatial_bounds)
+            time_interval.intersects(&file.file.time)
+                && file.file.spatial_partition.intersects(&spatial_bounds)
         });
         tile_files.sort_by(|left, right| {
-            StacTileIdentity::from(left).cmp(&StacTileIdentity::from(right))
+            StacTileIdentity::from(&left.file).cmp(&StacTileIdentity::from(&right.file))
         });
-        tile_files.dedup_by(|left, right| {
-            StacTileIdentity::from(&*left) == StacTileIdentity::from(&*right)
-        });
+        // Selection comes first: it keeps one resolution per item, so a file that another item
+        // shares must still be there for each of them.
+        let mut tile_files = if self
+            .dataset
+            .bands
+            .iter()
+            .any(|band| !band.coarser_assets.is_empty())
+        {
+            let level = match query.resolution {
+                LoadingInfoResolution::Native => NonZeroU32::MIN,
+                LoadingInfoResolution::OverviewLevel(level) => level,
+            };
+            select_file_resolution(tile_files, level)
+        } else {
+            tile_files.into_iter().map(|file| file.file).collect()
+        };
+        dedup_tile_files(&mut tile_files);
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
@@ -369,7 +386,7 @@ impl StacMultiBandMetaData {
     }
 
     /// Estimate the metadata cache weight of a complete query result, in bytes.
-    pub fn cache_weight(files: &[TileFile]) -> usize {
+    pub fn cache_weight(files: &[StacTileFile]) -> usize {
         super::cache::result_bytes(files)
     }
 
@@ -413,7 +430,7 @@ impl StacMultiBandMetaData {
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
-    ) -> geoengine_operators::util::Result<Vec<TileFile>> {
+    ) -> geoengine_operators::util::Result<Vec<StacTileFile>> {
         let mut files = Vec::new();
         let mut state = StacQueryState::FirstPage {
             query_url: items_url,
@@ -477,16 +494,23 @@ impl StacMultiBandMetaData {
     }
 
     /// Append matching assets from a STAC item to the dataset's tile file list.
-    pub fn process_stac_item(&self, item: &Item, files: &mut Vec<TileFile>) -> Result<()> {
+    pub fn process_stac_item(&self, item: &Item, files: &mut Vec<StacTileFile>) -> Result<()> {
         let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
             return Ok(());
         };
 
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
+        let mut item_files = Vec::new();
         for asset in item.assets.values() {
-            self.process_stac_asset(asset, item_epsg, time, z_index, files)?;
+            self.process_stac_asset(item, asset, item_epsg, time, z_index, &mut item_files)?;
         }
+        let item_id: Arc<str> = item.id.as_str().into();
+        files.extend(item_files.into_iter().map(|(factor, file)| StacTileFile {
+            item_id: item_id.clone(),
+            factor,
+            file,
+        }));
 
         Ok(())
     }
@@ -534,23 +558,54 @@ impl StacMultiBandMetaData {
         Ok(Some((time, z_index)))
     }
 
+    /// How many times coarser than the dataset an asset of this resolution is, if the dataset
+    /// reads such assets: 1 for its own resolution, or the factor of a coarser asset.
+    fn asset_factor(&self, resolution: SpatialResolution) -> Option<NonZeroU32> {
+        let factor =
+            resolution.integer_multiple_of(self.dataset.spatial_grid.spatial_resolution())?;
+        (factor.get() == 1
+            || self.dataset.bands.iter().any(|band| {
+                band.coarser_assets
+                    .iter()
+                    .any(|coarser| coarser.factor == factor)
+            }))
+        .then_some(factor)
+    }
+
+    /// The asset band a dataset band reads at this factor: the native asset, or a coarser
+    /// asset of the same band.
+    fn asset_band(
+        dataset_band: &super::StacProviderDatasetBand,
+        factor: NonZeroU32,
+    ) -> Option<&super::StacAssetBand> {
+        if factor.get() == 1 {
+            return Some(&dataset_band.asset_band);
+        }
+        dataset_band
+            .coarser_assets
+            .iter()
+            .find(|coarser| coarser.factor == factor)
+            .map(|coarser| &coarser.asset_band)
+    }
+
     fn process_stac_asset(
         &self,
+        item: &Item,
         asset: &stac::Asset,
         item_epsg: Option<u32>,
         time: TimeInterval,
         z_index: i64,
-        files: &mut Vec<TileFile>,
+        files: &mut Vec<(NonZeroU32, TileFile)>,
     ) -> Result<()> {
         if common::data_type_from_asset_v1_1_0_fallback(asset) != Some(self.dataset.data_type) {
             return Ok(());
         }
 
-        let Some(asset_epsg) = common::epsg_code_from_fields(
+        let Some(asset_epsg) = common::epsg_code_from_asset_or_item(
+            asset,
+            item_epsg,
             common::StacExtensionMajorVersion::V2,
-            &asset.additional_fields,
-        )
-        .or(item_epsg) else {
+        ) else {
             return Ok(());
         };
 
@@ -560,8 +615,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
-        else {
+        let Some(geo_transform) = common::geo_transform_from_asset_or_item(asset, item) else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing geo transform",
                 asset.href
@@ -569,7 +623,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let Some((height, width)) = common::proj_shape_from_fields(&asset.additional_fields) else {
+        let Some((height, width)) = common::proj_shape_from_asset_or_item(asset, item) else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing projection shape",
                 asset.href
@@ -577,13 +631,16 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        if (geo_transform.x_pixel_size().get().abs() - self.dataset.resolution.x().get()).abs()
-            > 1e-9
-            || (geo_transform.y_pixel_size().get().abs() - self.dataset.resolution.y().get()).abs()
-                > 1e-9
-        {
+        let Some(factor) = self.asset_factor(geo_transform.spatial_resolution()) else {
             return Ok(());
-        }
+        };
+        // the grid, not `resolution`: tiles have its pixel size, and harvested datasets store
+        // a square `resolution` next to a grid whose pixels are not exactly square
+        let geo_transform = snap_pixel_size(
+            geo_transform,
+            self.dataset.spatial_grid.spatial_resolution().times(factor),
+            &asset.href,
+        )?;
 
         let Some(asset_title) = asset.title.as_deref() else {
             tracing::warn!(
@@ -596,19 +653,7 @@ impl StacMultiBandMetaData {
         let grid_bounds = stac_asset_grid_bounds(height, width)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-        let file_path = if asset.href.starts_with("http://")
-            || asset.href.starts_with("https://")
-            || asset.href.starts_with("s3://")
-        {
-            PathBuf::from(&asset.href)
-        } else {
-            return Err(
-                geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: format!("unsupported STAC asset href scheme in {:?}", asset.href),
-                }
-                .into(),
-            );
-        };
+        let file_path = asset_file_path(&asset.href)?;
 
         let gdal_config_options =
             common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref(), None);
@@ -617,41 +662,47 @@ impl StacMultiBandMetaData {
             .then(|| vec!["USE_TILE_AS_BLOCK=YES".to_string()]);
 
         for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
-            if dataset_band.asset_band.asset_title != asset_title {
-                continue;
-            }
-
-            let Some(rasterband_channel) = common::rasterband_channel_for_dataset_band(
-                asset,
-                dataset_band.asset_band.band_name.as_deref(),
-            ) else {
+            let asset_band = Self::asset_band(dataset_band, factor);
+            let Some(asset_band) = asset_band.filter(|band| band.asset_title == asset_title) else {
                 continue;
             };
 
-            files.push(TileFile {
-                time,
-                spatial_partition,
-                band: dataset_band_idx as u32,
-                z_index,
-                params: GdalDatasetParameters {
-                    file_path: file_path.clone(),
-                    rasterband_channel,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: geo_transform.origin_coordinate(),
-                        x_pixel_size: geo_transform.x_pixel_size().into(),
-                        y_pixel_size: geo_transform.y_pixel_size().into(),
+            let Some(rasterband_channel) =
+                common::rasterband_channel_for_dataset_band(asset, asset_band.band_name.as_deref())
+            else {
+                continue;
+            };
+
+            files.push((
+                factor,
+                TileFile {
+                    time,
+                    spatial_partition,
+                    band: dataset_band_idx as u32,
+                    z_index,
+                    params: GdalDatasetParameters {
+                        file_path: file_path.clone(),
+                        rasterband_channel,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: geo_transform.origin_coordinate(),
+                            x_pixel_size: geo_transform.x_pixel_size().into(),
+                            y_pixel_size: geo_transform.y_pixel_size().into(),
+                        },
+                        width,
+                        height,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: common::no_data_value_for_rasterband(
+                            asset,
+                            rasterband_channel,
+                        ),
+                        properties_mapping: None,
+                        gdal_open_options: gdal_open_options.clone(),
+                        gdal_config_options: gdal_config_options.clone(),
+                        allow_alphaband_as_mask: false,
+                        retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
                     },
-                    width,
-                    height,
-                    file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: common::no_data_value_for_rasterband(asset, rasterband_channel),
-                    properties_mapping: None,
-                    gdal_open_options: gdal_open_options.clone(),
-                    gdal_config_options: gdal_config_options.clone(),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
                 },
-            });
+            ));
         }
 
         Ok(())
@@ -708,6 +759,106 @@ impl<'a> From<&'a TileFile> for StacTileIdentity<'a> {
             ],
         }
     }
+}
+
+/// A file that a STAC search found, with what loading info needs to choose between the
+/// resolutions of a band.
+#[derive(Clone, Debug)]
+pub struct StacTileFile {
+    /// The STAC item the file belongs to. Its assets of one band in several resolutions are
+    /// alternatives, so loading info reads only one of them.
+    pub item_id: Arc<str>,
+    /// How many times coarser than the dataset the file is: 1 for the dataset's resolution.
+    pub factor: NonZeroU32,
+    pub file: TileFile,
+}
+
+/// The files of one band of one STAC item, in several resolutions.
+///
+/// The time and z-index of a file are those of its item, so they need not be part of the key.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct StacFileGroup<'a> {
+    /// The id of the item, unique within the dataset's collection.
+    item_id: &'a str,
+    /// The index of the dataset band the files hold.
+    band: u32,
+}
+
+impl<'a> From<&'a StacTileFile> for StacFileGroup<'a> {
+    fn from(file: &'a StacTileFile) -> Self {
+        Self {
+            item_id: &file.item_id,
+            band: file.file.band,
+        }
+    }
+}
+
+/// Keeps, of each item's band, the coarsest file whose factor is not larger than `level`. The
+/// files of a band are never coarser than requested: a band whose files are all coarser has no
+/// file. The order of the files is kept.
+fn select_file_resolution(files: Vec<StacTileFile>, level: NonZeroU32) -> Vec<TileFile> {
+    let mut chosen: HashMap<StacFileGroup, NonZeroU32> = HashMap::new();
+    for file in files.iter().filter(|file| file.factor <= level) {
+        chosen
+            .entry(StacFileGroup::from(file))
+            .and_modify(|best| *best = (*best).max(file.factor))
+            .or_insert(file.factor);
+    }
+    let keep: Vec<bool> = files
+        .iter()
+        .map(|file| chosen.get(&StacFileGroup::from(file)) == Some(&file.factor))
+        .collect();
+    drop(chosen);
+
+    files
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(file, keep)| keep.then_some(file.file))
+        .collect()
+}
+
+/// Removes consecutive files that read the same data, e.g. those that several searches found.
+fn dedup_tile_files(files: &mut Vec<TileFile>) {
+    files.dedup_by(|left, right| StacTileIdentity::from(&*left) == StacTileIdentity::from(&*right));
+}
+
+/// The path GDAL opens an asset by. Only remote assets are supported.
+fn asset_file_path(href: &str) -> geoengine_operators::util::Result<PathBuf> {
+    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("s3://") {
+        Ok(PathBuf::from(href))
+    } else {
+        Err(
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("unsupported STAC asset href scheme in {href:?}"),
+            },
+        )
+    }
+}
+
+/// Snaps the pixel size of an asset to `resolution`, a multiple of the dataset grid's pixel size,
+/// keeping its origin and signs. The metadata may differ from it by rounding errors, which
+/// grids compare more strictly than metadata.
+fn snap_pixel_size(
+    geo_transform: GeoTransform,
+    resolution: SpatialResolution,
+    href: &str,
+) -> geoengine_operators::util::Result<GeoTransform> {
+    GeoTransform::new(
+        geo_transform.origin_coordinate(),
+        resolution
+            .x()
+            .get()
+            .copysign(geo_transform.x_pixel_size().get()),
+        resolution
+            .y()
+            .get()
+            .copysign(geo_transform.y_pixel_size().get()),
+    )
+    .map_err(
+        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not snap the geo transform of STAC asset {href}: {e}"),
+        },
+    )
 }
 
 fn stac_asset_grid_bounds(
@@ -963,6 +1114,7 @@ mod tests {
                             band_name: Some("B08".to_owned()),
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
+                        coarser_assets: Vec::new(),
                     },
                     crate::datasets::external::stac::StacProviderDatasetBand {
                         asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -970,6 +1122,7 @@ mod tests {
                             band_name: Some("B04".to_owned()),
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
+                        coarser_assets: Vec::new(),
                     },
                 ],
             }],
@@ -1156,6 +1309,70 @@ mod tests {
     }
 
     #[test]
+    fn it_selects_the_resolution_per_item_and_band() {
+        let file = |item_id: &str, band: u32, factor: u32, path: &str| {
+            let mut file = identity_tile();
+            file.band = band;
+            file.params.file_path = PathBuf::from(path);
+            StacTileFile {
+                item_id: item_id.into(),
+                factor: NonZeroU32::new(factor).unwrap(),
+                file,
+            }
+        };
+        // `a` and `b` share time, z-index and origin; only `a` has a coarser file
+        let files = vec![
+            file("a", 0, 1, "a_10m"),
+            file("a", 0, 6, "a_60m"),
+            file("a", 1, 1, "a_band_1"),
+            file("b", 0, 1, "b_10m"),
+            // never read coarser than requested, even if there is no finer file
+            file("c", 0, 6, "c_60m"),
+        ];
+        let paths = |level: u32| {
+            select_file_resolution(files.clone(), NonZeroU32::new(level).unwrap())
+                .into_iter()
+                .map(|file| file.params.file_path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(paths(1), ["a_10m", "a_band_1", "b_10m"]);
+        assert_eq!(paths(4), ["a_10m", "a_band_1", "b_10m"]);
+        assert_eq!(paths(8), ["a_60m", "a_band_1", "b_10m", "c_60m"]);
+    }
+
+    #[test]
+    fn it_deduplicates_shared_files_after_selecting_the_resolution() {
+        let file = |item_id: &str, factor: u32, path: &str| {
+            let mut file = identity_tile();
+            file.params.file_path = PathBuf::from(path);
+            file.params.width = 10 / factor as usize;
+            StacTileFile {
+                item_id: item_id.into(),
+                factor: NonZeroU32::new(factor).unwrap(),
+                file,
+            }
+        };
+        // `a` and `b` share their native file, but only `a` has a coarser one
+        let files = vec![
+            file("a", 1, "shared_10m"),
+            file("b", 1, "shared_10m"),
+            file("a", 2, "a_20m"),
+        ];
+        let paths = |level: u32| {
+            let mut files = select_file_resolution(files.clone(), NonZeroU32::new(level).unwrap());
+            dedup_tile_files(&mut files);
+            files
+                .into_iter()
+                .map(|file| file.params.file_path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(paths(1), ["shared_10m"]);
+        assert_eq!(paths(2), ["shared_10m", "a_20m"]);
+    }
+
+    #[test]
     fn tile_identity_orders_time_then_band_then_z_index() {
         let mut later_time = identity_tile();
         later_time.time = TimeInterval::new_unchecked(10_i64, 20_i64);
@@ -1240,6 +1457,7 @@ mod tests {
                             band_name: Some((*name).to_owned()),
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless((*name).to_owned()),
+                        coarser_assets: Vec::new(),
                     },
                 )
                 .collect();
@@ -1327,6 +1545,134 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_reads_the_coarsest_asset_not_coarser_than_the_query() {
+        let server = Server::run();
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let mut dataset = definition.datasets[0].clone();
+        let coarser_asset =
+            |factor: u32, title: &str| crate::datasets::external::stac::StacCoarserAsset {
+                factor: NonZeroU32::new(factor).unwrap(),
+                asset_band: crate::datasets::external::stac::StacAssetBand {
+                    asset_title: title.to_owned(),
+                    band_name: Some("B04".to_owned()),
+                },
+            };
+        dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
+            asset_band: crate::datasets::external::stac::StacAssetBand {
+                asset_title: "Red (band 4) - 10m".to_owned(),
+                band_name: Some("B04".to_owned()),
+            },
+            band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
+            coarser_assets: vec![
+                coarser_asset(2, "Red (band 4) - 20m"),
+                coarser_asset(6, "Red (band 4) - 60m"),
+            ],
+        }];
+        let asset = |resolution: u32, size: u32, title: &str| {
+            serde_json::json!({
+                "href": format!("s3://example/B04_{resolution}m.jp2"),
+                "title": title,
+                "data_type": "uint16",
+                "bands": [{"name": "B04"}],
+                "proj:code": "EPSG:32632",
+                "proj:shape": [size, size],
+                "proj:transform": [resolution, 0, 500_000, 0, -f64::from(resolution), 5_800_000],
+            })
+        };
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/collections/sentinel-2-l2a/items",
+            ))
+            .times(1)
+            .respond_with(responders::json_encoded(serde_json::json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "stac_version": "1.1.0",
+                    "id": "coarser-assets",
+                    "geometry": null,
+                    "properties": {"datetime": "2026-04-01T00:00:00Z"},
+                    "links": [],
+                    "assets": {
+                        "B04_10m": asset(10, 12, "Red (band 4) - 10m"),
+                        "B04_20m": asset(20, 6, "Red (band 4) - 20m"),
+                        "B04_60m": asset(60, 2, "Red (band 4) - 60m"),
+                        "B08_60m": asset(60, 2, "NIR 1 (band 8) - 60m"),
+                    },
+                }],
+                "links": [],
+            }))),
+        );
+        let meta = StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset,
+            page_limit: definition.page_limit,
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
+            cache_ttl_secs: None,
+            grid: StacGrid::default(),
+        };
+        let bounds =
+            SpatialPartition2D::new((500_000., 5_800_000.).into(), (500_120., 5_799_880.).into())
+                .unwrap();
+        let time = TimeInterval::new(
+            DateTime::new_utc(2026, 4, 1, 0, 0, 0),
+            DateTime::new_utc(2026, 4, 2, 0, 0, 0),
+        )
+        .unwrap();
+
+        // `None` is the native resolution, otherwise the overview level
+        for (level, expected) in [
+            (None, 10.),
+            (Some(2), 20.),
+            (Some(4), 20.),
+            (Some(8), 60.),
+            (Some(64), 60.),
+        ] {
+            let mut query = MultiBandGdalLoadingInfoQueryRectangle::new(
+                bounds,
+                time,
+                BandSelection::first(),
+                true,
+            );
+            if let Some(level) = level {
+                query = query.with_resolution(LoadingInfoResolution::OverviewLevel(
+                    NonZeroU32::new(level).unwrap(),
+                ));
+            }
+            let info = meta.loading_info(query).await.unwrap();
+            let tile = TileInformation::new(
+                GridIdx2D::new([0, 0]),
+                GridShape::new([2, 2]),
+                GeoTransform::new_unchecked(bounds.upper_left(), 60., -60.),
+            );
+            let files = info.tile_files(time, tile, 0);
+            assert_eq!(files.len(), 1, "level {level:?}");
+            assert_eq!(
+                files[0].geo_transform.x_pixel_size.get(),
+                expected,
+                "level {level:?}"
+            );
+            assert_eq!(
+                files[0].file_path,
+                std::path::PathBuf::from(format!("s3://example/B04_{expected}m.jp2")),
+                "level {level:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn outside_projection_domain_returns_empty_tiles_without_stac_requests() {
         // No requests are expected: querying outside the domain must not contact STAC.
         let server = Server::run();
@@ -1396,6 +1742,211 @@ mod tests {
                 assert_eq!(info.tile_files(*step, tile, 0), [] as [_; 0]);
             }
         }
+    }
+
+    #[tokio::test]
+    async fn it_loads_assets_with_item_level_projection_fields() {
+        // CLMS WSI items on CODE-DE declare `proj:code`, `proj:shape` and a 9-element
+        // `proj:transform` only in `properties`, not on the assets.
+        let server = Server::run();
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let mut dataset = definition.datasets[0].clone();
+        dataset.resolution = SpatialResolution::new_unchecked(100.0, 100.0);
+        dataset.projection = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035);
+        dataset.spatial_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((4_200_000.0, 3_100_000.0).into(), 100.0, -100.0),
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([999, 999])).unwrap(),
+        );
+        dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
+            asset_band: crate::datasets::external::stac::StacAssetBand {
+                asset_title: "WCD".to_owned(),
+                band_name: Some("WCD".to_owned()),
+            },
+            band_descriptor: RasterBandDescriptor::new_unitless("WCD".to_owned()),
+            coarser_assets: Vec::new(),
+        }];
+        let meta = StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset,
+            page_limit: definition.page_limit,
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
+            grid: StacGrid::default(),
+            cache_ttl_secs: definition.cache_ttl_secs,
+        };
+
+        let item: Item = serde_json::from_value(serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "CLMS_WSI_WCD_100m_E42N30_20250901P1Y_COMB_V100",
+            "geometry": null,
+            "properties": {
+                "datetime": "2025-09-01T00:00:00Z",
+                "proj:code": "EPSG:3035",
+                "proj:shape": [1000, 1000],
+                "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+            },
+            "links": [],
+            "assets": {
+                "WCD": {
+                    "href": "https://example.com/WCD.tif",
+                    "title": "WCD",
+                    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                    "data_type": "uint16"
+                },
+                // an explicit `null` CRS marks the asset as unlocated, so it must not inherit
+                // the item's projection fields even though title and data type match
+                "WCD_thumbnail": {
+                    "href": "https://example.com/WCD_thumbnail.tif",
+                    "title": "WCD",
+                    "type": "image/tiff; application=geotiff",
+                    "data_type": "uint16",
+                    "proj:code": null
+                }
+            }
+        }))
+        .unwrap();
+
+        let mut files = Vec::new();
+        meta.process_stac_item(&item, &mut files).unwrap();
+
+        assert_eq!(files.len(), 1, "only the located asset yields a file");
+        let file = &files[0].file;
+        assert_eq!(
+            file.params.file_path,
+            PathBuf::from("https://example.com/WCD.tif")
+        );
+        assert_eq!(file.params.width, 1000);
+        assert_eq!(file.params.height, 1000);
+        assert_eq!(
+            file.params.geo_transform.origin_coordinate,
+            (4_200_000.0, 3_100_000.0).into()
+        );
+        assert_eq!(file.params.geo_transform.x_pixel_size.get(), 100.0);
+        assert_eq!(file.params.geo_transform.y_pixel_size.get(), -100.0);
+        assert_eq!(
+            file.spatial_partition,
+            SpatialPartition2D::new(
+                (4_200_000.0, 3_100_000.0).into(),
+                (4_300_000.0, 3_000_000.0).into()
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn it_snaps_coarser_assets_and_skips_unconfigured_ones() {
+        let server = Server::run();
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let mut dataset = definition.datasets[0].clone();
+        // as harvested: a square `resolution` next to a grid whose y pixel size differs from it
+        // by rounding, which tiles have and files must have too
+        let grid_y_pixel_size = -9.999_999_999_98;
+        dataset.spatial_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, grid_y_pixel_size),
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979])).unwrap(),
+        );
+        dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
+            asset_band: crate::datasets::external::stac::StacAssetBand {
+                asset_title: "Red (band 4) - 10m".to_owned(),
+                band_name: Some("B04".to_owned()),
+            },
+            band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
+            coarser_assets: vec![crate::datasets::external::stac::StacCoarserAsset {
+                factor: NonZeroU32::new(6).unwrap(),
+                asset_band: crate::datasets::external::stac::StacAssetBand {
+                    asset_title: "Red (band 4) - 60m".to_owned(),
+                    band_name: Some("B04".to_owned()),
+                },
+            }],
+        }];
+        let meta = StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset,
+            page_limit: definition.page_limit,
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
+            grid: StacGrid::default(),
+            cache_ttl_secs: definition.cache_ttl_secs,
+        };
+        let asset = |href: &str, title: &str, pixel_size: Option<f64>| {
+            let mut asset = serde_json::json!({
+                "href": href,
+                "title": title,
+                "data_type": "uint16",
+                "bands": [{"name": "B04"}],
+            });
+            if let Some(pixel_size) = pixel_size {
+                asset["proj:shape"] = serde_json::json!([2, 2]);
+                asset["proj:transform"] =
+                    serde_json::json!([pixel_size, 0, 500_000, 0, -pixel_size, 5_800_000]);
+            }
+            asset
+        };
+        let item: Item = serde_json::from_value(serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "snapped",
+            "geometry": null,
+            "properties": {
+                "datetime": "2026-04-01T00:00:00Z",
+                "proj:code": "EPSG:32632",
+                "proj:shape": [12, 12],
+                "proj:transform": [10, 0, 500_000, 0, -10, 5_800_000]
+            },
+            "links": [],
+            "assets": {
+                // rounding errors of the metadata
+                "B04_60m": asset("s3://example/B04_60m.jp2", "Red (band 4) - 60m", Some(60.000_000_000_6)),
+                // the dataset has no coarser asset with factor 2
+                "B04_20m": asset("s3://example/B04_20m.jp2", "Red (band 4) - 20m", Some(20.)),
+                // without own projection fields, it inherits the item's 10 m grid and is no
+                // native asset either, because its title differs
+                "B04_60m_item": asset("s3://example/B04_60m_item.jp2", "Red (band 4) - 60m", None),
+            }
+        }))
+        .unwrap();
+
+        let mut files = Vec::new();
+        meta.process_stac_item(&item, &mut files).unwrap();
+
+        assert_eq!(files.len(), 1, "{files:?}");
+        let file = &files[0].file;
+        assert_eq!(
+            file.params.file_path,
+            PathBuf::from("s3://example/B04_60m.jp2")
+        );
+        assert_eq!(file.params.geo_transform.x_pixel_size.get(), 60.);
+        assert_eq!(
+            file.params.geo_transform.y_pixel_size.get(),
+            grid_y_pixel_size * 6.
+        );
+        assert_eq!(
+            file.spatial_partition,
+            SpatialPartition2D::new(
+                (500_000., 5_800_000.).into(),
+                (500_120., 5_800_000. + 2. * grid_y_pixel_size * 6.).into()
+            )
+            .unwrap()
+        );
     }
 
     fn stac_items_response() -> serde_json::Value {
@@ -1750,6 +2301,7 @@ mod tests {
                                 band_name: Some("B02".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B02".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -1757,6 +2309,7 @@ mod tests {
                                 band_name: Some("B03".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B03".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -1764,6 +2317,7 @@ mod tests {
                                 band_name: Some("WVP".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("WVP".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -1771,6 +2325,7 @@ mod tests {
                                 band_name: Some("B08".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -1778,6 +2333,7 @@ mod tests {
                                 band_name: Some("B04".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                     ],
                 },
@@ -1802,6 +2358,7 @@ mod tests {
                                 band_name: Some("AOT".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("AOT".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                         crate::datasets::external::stac::StacProviderDatasetBand {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
@@ -1809,6 +2366,7 @@ mod tests {
                                 band_name: Some("SCL".to_owned()),
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("SCL".to_owned()),
+                            coarser_assets: Vec::new(),
                         },
                     ],
                 },

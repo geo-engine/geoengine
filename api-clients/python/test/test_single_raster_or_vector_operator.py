@@ -35,7 +35,7 @@ class TestSingleRasterOrVectorOperator(unittest.TestCase):
         model = SingleRasterOrVectorOperator()
         if include_optional:
             return SingleRasterOrVectorOperator(
-                type = 'TimeShift',
+                type = 'Warp',
                 params = geoengine_api_client.models.visual_point_clustering_parameters.VisualPointClusteringParameters(
                     min_radius_px = 1.337, 
                     delta_px = 1.337, 
@@ -53,7 +53,7 @@ class TestSingleRasterOrVectorOperator(unittest.TestCase):
             )
         else:
             return SingleRasterOrVectorOperator(
-                type = 'TimeShift',
+                type = 'Warp',
                 params = geoengine_api_client.models.visual_point_clustering_parameters.VisualPointClusteringParameters(
                     min_radius_px = 1.337, 
                     delta_px = 1.337, 

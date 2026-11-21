@@ -365,7 +365,7 @@ async fn validate_tile(
         .and_then(|declared| rd.missing_overview_level(declared))
     {
         return Err(AddDatasetTilesError::TileFileMissingOverviewLevel {
-            overview_level,
+            overview_level: overview_level.get(),
             file_path: tile.params.file_path.to_string_lossy().to_string(),
         });
     }
@@ -669,7 +669,7 @@ pub async fn update_dataset_symbology_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok())
 }
 
-// Updates the dataset's provenance
+/// Updates the dataset's provenance.
 #[utoipa::path(
     tag = "Datasets",
     put,
@@ -3809,6 +3809,49 @@ mod tests {
         Ok(())
     }
 
+    /// Serves a file and answers `Range: bytes=first-last` requests with that part of it, as the
+    /// HEAD response promises (`Accept-Ranges: bytes`). GDAL asks for ranges when it reads with
+    /// several threads, and fails if it gets the whole file instead.
+    struct FileWithRanges(httptest::bytes::Bytes);
+
+    impl httptest::responders::Responder for FileWithRanges {
+        fn respond<'a>(
+            &mut self,
+            request: &'a httptest::http::Request<httptest::bytes::Bytes>,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = httptest::http::Response<httptest::bytes::Bytes>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            let file = &self.0;
+            let range = request
+                .headers()
+                .get(httptest::http::header::RANGE)
+                .and_then(|range| range.to_str().ok()?.strip_prefix("bytes=")?.split_once('-'))
+                .and_then(|(first, last)| {
+                    let first: usize = first.parse().ok()?;
+                    // an open end, or one beyond the file, reads up to the last byte
+                    let last = last.parse().map_or(file.len(), |last: usize| last + 1);
+                    (first < file.len()).then(|| first..last.min(file.len()))
+                });
+            let response = httptest::http::Response::builder().header("Content-Type", "image/tiff");
+            let response = match range {
+                Some(range) => response
+                    .status(206)
+                    .header(
+                        "Content-Range",
+                        format!("bytes {}-{}/{}", range.start, range.end - 1, file.len()),
+                    )
+                    .body(file.slice(range)),
+                None => response.status(200).body(file.clone()),
+            }
+            .expect("the headers are valid");
+            Box::pin(async move { response })
+        }
+    }
+
     /// Registers tile files on a mock HTTP server and creates tiles with plain `http://` URLs.
     /// The `/vsicurl/` prefix is only added when GDAL opens the dataset.
     /// The mock server serves the actual test data files so GDAL can read them via `/vsicurl/`.
@@ -3839,16 +3882,11 @@ mod tests {
                 ),
             );
 
-            // GET request (GDAL fetches tile data via /vsicurl/)
+            // GET request (GDAL fetches tile data via /vsicurl/), whole or a byte range
             server.expect(
                 Expectation::matching(all_of![request::method("GET"), request::path(server_path)])
                     .times(0..)
-                    .respond_with(
-                        status_code(200)
-                            .append_header("Content-Type", "image/tiff")
-                            .append_header("Content-Length", content_length.to_string())
-                            .body(data),
-                    ),
+                    .respond_with(FileWithRanges(data.into())),
             );
 
             // Store the plain http URL — the /vsicurl/ prefix is added when opening the dataset

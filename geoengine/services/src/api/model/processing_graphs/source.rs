@@ -17,6 +17,7 @@ use geoengine_operators::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use utoipa::ToSchema;
 
 /// The [`GdalSource`] is a source operator that reads raster data using GDAL.
@@ -48,12 +49,13 @@ pub struct GdalSourceParameters {
     #[schema(value_type = String, examples("ndvi"))]
     pub data: NamedData,
 
-    /// *Optional*: overview level to use.
+    /// *Optional*: overview level to use, i.e., how many times coarser than the native resolution
+    /// the data is read. `1` is the native resolution.
     ///
     /// If not provided, the data source will determine the resolution, i.e., uses its native resolution.
-    #[schema(examples(3))]
+    #[schema(value_type = Option<u32>, minimum = 1, examples(2))]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub overview_level: Option<u32>,
+    pub overview_level: Option<NonZeroU32>,
 }
 
 impl TryFrom<GdalSource> for OperatorsGdalSource {
@@ -216,6 +218,19 @@ mod tests {
     use crate::api::model::processing_graphs::{RasterOperator, TypedOperator, VectorOperator};
     use geoengine_datatypes::dataset::NamedData as OperatorsNamedData;
     use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
+
+    #[test]
+    fn it_rejects_overview_level_zero() {
+        let params = |level: &str| {
+            serde_json::from_str::<GdalSourceParameters>(&format!(
+                r#"{{"data": "example_dataset", "overviewLevel": {level}}}"#
+            ))
+        };
+        assert_eq!(params("2").unwrap().overview_level, NonZeroU32::new(2));
+        assert_eq!(params("1").unwrap().overview_level, NonZeroU32::new(1));
+        assert_eq!(params("null").unwrap().overview_level, None);
+        assert!(params("0").is_err());
+    }
 
     #[test]
     fn it_converts_into_gdal_source() {

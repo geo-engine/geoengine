@@ -283,9 +283,11 @@ export declare class DatasetsApi extends runtime.BaseAPI {
      */
     updateDatasetProvenanceHandlerRequestOpts(requestParameters: UpdateDatasetProvenanceHandlerRequest): Promise<runtime.RequestOpts>;
     /**
+     * Updates the dataset\'s provenance.
      */
     updateDatasetProvenanceHandlerRaw(requestParameters: UpdateDatasetProvenanceHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>>;
     /**
+     * Updates the dataset\'s provenance.
      */
     updateDatasetProvenanceHandler(requestParameters: UpdateDatasetProvenanceHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
     /**

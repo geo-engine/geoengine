@@ -36,6 +36,7 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use std::time::Instant;
 use tracing::{debug, trace};
 
@@ -48,7 +49,7 @@ mod loading_info;
 pub struct GdalSourceParameters {
     pub data: NamedData,
     #[serde(default)]
-    pub overview_level: Option<u32>, // TODO: should also allow a resolution? Add resample method?
+    pub overview_level: Option<NonZeroU32>, // TODO: should also allow a resolution? Add resample method?
 }
 
 impl GdalSourceParameters {
@@ -61,7 +62,7 @@ impl GdalSourceParameters {
     }
 
     #[must_use]
-    pub fn new_with_overview_level(data: NamedData, overview_level: u32) -> Self {
+    pub fn new_with_overview_level(data: NamedData, overview_level: NonZeroU32) -> Self {
         Self {
             data,
             overview_level: Some(overview_level),
@@ -69,7 +70,7 @@ impl GdalSourceParameters {
     }
 
     #[must_use]
-    pub fn with_overview_level(mut self, overview_level: Option<u32>) -> Self {
+    pub fn with_overview_level(mut self, overview_level: Option<NonZeroU32>) -> Self {
         self.overview_level = overview_level;
         self
     }
@@ -96,6 +97,22 @@ type MultiBandGdalMetaData = Box<
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub fetch_tiles: bool,
+    /// The resolution the source produces its tiles in: the native resolution or an
+    /// overview level.
+    ///
+    /// For an overview level, metadata may return files that are coarser than the native
+    /// resolution, but not coarser than the level, to read less data.
+    pub resolution: LoadingInfoResolution,
+}
+
+/// The resolution a source produces its tiles in, relative to the native resolution of the data.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoadingInfoResolution {
+    /// The native resolution of the data.
+    #[default]
+    Native,
+    /// An overview level: its pixels are this many times larger than the native pixels.
+    OverviewLevel(NonZeroU32),
 }
 
 impl MultiBandGdalLoadingInfoQueryRectangle {
@@ -108,6 +125,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle: QueryRectangle::new(spatial_bounds, time_interval, attributes),
             fetch_tiles,
+            resolution: LoadingInfoResolution::Native,
         }
     }
 
@@ -118,23 +136,32 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             fetch_tiles,
+            resolution: LoadingInfoResolution::Native,
         }
+    }
+
+    /// Sets the resolution the source produces its tiles in.
+    #[must_use]
+    pub fn with_resolution(mut self, resolution: LoadingInfoResolution) -> Self {
+        self.resolution = resolution;
+        self
     }
 }
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
+    resolution: LoadingInfoResolution,
     fetch_tiles: bool,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
+    let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
     MultiBandGdalLoadingInfoQueryRectangle::new(
-        tiling_spatial_grid
-            .tiling_geo_transform()
-            .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
+        tiling_geo_transform.grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
         fetch_tiles,
     )
+    .with_resolution(resolution)
 }
 
 pub struct GdalSourceProcessor<T>
@@ -144,16 +171,27 @@ where
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: MultiBandGdalMetaData,
-    pub overview_level: u32,
+    pub overview_level: NonZeroU32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
-    /// The dataset declares its overview levels (`max_overview_level`), so every file has
-    /// `overview_level`: it is read from that level as is, never resampled.
-    pub files_have_level: bool,
     pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
 
-impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
+impl<T> GdalSourceProcessor<T>
+where
+    T: gdal::raster::GdalType + Pixel,
+{
+    /// The resolution this processor produces its tiles in, for the metadata.
+    fn loading_info_resolution(&self) -> LoadingInfoResolution {
+        self.original_resolution_spatial_grid
+            .map(|_| self.overview_level)
+            .filter(|level| level.get() > 1)
+            .map_or(
+                LoadingInfoResolution::Native,
+                LoadingInfoResolution::OverviewLevel,
+            )
+    }
+}
 
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
@@ -204,17 +242,20 @@ where
 
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
-        let reader_mode = match self.original_resolution_spatial_grid {
-            None => GdalReaderMode::OriginalResolution(ReaderState {
-                dataset_spatial_grid: grid_produced_by_source,
-            }),
-            Some(original_resolution_spatial_grid) => {
+        // only levels from 2 up have an overview grid, see `overview_level_spatial_grid`
+        let reader_mode = match (
+            self.original_resolution_spatial_grid,
+            std::num::NonZeroUsize::new(self.overview_level.get() as usize),
+        ) {
+            (Some(original_resolution_spatial_grid), Some(overview_level)) => {
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
-                    overview_level: self.overview_level,
-                    files_have_level: self.files_have_level,
+                    overview_level,
                 })
             }
+            _ => GdalReaderMode::OriginalResolution(ReaderState {
+                dataset_spatial_grid: grid_produced_by_source,
+            }),
         };
 
         let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
@@ -223,6 +264,7 @@ where
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
                 produced_tiling_grid,
+                self.loading_info_resolution(),
                 true,
             ))
             .await?;
@@ -302,6 +344,7 @@ where
         let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
             &query,
             produced_tiling_grid,
+            LoadingInfoResolution::Native,
             false,
         );
 
@@ -369,7 +412,7 @@ impl RasterOperator for MultiBandGdalSource {
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
-                self.params.overview_level.unwrap_or(0),
+                self.params.overview_level.unwrap_or(NonZeroU32::MIN),
                 context.default_cache_ttl(),
             )
         };
@@ -388,10 +431,10 @@ pub struct InitializedGdalSourceOperator {
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     // the overview level to use. 0/1 means the highest resolution
-    pub overview_level: u32,
+    pub overview_level: NonZeroU32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     /// the overview levels the dataset declares, see [`SpatialGridDescriptor::max_overview_level`]
-    pub max_overview_level: Option<u32>,
+    pub max_overview_level: Option<NonZeroU32>,
     pub default_cache_ttl: CacheTtlSeconds,
 }
 
@@ -413,7 +456,7 @@ impl InitializedGdalSourceOperator {
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
-            overview_level: 0,
+            overview_level: NonZeroU32::MIN,
             original_resolution_spatial_grid: None,
             default_cache_ttl,
         }
@@ -427,7 +470,7 @@ impl InitializedGdalSourceOperator {
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
-        overview_level: u32,
+        overview_level: NonZeroU32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let max_overview_level = result_descriptor.spatial_grid.max_overview_level();
@@ -473,7 +516,6 @@ impl InitializedGdalSourceOperator {
             meta_data: self.meta_data.clone(),
             overview_level: self.overview_level,
             original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-            files_have_level: self.max_overview_level.is_some(),
             default_cache_ttl: self.default_cache_ttl,
             _phantom_data: PhantomData,
         }
@@ -522,8 +564,8 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn reads_cached_blocks(&self) -> bool {
-        // see `GdalReaderMode::level_factor`: else GDAL picks an overview, which has no blocks
-        self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
+        // every level of a file, and every level it lacks, is read from its blocks
+        true
     }
 
     fn path(&self) -> ProcessingGraphOperatorPath {
@@ -542,10 +584,10 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
         // TODO: handle cases where the original processing graph explicitly loads overviews in the source
         ensure!(
-            self.overview_level == 0,
+            self.overview_level.get() == 1,
             SourcesMustNotUseOverviews {
                 data: self.data_name.to_string(),
-                oveview_level: self.overview_level
+                oveview_level: self.overview_level.get()
             }
         );
 
@@ -1791,7 +1833,10 @@ mod tests {
         let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new_with_overview_level(dataset_name, 2),
+            params: GdalSourceParameters::new_with_overview_level(
+                dataset_name,
+                std::num::NonZeroU32::new(2).unwrap(),
+            ),
         }
         .typed();
 
@@ -2066,8 +2111,7 @@ mod tests {
             for overview_level in [2_isize, 4, 8] {
                 let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
-                    overview_level: overview_level as u32,
-                    files_have_level: false,
+                    overview_level: std::num::NonZeroUsize::new(overview_level as usize).unwrap(),
                 });
 
                 // overview pixels that lie completely inside the mosaic, the tiling origin is at (0, 0)
@@ -2158,6 +2202,172 @@ mod tests {
                         full_resolution.len(),
                         &full_resolution[..full_resolution.len().min(5)]
                     ));
+                }
+            }
+        }
+
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_places_a_coarser_file_at_an_overview_level() {
+        use gdal::raster::Buffer;
+        use geoengine_datatypes::raster::GridIndexAccess;
+
+        // the dataset has pixels of 1 unit, the file of 6 units, the tiles of 8 units
+        const DATASET_SIZE: isize = 120;
+        const FACTOR: isize = 6;
+        const FILE_SIZE: isize = DATASET_SIZE / FACTOR;
+        const LEVEL: isize = 8;
+        const TILE_SIZE: isize = 16;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let time_interval = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+
+        let mut failures = Vec::new();
+        // an origin aligned to the tiles, and one that is not
+        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9)] {
+            let file_path = temp_dir
+                .path()
+                .join(format!("coarser_{origin_x}_{origin_y}.tif"));
+            let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+            let mut dataset = driver
+                .create_with_band_type::<u16, _>(
+                    &file_path,
+                    FILE_SIZE as usize,
+                    FILE_SIZE as usize,
+                    1,
+                )
+                .unwrap();
+            dataset
+                .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
+                .unwrap();
+            dataset
+                .set_geo_transform(&[
+                    origin_x as f64,
+                    FACTOR as f64,
+                    0.,
+                    origin_y as f64,
+                    0.,
+                    -FACTOR as f64,
+                ])
+                .unwrap();
+            // every file pixel encodes its row and column
+            let values = (0..FILE_SIZE)
+                .flat_map(|row| (0..FILE_SIZE).map(move |col| (row * FILE_SIZE + col + 1) as u16))
+                .collect();
+            {
+                let mut band = dataset.rasterband(1).unwrap();
+                band.set_no_data_value(Some(0.)).unwrap();
+                band.write(
+                    (0, 0),
+                    (FILE_SIZE as usize, FILE_SIZE as usize),
+                    &mut Buffer::new((FILE_SIZE as usize, FILE_SIZE as usize), values),
+                )
+                .unwrap();
+            }
+            dataset.close().unwrap();
+
+            let file = TileFile {
+                time: time_interval,
+                spatial_partition: SpatialPartition2D::new_unchecked(
+                    (origin_x as f64, origin_y as f64).into(),
+                    (
+                        (origin_x + DATASET_SIZE) as f64,
+                        (origin_y - DATASET_SIZE) as f64,
+                    )
+                        .into(),
+                ),
+                band: 0,
+                z_index: 0,
+                params: GdalDatasetParameters {
+                    file_path,
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (origin_x as f64, origin_y as f64).into(),
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(FACTOR as f64),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-FACTOR as f64),
+                    },
+                    width: FILE_SIZE as usize,
+                    height: FILE_SIZE as usize,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: Some(0.0),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                    retry: None,
+                },
+            };
+
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: SpatialGridDefinition::new(
+                    GeoTransform::new_unchecked(
+                        (origin_x as f64, origin_y as f64).into(),
+                        1.0,
+                        -1.0,
+                    ),
+                    GridBoundingBox2D::new([0, 0], [DATASET_SIZE - 1, DATASET_SIZE - 1]).unwrap(),
+                ),
+                overview_level: std::num::NonZeroUsize::new(LEVEL as usize).unwrap(),
+            });
+            let tile_info = TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
+                GeoTransform::new_unchecked((0.0, 0.0).into(), LEVEL as f64, -LEVEL as f64),
+            );
+            let tile = assemble_tile::<u16>(
+                MultiBandGdalLoadingInfo::new(vec![time_interval], vec![file], None).tile_plan(
+                    time_interval,
+                    tile_info,
+                    0,
+                    CacheTtlSeconds::new(0),
+                ),
+                reader_mode,
+                &gpp.get_gdal_worker(),
+                None,
+            )
+            .await
+            .unwrap();
+
+            // tile pixels that lie completely inside the file
+            let x_min = -(-origin_x).div_euclid(LEVEL);
+            let x_max = (origin_x + DATASET_SIZE).div_euclid(LEVEL) - 1;
+            let y_min = -origin_y.div_euclid(LEVEL);
+            let y_max = (DATASET_SIZE - origin_y).div_euclid(LEVEL) - 1;
+            for y in y_min..=y_max {
+                for x in x_min..=x_max {
+                    // the file pixel under the tile pixel's center
+                    let expected_col = (x * LEVEL + LEVEL / 2 - origin_x).div_euclid(FACTOR);
+                    let expected_row = (origin_y + y * LEVEL + LEVEL / 2).div_euclid(FACTOR);
+                    let Some(value) = tile
+                        .grid_array
+                        .get_at_grid_index_unchecked(GridIdx2D::new_y_x(y, x))
+                    else {
+                        failures.push(format!(
+                            "origin ({origin_x}, {origin_y}): no data at ({y}, {x})"
+                        ));
+                        continue;
+                    };
+                    let row = ((value as isize) - 1).div_euclid(FILE_SIZE);
+                    let col = ((value as isize) - 1).rem_euclid(FILE_SIZE);
+                    // rounding the read window to file pixels moves it by less than one file pixel
+                    if (row - expected_row).abs() > 1 || (col - expected_col).abs() > 1 {
+                        failures.push(format!(
+                            "origin ({origin_x}, {origin_y}): file pixel ({row}, {col}) at ({y}, {x}), expected ({expected_row}, {expected_col})"
+                        ));
+                    }
                 }
             }
         }

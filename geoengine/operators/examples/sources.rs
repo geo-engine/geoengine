@@ -30,10 +30,9 @@ fn setup_gdal_source(
     GdalSourceProcessor::<u8> {
         produced_result_descriptor: meta_data.result_descriptor.clone(),
         tiling_specification,
-        overview_level: 0,
+        overview_level: std::num::NonZeroU32::MIN,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
-        files_have_level: false,
         default_cache_ttl: CacheTtlSeconds::new(0),
         _phantom_data: PhantomData,
     }

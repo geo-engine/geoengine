@@ -401,6 +401,7 @@ class SessionApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     sessionViewHandlerRaw(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -410,6 +411,7 @@ class SessionApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     sessionViewHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {

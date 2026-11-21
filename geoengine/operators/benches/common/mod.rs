@@ -36,14 +36,14 @@
 pub mod metrics;
 pub mod range_server;
 
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment, File, Map, Source, Value, ValueKind};
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, measurement::WallTime};
 use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     primitives::{
-        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
-        TimeInterval, TimeStep,
+        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInstance, TimeInterval, TimeStep,
     },
     raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -67,12 +67,16 @@ use geoengine_operators::{
         NeighborhoodAggregateParams, NeighborhoodParams, RasterScaling, RasterScalingParams,
         RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams, ScalingMode,
         SlopeOffsetSelection, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        WarpDownsampling, WarpUpsampling,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
         gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
-    util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
+    util::{
+        WarpMethods, WrapWithProjectionAndResample, create_rayon_thread_pool,
+        gdal::create_ndvi_meta_data_with_cache_ttl,
+    },
 };
 use rayon::ThreadPool;
 use serde::de::DeserializeOwned;
@@ -309,9 +313,17 @@ impl Env {
                         HashMap::new(),
                     )
                     .into_iter()
+                    .map(|(name, value)| (name.to_ascii_uppercase(), value))
                     .collect(),
                 ),
-                blas_threads: setting(&settings, "gdal_process_pool.worker.blas_threads", 1),
+                environment: setting::<HashMap<String, String>>(
+                    &settings,
+                    "gdal_process_pool.worker.environment",
+                    HashMap::new(),
+                )
+                .into_iter()
+                .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                .collect(),
                 ..WorkerConfig::default()
             },
         );
@@ -349,7 +361,10 @@ impl Env {
         ));
         Self {
             runtime,
-            exe_ctx: StatisticsWrappingMockExecutionContext { inner: exe_ctx },
+            exe_ctx: StatisticsWrappingMockExecutionContext {
+                inner: exe_ctx,
+                cache_raster_operators: false,
+            },
             query_ctx,
             raster,
             start,
@@ -418,6 +433,53 @@ impl Env {
     /// The mean over windows of six time steps of the raster, ignoring no data.
     pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
         mean(raster, self.step * 6)
+    }
+
+    /// The operator as the server wraps it for a query in `srs` with `resolution`, e.g. for a WMS
+    /// `GetMap` request (`WrapWithProjectionAndResample`, as in `services::queries::raster_grid`).
+    pub fn resample(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+    ) -> TypedRasterOperator {
+        self.runtime.block_on(async {
+            let initialized = operator
+                .clone()
+                .initialize(
+                    ProcessingGraphOperatorPath::initialize_root(),
+                    &self.exe_ctx,
+                )
+                .await
+                .unwrap();
+            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
+                .wrap_with_projection_and_resample(
+                    None,
+                    Some(resolution),
+                    srs,
+                    WarpMethods::NEAREST,
+                    &self.exe_ctx,
+                )
+                .await
+                .unwrap()
+                .operator
+        })
+    }
+
+    /// `resample`, with `downsampling` and `upsampling` in the `Warp` it wraps the operator with.
+    pub fn resample_with_methods(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+        (downsampling, upsampling): (WarpDownsampling, WarpUpsampling),
+    ) -> TypedRasterOperator {
+        let TypedRasterOperator::Warp(mut warp) = self.resample(operator, srs, resolution) else {
+            panic!("the resampled operator should be a warp");
+        };
+        warp.params.downsampling = downsampling;
+        warp.params.upsampling = upsampling;
+        TypedRasterOperator::Warp(warp)
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.
@@ -563,11 +625,51 @@ fn raster_meta_data() -> GdalMetaDataRegular {
 fn settings() -> Config {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     Config::builder()
-        .add_source(File::from(dir.join("Settings-default.toml")))
-        .add_source(File::from(dir.join("Settings.toml")).required(false))
+        .add_source(WorkerOptionNamesInLowerCase(File::from(
+            dir.join("Settings-default.toml"),
+        )))
+        .add_source(WorkerOptionNamesInLowerCase(
+            File::from(dir.join("Settings.toml")).required(false),
+        ))
         .add_source(Environment::with_prefix("geoengine").separator("__"))
         .build()
         .unwrap()
+}
+
+/// A copy of `WorkerOptionNamesInLowerCase` in `services::config`, which the benches cannot use:
+/// names the GDAL options and environment variables of the workers in a settings file in lower case, as environment variables are, so
+/// that the order of the settings decides between them.
+#[derive(Debug, Clone)]
+struct WorkerOptionNamesInLowerCase<S>(S);
+
+impl<S: Source + Clone + Send + Sync + 'static> Source for WorkerOptionNamesInLowerCase<S> {
+    fn clone_into_box(&self) -> Box<dyn Source + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn collect(&self) -> Result<Map<String, Value>, ConfigError> {
+        fn table<'a>(value: Option<&'a mut Value>, key: &str) -> Option<&'a mut Value> {
+            match &mut value?.kind {
+                ValueKind::Table(table) => table.get_mut(key),
+                _ => None,
+            }
+        }
+
+        let mut settings = self.0.collect()?;
+        for options in ["gdal_config_options", "environment"] {
+            let options = table(
+                table(settings.get_mut("gdal_process_pool"), "worker"),
+                options,
+            );
+            if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
+                *options = std::mem::take(options)
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_lowercase(), value))
+                    .collect();
+            }
+        }
+        Ok(settings)
+    }
 }
 
 /// The setting `key`, or `default` while the settings do not have the key (the keys that wp1 adds,

@@ -29,37 +29,38 @@ format-justfiles write="false": common::_clear
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ui/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile www/justfile
 
-FORMAT_FIND_EXCLUDES := '\
-    -not -path "./.git/*" \
-    -not -path "./.mypy_cache/*" \
-    -not -path "./api-clients/python/*" \
-    -not -path "./api-clients/rust/*" \
-    -not -path "./api-clients/typescript/*" \
-    -not -path "./geoengine/target/*" \
-    -not -path "./geoengine/test_data/*" \
-    -not -path "./geoengine/upload/*" \
-    -not -path "./node_modules/*" \
-    -not -path "./python/.pytest_cache/*" \
-    -not -path "./python/.venv/*" \
-    -not -path "./target/*" \
-    -not -path "./ui/.angular/*" \
-    -not -path "./openapi.json" `# generated file` \
-    -not -path "./www/*" `# covered by www itself` \
+# Lists the tracked and untracked files that prettier checks, without the git-ignored ones
+# (build output, virtual envs, caches, …). Takes the file pattern as the last argument.
+FORMAT_FILES := '\
+    git ls-files -z --cached --others --exclude-standard -- \
+    ":!:api-clients/python/" \
+    ":!:api-clients/rust/" \
+    ":!:api-clients/typescript/" \
+    ":!:geoengine/test_data/" \
+    ":!:openapi.json" `# generated file` \
+    ":!:www/" `# covered by www itself` \
     '
+
+# `--no-error-on-unmatched-pattern` skips tracked files that were deleted locally.
+PRETTIER := "xargs -0 -r npx prettier --no-error-on-unmatched-pattern"
 
 # Check if markdown files are formatted correctly. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
+[script("bash")]
 format-md write="false": common::_clear
-    find . -type f -name "*.md" {{ FORMAT_FIND_EXCLUDES }} \
-    | xargs npx prettier {{ if write != "true" { "--check" } else { "--write" } }}
+    set -euo pipefail
+    {{ FORMAT_FILES }} "*.md" \
+    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }} --
 
 # Check if JSON files are formatted correctly. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
+[script("bash")]
 format-json write="false": common::_clear
-    find . -type f -name "*.json" {{ FORMAT_FIND_EXCLUDES }} \
-    | xargs npx prettier {{ if write != "true" { "--check" } else { "--write" } }}
+    set -euo pipefail
+    {{ FORMAT_FILES }} "*.json" \
+    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }} --
 
 VERSION_CMD := "cd geoengine && cargo metadata --manifest-path Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
 PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'

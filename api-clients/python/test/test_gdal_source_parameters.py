@@ -36,7 +36,7 @@ class TestGdalSourceParameters(unittest.TestCase):
         if include_optional:
             return GdalSourceParameters(
                 data = '',
-                overview_level = 0
+                overview_level = 1
             )
         else:
             return GdalSourceParameters(

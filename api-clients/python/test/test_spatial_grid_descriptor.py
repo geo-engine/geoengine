@@ -50,7 +50,7 @@ class TestSpatialGridDescriptor(unittest.TestCase):
                             y_idx = 56, 
                             x_idx = 56, ), ), ),
                 descriptor = 'source',
-                max_overview_level = 0
+                max_overview_level = 1
             )
         else:
             return SpatialGridDescriptor(

@@ -731,6 +731,7 @@
         "tags": [
           "Datasets"
         ],
+        "summary": "Updates the dataset's provenance.",
         "operationId": "update_dataset_provenance_handler",
         "parameters": [
           {
@@ -2014,6 +2015,7 @@
         "tags": [
           "Layers"
         ],
+        "summary": "Returns the capabilities of the given provider, e.g., whether it supports listing and search.",
         "operationId": "provider_capabilities_handler",
         "parameters": [
           {
@@ -2720,6 +2722,239 @@
         ]
       }
     },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Collection Coverage Tilesets List",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).",
+        "operationId": "collection_coverage_tilesets",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSets"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Collection Coverage Tileset Metadata",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).",
+        "operationId": "collection_coverage_tileset",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSet"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Coverage Tile",
+        "description": "Returns the raw values of the tile as `GeoTIFF`, with one band per selected field.\nThe tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.\n\nCf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).",
+        "operationId": "coverage_tile",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          },
+          {
+            "name": "tileMatrix",
+            "in": "path",
+            "description": "Tile matrix level",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileRow",
+            "in": "path",
+            "description": "Tile row",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileCol",
+            "in": "path",
+            "description": "Tile column",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "query",
+            "description": "Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2018-02-12T23:20:50Z"
+          },
+          {
+            "name": "properties",
+            "in": "query",
+            "description": "Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "red,green,blue"
+          },
+          {
+            "name": "exclude-properties",
+            "in": "query",
+            "description": "Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "alpha"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/GeoTiffResponse"
+          },
+          "400": {
+            "description": "Invalid tile coordinates, datetime or field selection"
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
       "get": {
         "tags": [
@@ -2966,15 +3201,16 @@
                 "example": {
                   "conformsTo": [
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
                     "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/geodata-tilesets",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tiff",
                     "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
                     "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset"
                   ]
@@ -4609,6 +4845,7 @@
         "tags": [
           "Session"
         ],
+        "summary": "Sets the view (spatial and temporal extent) of the current session.",
         "operationId": "session_view_handler",
         "requestBody": {
           "content": {
@@ -4637,6 +4874,7 @@
         "tags": [
           "Spatial References"
         ],
+        "summary": "Returns the name, PROJ string, extent and axis order of a spatial reference.",
         "operationId": "get_spatial_reference_specification_handler",
         "parameters": [
           {
@@ -8291,7 +8529,7 @@
       "Expression": {
         "type": "object",
         "title": "Raster Expression",
-        "description": "The `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can specify an output data type.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.\nThe expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.\nWhen the temporal resolution is months, our output NDVI will also be a monthly time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform pixel-wise computations.\nOne can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.\nThis is important if `mapNoData` is set to true.\nOtherwise, NO DATA values are mapped automatically to the output NO DATA value.\nFinally, the value `NODATA` can be used to output NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```rust,ignore\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.",
+        "description": "The `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can specify an output data type.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.\nThe expression uses a raster source with the two bands `red` and `nir` and calculates the formula `(nir - red) / (nir + red)`.\nWhen the temporal resolution is months, our output NDVI will also be a monthly time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform pixel-wise computations.\nOne can refer to the raster bands by their names, e.g., `red` and `nir`.\nFurthermore, expressions can check with `red IS NODATA`, `nir IS NODATA`, etc. for NO DATA values.\nThis is important if `mapNoData` is set to true.\nOtherwise, NO DATA values are mapped automatically to the output NO DATA value.\nFinally, the value `NODATA` can be used to output NO DATA.\n\nUsers can think of this implicit function signature for, e.g., the two bands `red` and `nir`:\n\n```rust,ignore\nfn (red: f64, nir: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```rust,ignore\n(red + nir) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```rust,ignore\nif red IS NODATA {\n    nir\n} else {\n    red\n}\n```\n\nFunction calls can be used to access utility functions.\n\n```rust,ignore\nmax(red, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```rust,ignore\nlet mean = (red + nir) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.\n\n### Band names as variables\n\nBand names are adapted to be valid variable names:\nevery character that is not a letter or a digit is replaced by an underscore, e.g., `nir 1` becomes `nir_1`.\nA band can only be referred to by its name if the name starts with an ASCII letter,\nconsists of ASCII letters, digits and underscores only, and is not a keyword of the expression language\n(`if`, `else`, `let`, `nodata`, `is`, `true`, `false`, as well as the reserved words\n`and`, `or`, `not`, `in`, `for`, `while`, `loop`, `break`, `continue`, `return`, `fn` and `match`).\nMoreover, the adapted names of all bands must be different.\nTo use other names, rename the bands with the `RasterStacker` operator (parameter `renameBands`).\n\n**Deprecated:** Bands can also be referred to as `A` for the first band, `B` for the second, and so on.\nThis will be removed in the future.\nIf a band is named like the letter of another band, e.g., the first band is named `B`,\nthe band name is used if the expression also refers to another band by its name.\nOtherwise, the letter is used.",
         "required": [
           "type",
           "params",
@@ -8315,7 +8553,7 @@
           {
             "type": "Expression",
             "params": {
-              "expression": "(A - B) / (A + B)",
+              "expression": "(nir - red) / (nir + red)",
               "outputType": "F32",
               "outputBand": {
                 "name": "NDVI",
@@ -8347,9 +8585,9 @@
         "properties": {
           "expression": {
             "type": "string",
-            "description": "Expression script\n\nExample: `\"(A - B) / (A + B)\"`",
+            "description": "Expression script\n\nExample: `\"(nir - red) / (nir + red)\"`",
             "examples": [
-              "(A - B) / (A + B)"
+              "(nir - red) / (nir + red)"
             ]
           },
           "outputType": {
@@ -8955,11 +9193,11 @@
               "null"
             ],
             "format": "int32",
-            "description": "*Optional*: overview level to use.\n\nIf not provided, the data source will determine the resolution, i.e., uses its native resolution.",
+            "description": "*Optional*: overview level to use, i.e., how many times coarser than the native resolution\nthe data is read. `1` is the native resolution.\n\nIf not provided, the data source will determine the resolution, i.e., uses its native resolution.",
             "examples": [
-              3
+              2
             ],
-            "minimum": 0
+            "minimum": 1
           }
         }
       },
@@ -12097,7 +12335,7 @@
       "PolygonRasterization": {
         "type": "object",
         "title": "Polygon Rasterization",
-        "description": "The `PolygonRasterization` operator creates a raster from a polygon vector source.\n\nA pixel is covered by a polygon if its center lies inside the polygon (holes are respected).\nPixels that are not covered by any polygon are NO DATA.\n\nThe value of the covered pixels is\n- a constant (`1` by default),\n- the number of polygons that cover the pixel (`count`), or\n- the value of a numeric column (`attribute`), aggregated over all polygons that cover the pixel.\n  Features with a null value are skipped, unless `ignoreNoData` is `false`, which makes all pixels they cover NO DATA.\n  `first`, `last`, `min` and `max` keep the measurement of the column, e.g., its classes.\n  `sum`, `mean` and `medianEstimate` create new values, so a classification becomes unitless.\n  The median is exact for up to five values and estimated by the P² algorithm for more.\n\nThe time slices of the output raster are\n- `featureTimes` (default): every start and end time of a feature is a slice boundary,\n  i.e., the slices are the intervals between consecutive boundaries.\n  For example, features valid during `[0, 10)` and `[5, 20)` yield the slices `[0, 5)`, `[5, 10)` and `[10, 20)`.\n  Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.\n  This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.\n- `regular`: slices of a fixed time step, each containing all features whose time intersects it.\n- `ignore`: one slice that is valid forever and contains all features.\n\n## Clipping a raster with polygons\n\nRasterize the polygons on the grid of the raster and mask the raster with the NO DATA pixels of the result,\nusing a `RasterStacker` and an `Expression` like `if B IS NODATA { NODATA } else { A }`.\nBoth rasters need\n- the same resolution and origin modulo the resolution, e.g., the default origin `(0, 0)` for most grids,\n- the same data type, i.e., set `outputType` to the data type of the raster, and\n- the same regular time steps, i.e., use the `regular` time of the raster, or slices that the stacker can align.\n\n## Errors\n\nIf the source is not a polygon source, the column does not exist or is not numeric,\nor the constant value cannot be represented by the output type, an error will be thrown.",
+        "description": "The `PolygonRasterization` operator creates a raster from a polygon vector source.\n\nA pixel is covered by a polygon if its center lies inside the polygon (holes are respected).\nPixels that are not covered by any polygon are NO DATA.\n\nThe value of the covered pixels is\n- a constant (`1` by default),\n- the number of polygons that cover the pixel (`count`), or\n- the value of a numeric column (`attribute`), aggregated over all polygons that cover the pixel.\n  Features with a null value are skipped, unless `ignoreNoData` is `false`, which makes all pixels they cover NO DATA.\n  `first`, `last`, `min` and `max` keep the measurement of the column, e.g., its classes.\n  `sum`, `mean` and `medianEstimate` create new values, so a classification becomes unitless.\n  The median is exact for up to five values and estimated by the P² algorithm for more.\n\nThe time slices of the output raster are\n- `featureTimes` (default): every start and end time of a feature is a slice boundary,\n  i.e., the slices are the intervals between consecutive boundaries.\n  For example, features valid during `[0, 10)` and `[5, 20)` yield the slices `[0, 5)`, `[5, 10)` and `[10, 20)`.\n  Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.\n  This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.\n- `regular`: slices of a fixed time step, each containing all features whose time intersects it.\n- `allFeatures`: one slice that is valid forever and contains all features of the source, regardless of their times.\n  Every query gets this slice, whatever its time, so the features of all times are read for each tile.\n\n## Clipping a raster with polygons\n\nRasterize the polygons on the grid of the raster and mask the raster with the NO DATA pixels of the result,\nusing a `RasterStacker` and an `Expression` like `if B IS NODATA { NODATA } else { A }`.\nBoth rasters need\n- the same resolution and origin modulo the resolution, e.g., the default origin `(0, 0)` for most grids,\n- the same data type, i.e., set `outputType` to the data type of the raster, and\n- the same regular time steps, i.e., use the `regular` time of the raster, or slices that the stacker can align.\n\n## Errors\n\nIf the source is not a polygon source, the column does not exist or is not numeric,\nor the constant value cannot be represented by the output type, an error will be thrown.",
         "required": [
           "type",
           "params",
@@ -12296,16 +12534,31 @@
             "$ref": "#/components/schemas/PolygonRasterizationTimeRegular"
           },
           {
-            "$ref": "#/components/schemas/PolygonRasterizationTimeIgnore"
+            "$ref": "#/components/schemas/PolygonRasterizationTimeAllFeatures"
           }
         ],
         "description": "How the time slices of the output raster are derived from the features.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "allFeatures": "#/components/schemas/PolygonRasterizationTimeAllFeatures",
             "featureTimes": "#/components/schemas/PolygonRasterizationTimeFeatureTimes",
-            "ignore": "#/components/schemas/PolygonRasterizationTimeIgnore",
             "regular": "#/components/schemas/PolygonRasterizationTimeRegular"
+          }
+        }
+      },
+      "PolygonRasterizationTimeAllFeatures": {
+        "type": "object",
+        "description": "One time slice that is valid forever and contains all features, regardless of their times.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "allFeatures"
+            ]
           }
         }
       },
@@ -12320,21 +12573,6 @@
             "type": "string",
             "enum": [
               "featureTimes"
-            ]
-          }
-        }
-      },
-      "PolygonRasterizationTimeIgnore": {
-        "type": "object",
-        "description": "One time slice that is valid forever and contains all features, regardless of their times.",
-        "required": [
-          "type"
-        ],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "ignore"
             ]
           }
         }
@@ -13061,6 +13299,9 @@
           },
           {
             "$ref": "#/components/schemas/TimeShift"
+          },
+          {
+            "$ref": "#/components/schemas/Warp"
           }
         ],
         "description": "An operator that produces raster data.",
@@ -13087,7 +13328,8 @@
             "Reprojection": "#/components/schemas/Reprojection",
             "Temperature": "#/components/schemas/Temperature",
             "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation",
-            "TimeShift": "#/components/schemas/TimeShift"
+            "TimeShift": "#/components/schemas/TimeShift",
+            "Warp": "#/components/schemas/Warp"
           }
         }
       },
@@ -13415,9 +13657,12 @@
           {
             "type": "RasterVectorJoin",
             "params": {
-              "names": [
-                "NDVI"
-              ],
+              "names": {
+                "type": "names",
+                "values": [
+                  "NDVI"
+                ]
+              },
               "featureAggregation": "first",
               "temporalAggregation": "mean",
               "temporalAggregationIgnoreNoData": true
@@ -14453,8 +14698,8 @@
               "null"
             ],
             "format": "int32",
-            "description": "The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.\nSources read only these and downsample further themselves. Unset: the levels are unknown\nand GDAL chooses, which may resample.",
-            "minimum": 0
+            "description": "The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset;\n`1` says that the files have no overviews. Sources read only these and downsample further\nthemselves. Unset: the levels are unknown and GDAL chooses, which may resample.",
+            "minimum": 1
           }
         }
       },
@@ -14580,6 +14825,26 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "StacCoarserAsset": {
+        "type": "object",
+        "description": "A coarser asset that holds the same band as a dataset band, e.g. the 60 m\nfile of a band whose dataset has a resolution of 10 m.",
+        "required": [
+          "factor",
+          "assetBand"
+        ],
+        "properties": {
+          "factor": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many times coarser than the dataset's resolution the asset's pixels\nare, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2,\nand increasing within a band.",
+            "minimum": 2
+          },
+          "assetBand": {
+            "$ref": "#/components/schemas/StacAssetBand",
+            "description": "The band inside the coarser asset."
           }
         }
       },
@@ -14785,6 +15050,13 @@
           "bandDescriptor": {
             "$ref": "#/components/schemas/RasterBandDescriptor",
             "description": "The band descriptor of the resulting geo engine dataset layer."
+          },
+          "coarserAssets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacCoarserAsset"
+            },
+            "description": "Coarser assets with the same band, finest first.\n\nWhen the source reads an overview level, it reads the coarsest of these\nassets whose factor is not larger than the overview level, so it\ntransfers less data."
           }
         }
       },
@@ -17574,6 +17846,162 @@
       "VolumeName": {
         "type": "string"
       },
+      "Warp": {
+        "type": "object",
+        "title": "Warp",
+        "description": "The `Warp` operator puts a raster onto another grid in one step: another spatial reference,\nanother resolution and another grid origin, in any combination.\n\nThe output resolution can be coarser or finer than the input resolution, also coarser in one\naxis and finer in the other. By default, each output pixel takes the value of the input pixel\nunder its center. `downsampling` and `upsampling` choose other methods, with the semantics of\n[`gdalwarp -r`](https://gdal.org/en/stable/programs/gdalwarp.html#cmdoption-gdalwarp-r):\n`downsampling` applies to outputs that are coarser than the input in at least one axis,\n`upsampling` to outputs that are finer in both axes. With another spatial reference, coarser\nand finer are relative to the resolution of the reprojected input, and the footprint of an\noutput pixel is the bounding box of its projected corners, as in GDAL.\n\nInteger outputs of `average` and `bilinear` round half up. `outputDataType` keeps the fractions,\ne.g. `F32` for the average of `U8` values.\n\nGeo Engine uses `Warp` to answer queries, e.g., WMS requests, in a spatial reference or at a\nresolution that differs from the processing graph's.\n\n## Errors\n\nThe operator returns an error if the input has no spatial reference, if the input data\ncannot be reprojected to the target spatial reference, or if `mode` is used with a float\ninput or could need more memory than the limit\n`[query_context] warp_mode_max_memory_per_tile_mb`.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Warp"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/WarpParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Warp",
+            "params": {
+              "targetSpatialReference": "EPSG:3857",
+              "outputResolution": {
+                "x": 20000.0,
+                "y": 10000.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          },
+          {
+            "type": "Warp",
+            "params": {
+              "outputResolution": {
+                "x": 0.5,
+                "y": 0.5
+              },
+              "downsampling": "average",
+              "upsampling": "bilinear",
+              "outputDataType": "F32"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "WarpDownsamplingMethod": {
+        "type": "string",
+        "description": "How `Warp` computes an output pixel that is coarser than the input in at least one axis, as\n`gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.",
+        "enum": [
+          "nearest",
+          "average",
+          "mode",
+          "min",
+          "max"
+        ]
+      },
+      "WarpParameters": {
+        "type": "object",
+        "description": "Parameters for the `Warp` operator.",
+        "properties": {
+          "targetSpatialReference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target spatial reference system. Defaults to the spatial reference of the input.",
+            "examples": [
+              "EPSG:3857"
+            ]
+          },
+          "outputResolution": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SpatialResolution",
+                "description": "Output resolution (`x`, `y`) in units of the target spatial reference.\nDefaults to the resolution of the (reprojected) input."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputOriginReference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional reference point used to align the output grid origin."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "downsampling": {
+            "$ref": "#/components/schemas/WarpDownsamplingMethod",
+            "description": "How to compute an output pixel that is coarser than the input in at least one axis.\nDefaults to `nearest`."
+          },
+          "upsampling": {
+            "$ref": "#/components/schemas/WarpUpsamplingMethod",
+            "description": "How to compute an output pixel that is finer than the input in both axes.\nDefaults to `nearest`."
+          },
+          "outputDataType": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RasterDataType",
+                "description": "The data type of the output. Defaults to the data type of the input.\nInteger types round half up and clip values to their range."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deriveOutSpec": {
+            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
+            "description": "How the output grid is derived when reprojecting, as in `Reprojection`:\n`projectionBounds` (default) derives it from the area of use of the input's spatial\nreference, `dataBounds` from the data bounds."
+          },
+          "approximationErrorThreshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The largest error in input pixels of the approximate coordinate transformation when\nreprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's\n`[query_context] reprojection_approximation_error_px` (`0.125` by default).",
+            "examples": [
+              0.125,
+              0.0
+            ]
+          }
+        }
+      },
+      "WarpUpsamplingMethod": {
+        "type": "string",
+        "description": "How `Warp` computes an output pixel that is finer than the input in both axes, as\n`gdalwarp -r` with the same name.",
+        "enum": [
+          "nearest",
+          "bilinear"
+        ]
+      },
       "WcsRequest": {
         "type": "string",
         "enum": [
@@ -17740,6 +18168,17 @@
                   "message": "Unable to parse query string: invalid digit found in string"
                 }
               }
+            }
+          }
+        }
+      },
+      "GeoTiffResponse": {
+        "description": "GeoTIFF Image",
+        "content": {
+          "image/tiff; application=geotiff": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
             }
           }
         }

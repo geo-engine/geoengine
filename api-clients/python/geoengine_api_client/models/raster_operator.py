@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
+RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift", "Warp"]
 
 class RasterOperator(BaseModel):
     """
@@ -71,8 +71,10 @@ class RasterOperator(BaseModel):
     oneof_schema_20_validator: Optional[Temperature] = None
     # data type: TimeShift
     oneof_schema_21_validator: Optional[TimeShift] = None
-    actual_instance: Optional[Union[BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
-    one_of_schemas: Set[str] = { "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
+    # data type: Warp
+    oneof_schema_22_validator: Optional[Warp] = None
+    actual_instance: Optional[Union[BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp]] = None
+    one_of_schemas: Set[str] = { "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift", "Warp" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -203,12 +205,17 @@ class RasterOperator(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `TimeShift`")
         else:
             match += 1
+        # validate data type: Warp
+        if not isinstance(v, Warp):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `Warp`")
+        else:
+            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -332,6 +339,11 @@ class RasterOperator(BaseModel):
         # check if data type is `TimeShift`
         if _data_type == "TimeShift":
             instance.actual_instance = TimeShift.from_json(json_str)
+            return instance
+
+        # check if data type is `Warp`
+        if _data_type == "Warp":
+            instance.actual_instance = Warp.from_json(json_str)
             return instance
 
         # deserialize data into BandFilter
@@ -460,13 +472,19 @@ class RasterOperator(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into Warp
+        try:
+            instance.actual_instance = Warp.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -480,7 +498,7 @@ class RasterOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift, Warp]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None
@@ -514,6 +532,7 @@ from geoengine_api_client.models.reprojection import Reprojection
 from geoengine_api_client.models.temperature import Temperature
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation
 from geoengine_api_client.models.time_shift import TimeShift
+from geoengine_api_client.models.warp import Warp
 # TODO: Rewrite to not use raise_errors
 RasterOperator.model_rebuild(raise_errors=False)
 

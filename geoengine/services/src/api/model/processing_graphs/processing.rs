@@ -79,6 +79,8 @@ use geoengine_operators::{
         VectorJoinSources as OperatorsVectorJoinSources, VectorJoinType as OperatorsVectorJoinType,
         VisualPointClustering as OperatorsVisualPointClustering,
         VisualPointClusteringParams as OperatorsVisualPointClusteringParameters,
+        Warp as OperatorsWarp, WarpDownsampling as OperatorsWarpDownsampling,
+        WarpParams as OperatorsWarpParameters, WarpUpsampling as OperatorsWarpUpsampling,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -91,7 +93,7 @@ use utoipa::ToSchema;
 /// Internally, the expression is evaluated using floating-point numbers.
 ///
 /// An example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.
-/// The expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.
+/// The expression uses a raster source with the two bands `red` and `nir` and calculates the formula `(nir - red) / (nir + red)`.
 /// When the temporal resolution is months, our output NDVI will also be a monthly time series.
 ///
 /// ## Types
@@ -101,38 +103,38 @@ use utoipa::ToSchema;
 /// ### Expression
 ///
 /// Expressions are simple scripts to perform pixel-wise computations.
-/// One can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.
-/// Furthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.
+/// One can refer to the raster bands by their names, e.g., `red` and `nir`.
+/// Furthermore, expressions can check with `red IS NODATA`, `nir IS NODATA`, etc. for NO DATA values.
 /// This is important if `mapNoData` is set to true.
 /// Otherwise, NO DATA values are mapped automatically to the output NO DATA value.
 /// Finally, the value `NODATA` can be used to output NO DATA.
 ///
-/// Users can think of this implicit function signature for, e.g., two inputs:
+/// Users can think of this implicit function signature for, e.g., the two bands `red` and `nir`:
 ///
 /// ```rust,ignore
-/// fn (A: f64, B: f64) -> f64
+/// fn (red: f64, nir: f64) -> f64
 /// ```
 ///
 /// As a start, expressions contain algebraic operations and mathematical functions.
 ///
 /// ```rust,ignore
-/// (A + B) / 2
+/// (red + nir) / 2
 /// ```
 ///
 /// In addition, branches can be used to check for conditions.
 ///
 /// ```rust,ignore
-/// if A IS NODATA {
-///     B
+/// if red IS NODATA {
+///     nir
 /// } else {
-///     A
+///     red
 /// }
 /// ```
 ///
 /// Function calls can be used to access utility functions.
 ///
 /// ```rust,ignore
-/// max(A, 0)
+/// max(red, 0)
 /// ```
 ///
 /// Currently, the following functions are available:
@@ -152,19 +154,36 @@ use utoipa::ToSchema;
 /// To generate more complex expressions, it is possible to have variable assignments.
 ///
 /// ```rust,ignore
-/// let mean = (A + B) / 2;
+/// let mean = (red + nir) / 2;
 /// let coefficient = 0.357;
 /// mean * coefficient
 /// ```
 ///
 /// Note, that all assignments are separated by semicolons.
 /// However, the last expression must be without a semicolon.
+///
+/// ### Band names as variables
+///
+/// Band names are adapted to be valid variable names:
+/// every character that is not a letter or a digit is replaced by an underscore, e.g., `nir 1` becomes `nir_1`.
+/// A band can only be referred to by its name if the name starts with an ASCII letter,
+/// consists of ASCII letters, digits and underscores only, and is not a keyword of the expression language
+/// (`if`, `else`, `let`, `nodata`, `is`, `true`, `false`, as well as the reserved words
+/// `and`, `or`, `not`, `in`, `for`, `while`, `loop`, `break`, `continue`, `return`, `fn` and `match`).
+/// Moreover, the adapted names of all bands must be different.
+/// To use other names, rename the bands with the `RasterStacker` operator (parameter `renameBands`).
+///
+/// **Deprecated:** Bands can also be referred to as `A` for the first band, `B` for the second, and so on.
+/// This will be removed in the future.
+/// If a band is named like the letter of another band, e.g., the first band is named `B`,
+/// the band name is used if the expression also refers to another band by its name.
+/// Otherwise, the letter is used.
 #[api_operator(
     title = "Raster Expression",
     examples(json!({
         "type": "Expression",
         "params": {
-            "expression": "(A - B) / (A + B)",
+            "expression": "(nir - red) / (nir + red)",
             "outputType": "F32",
             "outputBand": {
                 "name": "NDVI",
@@ -195,8 +214,8 @@ pub struct Expression {
 pub struct ExpressionParameters {
     /// Expression script
     ///
-    /// Example: `"(A - B) / (A + B)"`
-    #[schema(examples("(A - B) / (A + B)"))]
+    /// Example: `"(nir - red) / (nir + red)"`
+    #[schema(examples("(nir - red) / (nir + red)"))]
     pub expression: String,
     /// A raster data type for the output
     #[schema(examples("F32"))]
@@ -316,6 +335,15 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
         match value {
             DeriveOutRasterSpecsSource::DataBounds => Self::DataBounds,
             DeriveOutRasterSpecsSource::ProjectionBounds => Self::ProjectionBounds,
+        }
+    }
+}
+
+impl From<OperatorsDeriveOutRasterSpecsSource> for DeriveOutRasterSpecsSource {
+    fn from(value: OperatorsDeriveOutRasterSpecsSource) -> Self {
+        match value {
+            OperatorsDeriveOutRasterSpecsSource::DataBounds => Self::DataBounds,
+            OperatorsDeriveOutRasterSpecsSource::ProjectionBounds => Self::ProjectionBounds,
         }
     }
 }
@@ -989,6 +1017,196 @@ impl TryFrom<Downsampling> for OperatorsDownsampling {
     }
 }
 
+/// The `Warp` operator puts a raster onto another grid in one step: another spatial reference,
+/// another resolution and another grid origin, in any combination.
+///
+/// The output resolution can be coarser or finer than the input resolution, also coarser in one
+/// axis and finer in the other. By default, each output pixel takes the value of the input pixel
+/// under its center. `downsampling` and `upsampling` choose other methods, with the semantics of
+/// [`gdalwarp -r`](https://gdal.org/en/stable/programs/gdalwarp.html#cmdoption-gdalwarp-r):
+/// `downsampling` applies to outputs that are coarser than the input in at least one axis,
+/// `upsampling` to outputs that are finer in both axes. With another spatial reference, coarser
+/// and finer are relative to the resolution of the reprojected input, and the footprint of an
+/// output pixel is the bounding box of its projected corners, as in GDAL.
+///
+/// Integer outputs of `average` and `bilinear` round half up. `outputDataType` keeps the fractions,
+/// e.g. `F32` for the average of `U8` values.
+///
+/// Geo Engine uses `Warp` to answer queries, e.g., WMS requests, in a spatial reference or at a
+/// resolution that differs from the processing graph's.
+///
+/// ## Errors
+///
+/// The operator returns an error if the input has no spatial reference, if the input data
+/// cannot be reprojected to the target spatial reference, or if `mode` is used with a float
+/// input or could need more memory than the limit
+/// `[query_context] warp_mode_max_memory_per_tile_mb`.
+#[api_operator(
+    title = "Warp",
+    examples(
+        json!({
+            "type": "Warp",
+            "params": {
+                "targetSpatialReference": "EPSG:3857",
+                "outputResolution": { "x": 20000.0, "y": 10000.0 }
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
+            }
+        }),
+        json!({
+            "type": "Warp",
+            "params": {
+                "outputResolution": { "x": 0.5, "y": 0.5 },
+                "downsampling": "average",
+                "upsampling": "bilinear",
+                "outputDataType": "F32"
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
+            }
+        })
+    )
+)]
+pub struct Warp {
+    pub params: WarpParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `Warp` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WarpParameters {
+    /// Target spatial reference system. Defaults to the spatial reference of the input.
+    #[schema(value_type = Option<String>, examples("EPSG:3857"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_spatial_reference: Option<SpatialReference>,
+    /// Output resolution (`x`, `y`) in units of the target spatial reference.
+    /// Defaults to the resolution of the (reprojected) input.
+    #[schema(examples(json!({ "x": 20000.0, "y": 10000.0 })))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_resolution: Option<SpatialResolution>,
+    /// Optional reference point used to align the output grid origin.
+    #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_origin_reference: Option<Coordinate2D>,
+    /// How to compute an output pixel that is coarser than the input in at least one axis.
+    /// Defaults to `nearest`.
+    #[schema(examples("average"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub downsampling: WarpDownsamplingMethod,
+    /// How to compute an output pixel that is finer than the input in both axes.
+    /// Defaults to `nearest`.
+    #[schema(examples("bilinear"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub upsampling: WarpUpsamplingMethod,
+    /// The data type of the output. Defaults to the data type of the input.
+    /// Integer types round half up and clip values to their range.
+    #[schema(examples("F32"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_data_type: Option<RasterDataType>,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`:
+    /// `projectionBounds` (default) derives it from the area of use of the input's spatial
+    /// reference, `dataBounds` from the data bounds.
+    #[schema(examples("projectionBounds"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
+    /// The largest error in input pixels of the approximate coordinate transformation when
+    /// reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's
+    /// `[query_context] reprojection_approximation_error_px` (`0.125` by default).
+    #[schema(value_type = Option<f64>, examples(0.125, 0.0))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approximation_error_threshold: Option<NonNegativeFiniteF64>,
+}
+
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
+}
+
+/// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as
+/// `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum WarpDownsamplingMethod {
+    /// The value of the input pixel under the center of the output pixel.
+    #[default]
+    Nearest,
+    /// The average of the input pixels under the output pixel, weighted by the area of each
+    /// that the output pixel covers.
+    Average,
+    /// The most common value of the input pixels under the output pixel, weighted by the area of
+    /// each that the output pixel covers. Only for integer inputs. The operator returns an error if
+    /// it could need more memory per output tile than the limit
+    /// `[query_context] warp_mode_max_memory_per_tile_mb`, e.g. for a large factor on 16-bit data
+    /// without overviews.
+    Mode,
+    /// The minimum of the input pixels under the output pixel.
+    Min,
+    /// The maximum of the input pixels under the output pixel.
+    Max,
+}
+
+impl From<WarpDownsamplingMethod> for OperatorsWarpDownsampling {
+    fn from(value: WarpDownsamplingMethod) -> Self {
+        match value {
+            WarpDownsamplingMethod::Nearest => Self::Nearest,
+            WarpDownsamplingMethod::Average => Self::Average,
+            WarpDownsamplingMethod::Mode => Self::Mode,
+            WarpDownsamplingMethod::Min => Self::Min,
+            WarpDownsamplingMethod::Max => Self::Max,
+        }
+    }
+}
+
+/// How `Warp` computes an output pixel that is finer than the input in both axes, as
+/// `gdalwarp -r` with the same name.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum WarpUpsamplingMethod {
+    /// The value of the input pixel under the center of the output pixel.
+    #[default]
+    Nearest,
+    /// The bilinear interpolation of the four input pixel centers around the center of the output
+    /// pixel. Neighbours without data are left out. If the input pixel under the center has no
+    /// data, the output pixel has none either.
+    Bilinear,
+}
+
+impl From<WarpUpsamplingMethod> for OperatorsWarpUpsampling {
+    fn from(value: WarpUpsamplingMethod) -> Self {
+        match value {
+            WarpUpsamplingMethod::Nearest => Self::Nearest,
+            WarpUpsamplingMethod::Bilinear => Self::Bilinear,
+        }
+    }
+}
+
+impl TryFrom<Warp> for OperatorsWarp {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Warp) -> Result<Self, Self::Error> {
+        Ok(OperatorsWarp {
+            params: OperatorsWarpParameters {
+                target_spatial_reference: value.params.target_spatial_reference.map(Into::into),
+                output_resolution: value.params.output_resolution.map(Into::into),
+                output_origin_reference: value.params.output_origin_reference.map(Into::into),
+                downsampling: value.params.downsampling.into(),
+                upsampling: value.params.upsampling.into(),
+                output_data_type: value.params.output_data_type.map(Into::into),
+                derive_out_spec: value.params.derive_out_spec.into(),
+                approximation_error_threshold: value.params.approximation_error_threshold,
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
 /// The `BandFilter` operator selects bands from a raster source by band names or band indices.
 ///
 /// It removes all non-selected bands while preserving the original order of remaining bands.
@@ -1075,7 +1293,10 @@ impl TryFrom<BandFilter> for OperatorsBandFilter {
     examples(json!({
         "type": "RasterVectorJoin",
         "params": {
-            "names": ["NDVI"],
+            "names": {
+                "type": "names",
+                "values": ["NDVI"]
+            },
             "featureAggregation": "first",
             "temporalAggregation": "mean",
             "temporalAggregationIgnoreNoData": true
@@ -2151,7 +2372,8 @@ impl TryFrom<Rasterization> for OperatorsRasterization {
 ///   Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.
 ///   This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.
 /// - `regular`: slices of a fixed time step, each containing all features whose time intersects it.
-/// - `ignore`: one slice that is valid forever and contains all features.
+/// - `allFeatures`: one slice that is valid forever and contains all features of the source, regardless of their times.
+///   Every query gets this slice, whatever its time, so the features of all times are read for each tile.
 ///
 /// ## Clipping a raster with polygons
 ///
@@ -2274,7 +2496,7 @@ pub struct PolygonRasterizationParameters {
     #[schema(examples(
         json!({ "type": "featureTimes" }),
         json!({ "type": "regular", "step": { "granularity": "months", "step": 1 } }),
-        json!({ "type": "ignore" })
+        json!({ "type": "allFeatures" })
     ))]
     #[serde(default)]
     pub time: PolygonRasterizationTime,
@@ -2360,7 +2582,7 @@ pub enum PolygonRasterizationAggregation {
 pub enum PolygonRasterizationTime {
     FeatureTimes(PolygonRasterizationTimeFeatureTimes),
     Regular(PolygonRasterizationTimeRegular),
-    Ignore(PolygonRasterizationTimeIgnore),
+    AllFeatures(PolygonRasterizationTimeAllFeatures),
 }
 
 impl Default for PolygonRasterizationTime {
@@ -2393,10 +2615,10 @@ pub struct PolygonRasterizationTimeRegular {
 }
 
 /// One time slice that is valid forever and contains all features, regardless of their times.
-#[type_tag(value = "ignore")]
+#[type_tag(value = "allFeatures")]
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct PolygonRasterizationTimeIgnore {}
+pub struct PolygonRasterizationTimeAllFeatures {}
 
 impl From<PolygonRasterizationValue> for OperatorsBurnValue {
     fn from(value: PolygonRasterizationValue) -> Self {
@@ -2476,7 +2698,7 @@ impl From<PolygonRasterizationTime> for OperatorsRasterizationTime {
                 step: regular.step.into(),
                 reference: regular.reference.map(Into::into),
             },
-            PolygonRasterizationTime::Ignore(_) => Self::Ignore,
+            PolygonRasterizationTime::AllFeatures(_) => Self::AllFeatures,
         }
     }
 }
@@ -2494,8 +2716,8 @@ impl From<OperatorsRasterizationTime> for PolygonRasterizationTime {
                     reference: reference.map(Into::into),
                 })
             }
-            OperatorsRasterizationTime::Ignore => {
-                Self::Ignore(PolygonRasterizationTimeIgnore::default())
+            OperatorsRasterizationTime::AllFeatures => {
+                Self::AllFeatures(PolygonRasterizationTimeAllFeatures::default())
             }
         }
     }
@@ -3666,6 +3888,60 @@ mod tests {
             ops.params.output_origin_reference,
             Some(geoengine_datatypes::primitives::Coordinate2D::new(0.0, 0.0))
         );
+    }
+
+    #[test]
+    fn it_converts_warp_params() {
+        let api: Warp = serde_json::from_value(serde_json::json!({
+            "type": "Warp",
+            "params": {
+                "targetSpatialReference": "EPSG:3857",
+                "outputResolution": { "x": 20000.0, "y": 10000.0 },
+                "downsampling": "mode",
+                "upsampling": "bilinear",
+                "outputDataType": "F32",
+                "approximationErrorThreshold": 0.0
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
+            }
+        }))
+        .expect("valid warp");
+
+        let ops = OperatorsWarp::try_from(api).expect("conversion failed");
+
+        assert_eq!(
+            ops.params,
+            OperatorsWarpParameters {
+                target_spatial_reference: Some(
+                    geoengine_datatypes::spatial_reference::SpatialReference::web_mercator()
+                ),
+                output_resolution: Some(
+                    geoengine_datatypes::primitives::SpatialResolution::new_unchecked(
+                        20_000., 10_000.
+                    )
+                ),
+                output_origin_reference: None,
+                downsampling: OperatorsWarpDownsampling::Mode,
+                upsampling: OperatorsWarpUpsampling::Bilinear,
+                output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
+                derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
+                approximation_error_threshold: Some(NonNegativeFiniteF64::new_unchecked(0.)),
+            }
+        );
+    }
+
+    #[test]
+    fn it_rejects_a_negative_approximation_error_threshold() {
+        for threshold in [json!(-0.5), json!("NaN")] {
+            let result = serde_json::from_value::<WarpParameters>(json!({
+                "approximationErrorThreshold": threshold
+            }));
+            assert!(result.is_err(), "{threshold} must be rejected");
+        }
     }
 
     #[test]

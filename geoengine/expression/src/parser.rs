@@ -18,7 +18,7 @@ use pest_derive::Parser;
 use snafu::{OptionExt, ResultExt};
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashMap, hash_map},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map},
     rc::Rc,
     sync::OnceLock,
 };
@@ -34,8 +34,13 @@ struct _ExpressionParser;
 /// A parser for user-defined expressions.
 pub struct ExpressionParser {
     parameters: Vec<Parameter>,
+    /// Alternative names for parameters (alias → parameter).
+    aliases: BTreeMap<Identifier, Identifier>,
+    /// Whether `let` assignments may shadow parameters.
+    allow_parameter_shadowing: bool,
     out_type: DataType,
     functions: Rc<RefCell<BTreeSet<AstFunction>>>,
+    used_aliases: Rc<RefCell<BTreeSet<Identifier>>>,
 }
 
 static EXPRESSION_PARSER: OnceLock<PrattParser<Rule>> = OnceLock::new();
@@ -75,9 +80,71 @@ impl ExpressionParser {
 
         Ok(Self {
             parameters: parameters.to_vec(),
+            aliases: BTreeMap::new(),
+            allow_parameter_shadowing: false,
             out_type,
             functions: Rc::new(RefCell::new(Default::default())),
+            used_aliases: Rc::new(RefCell::new(Default::default())),
         })
+    }
+
+    /// Adds alternative names for parameters, given as `(alias, parameter)` pairs.
+    ///
+    /// An alias can be used like the parameter it refers to, but it cannot be shadowed.
+    pub fn with_aliases(
+        mut self,
+        aliases: impl IntoIterator<Item = (Identifier, Identifier)>,
+    ) -> Result<Self> {
+        for (alias, target) in aliases {
+            if self.is_parameter(&alias) {
+                return Err(ExpressionSemanticError::AliasCollidesWithParameter {
+                    alias: alias.to_string(),
+                }
+                .into_definition_parser_error());
+            }
+
+            if !self.is_parameter(&target) {
+                return Err(ExpressionSemanticError::AliasForUnknownParameter {
+                    alias: alias.to_string(),
+                    target: target.to_string(),
+                }
+                .into_definition_parser_error());
+            }
+
+            self.aliases.insert(alias, target);
+        }
+
+        Ok(self)
+    }
+
+    /// Allows `let` assignments to shadow parameters (but not aliases or other assignments).
+    #[must_use]
+    pub fn with_parameter_shadowing(mut self, allow: bool) -> Self {
+        self.allow_parameter_shadowing = allow;
+        self
+    }
+
+    fn is_parameter(&self, identifier: &Identifier) -> bool {
+        self.parameters
+            .iter()
+            .any(|parameter| parameter.identifier() == identifier)
+    }
+
+    /// Returns the variables that the expression `input` reads without defining them itself,
+    /// i.e., all referenced variables except the ones that are assigned with `let` before.
+    ///
+    /// This only checks the syntax of the expression, not whether the variables exist.
+    pub fn free_variables(input: &str) -> Result<BTreeSet<String>> {
+        let pairs = _ExpressionParser::parse(Rule::main, input)
+            .map_err(ExpressionParserError::from_syntactic_error)?;
+
+        let mut free_variables = BTreeSet::new();
+        let mut defined = HashSet::new();
+        for pair in pairs {
+            collect_free_variables(pair, &mut defined, &mut free_variables);
+        }
+
+        Ok(free_variables)
     }
 
     pub fn parse(self, name: &str, input: &str) -> Result<ExpressionAst> {
@@ -88,11 +155,16 @@ impl ExpressionParser {
         let pairs = _ExpressionParser::parse(Rule::main, input)
             .map_err(ExpressionParserError::from_syntactic_error)?;
 
-        let variables = self
+        let mut variables: HashMap<Identifier, DataType> = self
             .parameters
             .iter()
             .map(|param| (param.identifier().clone(), param.data_type()))
             .collect();
+        for (alias, target) in &self.aliases {
+            if let Some(&data_type) = variables.get(target) {
+                variables.insert(alias.clone(), data_type);
+            }
+        }
 
         let root = self.build_ast(pairs, &variables)?;
 
@@ -104,13 +176,62 @@ impl ExpressionParser {
             .into_definition_parser_error());
         }
 
-        ExpressionAst::new(
+        let used_aliases = self
+            .used_aliases
+            .borrow()
+            .iter()
+            .filter_map(|alias| {
+                self.aliases
+                    .get(alias)
+                    .map(|target| (alias.clone(), target.clone()))
+            })
+            .collect();
+
+        Ok(ExpressionAst::new(
             name.to_string().into(),
             self.parameters,
             self.out_type,
             self.functions.borrow_mut().clone(),
             root,
-        )
+        )?
+        .with_aliases(used_aliases))
+    }
+
+    /// Looks up the data type of a variable and records whether it is an alias.
+    fn lookup_variable(
+        &self,
+        identifier: &Identifier,
+        variables: &HashMap<Identifier, DataType>,
+        span: pest::Span<'_>,
+    ) -> Result<DataType> {
+        let Some(&data_type) = variables.get(identifier) else {
+            return Err(ExpressionSemanticError::UnknownVariable {
+                variable: identifier.to_string(),
+                available: self.available_variables(variables),
+            }
+            .into_parser_error(span));
+        };
+
+        if self.aliases.contains_key(identifier) {
+            self.used_aliases.borrow_mut().insert(identifier.clone());
+        }
+
+        Ok(data_type)
+    }
+
+    /// Lists the variables for error messages, without aliases.
+    fn available_variables(&self, variables: &HashMap<Identifier, DataType>) -> String {
+        let names = variables
+            .keys()
+            .filter(|name| !self.aliases.contains_key(*name))
+            .map(|name| format!("`{name}`"))
+            .collect::<BTreeSet<_>>();
+
+        if names.is_empty() {
+            return "none".to_string();
+        }
+
+        names.into_iter().collect::<Vec<_>>().join(", ")
     }
 
     fn build_ast(
@@ -144,12 +265,7 @@ impl ExpressionParser {
             )),
             Rule::identifier => {
                 let identifier = pair.as_str().into();
-                let data_type = *variables
-                    .get(&identifier)
-                    .context(error::UnknownVariable {
-                        variable: identifier.to_string(),
-                    })
-                    .map_err(|e| e.into_parser_error(span))?;
+                let data_type = self.lookup_variable(&identifier, variables, span)?;
                 Ok(AstNode::Variable {
                     name: identifier,
                     data_type,
@@ -162,6 +278,17 @@ impl ExpressionParser {
                 let mut assignments: Vec<Assignment> = vec![];
 
                 let mut variables = variables.clone();
+
+                // parameters that may be shadowed once by an assignment
+                let mut shadowable_parameters: HashSet<Identifier> =
+                    if self.allow_parameter_shadowing {
+                        self.parameters
+                            .iter()
+                            .map(|parameter| parameter.identifier().clone())
+                            .collect()
+                    } else {
+                        HashSet::new()
+                    };
 
                 for pair in pair.into_inner() {
                     if matches!(pair.as_rule(), Rule::assignment) {
@@ -192,8 +319,13 @@ impl ExpressionParser {
                             hash_map::Entry::Vacant(entry) => {
                                 entry.insert(expression_data_type);
                             }
+                            hash_map::Entry::Occupied(mut entry)
+                                if shadowable_parameters.remove(entry.key()) =>
+                            {
+                                entry.insert(expression_data_type);
+                            }
                             hash_map::Entry::Occupied(entry) => {
-                                // we do not allow shadowing for now
+                                // we do not allow shadowing of aliases and assignments
 
                                 let identifier: &Identifier = entry.key();
                                 return Err(ExpressionSemanticError::VariableShadowing {
@@ -396,12 +528,7 @@ impl ExpressionParser {
                     .as_str()
                     .into();
 
-                let data_type = *variables
-                    .get(&identifier)
-                    .context(error::UnknownVariable {
-                        variable: identifier.to_string(),
-                    })
-                    .map_err(|e| e.into_parser_error(span))?;
+                let data_type = self.lookup_variable(&identifier, variables, span)?;
 
                 if data_type != DataType::Number {
                     return Err(ExpressionSemanticError::ComparisonsMustBeUsedWithNumbers
@@ -495,6 +622,46 @@ impl ExpressionParser {
             op: boolean_operator,
             right: Box::new(right),
         })
+    }
+}
+
+/// Collects the variables that `pair` reads and that are not in `defined`.
+/// Assignments add their variable to `defined` for everything that follows them.
+fn collect_free_variables(
+    pair: Pair<'_, Rule>,
+    defined: &mut HashSet<String>,
+    free_variables: &mut BTreeSet<String>,
+) {
+    match pair.as_rule() {
+        Rule::identifier => {
+            let name = pair.as_str();
+            if !defined.contains(name) {
+                free_variables.insert(name.to_string());
+            }
+        }
+        Rule::function => {
+            // the first identifier is the function name
+            for inner in pair.into_inner().skip(1) {
+                collect_free_variables(inner, defined, free_variables);
+            }
+        }
+        Rule::assignment => {
+            let mut inner = pair.into_inner();
+            let name = inner
+                .next()
+                .map(|identifier| identifier.as_str().to_string());
+            for expression in inner {
+                collect_free_variables(expression, defined, free_variables);
+            }
+            if let Some(name) = name {
+                defined.insert(name);
+            }
+        }
+        _ => {
+            for inner in pair.into_inner() {
+                collect_free_variables(inner, defined, free_variables);
+            }
+        }
     }
 }
 
@@ -720,8 +887,8 @@ mod tests {
                 #ADD_FN
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    expression_fn_add__n_n(a, Some(1f64))
+                pub extern "Rust" fn expression(var_a: Option<f64>) -> Option<f64> {
+                    expression_fn_add__n_n(var_a, Some(1f64))
                 }
             }
             .to_string()
@@ -737,10 +904,10 @@ mod tests {
                 #SUB_FN
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                pub extern "Rust" fn ndvi(var_a: Option<f64>, var_b: Option<f64>) -> Option<f64> {
                     expression_fn_div__n_n(
-                        expression_fn_sub__n_n(a, b),
-                        expression_fn_add__n_n(a, b),
+                        expression_fn_sub__n_n(var_a, var_b),
+                        expression_fn_add__n_n(var_a, var_b),
                     )
                 }
             }
@@ -765,8 +932,8 @@ mod tests {
                 }
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    expression_fn_max__n_n(a, Some(0f64))
+                pub extern "Rust" fn expression(var_a: Option<f64>) -> Option<f64> {
+                    expression_fn_max__n_n(var_a, Some(0f64))
                 }
             }
             .to_string()
@@ -790,8 +957,8 @@ mod tests {
                 }
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    expression_fn_pow__n_n(expression_fn_sqrt__n(a), Some(2f64))
+                pub extern "Rust" fn expression(var_a: Option<f64>) -> Option<f64> {
+                    expression_fn_pow__n_n(expression_fn_sqrt__n(var_a), Some(2f64))
                 }
             }
             .to_string()
@@ -958,11 +1125,11 @@ mod tests {
                 #Prelude
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    if ((a) == (None)) {
+                pub extern "Rust" fn expression(var_a: Option<f64>) -> Option<f64> {
+                    if ((var_a) == (None)) {
                         Some(0f64)
                     } else {
-                        a
+                        var_a
                     }
                 }
             }
@@ -987,13 +1154,13 @@ mod tests {
                 #MUL_FN
 
                 #[unsafe(no_mangle)]
-                pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
-                    if ((A) == (None)) {
-                        expression_fn_mul__n_n(B, Some(2f64))
-                    } else if ((A) == (Some(6f64))) {
+                pub extern "Rust" fn expression(var_A: Option<f64>, var_B: Option<f64>) -> Option<f64> {
+                    if ((var_A) == (None)) {
+                        expression_fn_mul__n_n(var_B, Some(2f64))
+                    } else if ((var_A) == (Some(6f64))) {
                         None
                     } else {
-                        A
+                        var_A
                     }
                 }
             }
@@ -1127,10 +1294,10 @@ mod tests {
 
                 #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
-                    let a = Some(1.2f64);
-                    let b = Some(2f64);
+                    let var_a = Some(1.2f64);
+                    let var_b = Some(2f64);
                     expression_fn_add__n_n(
-                        expression_fn_add__n_n(a, b),
+                        expression_fn_add__n_n(var_a, var_b),
                         Some(1f64),
                     )
                 }
@@ -1150,7 +1317,7 @@ mod tests {
             )
             .unwrap_err()
             .to_string(),
-            " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
+            " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined. Available variables: `A`, `b`",
             "no access before declaration"
         );
 
@@ -1259,12 +1426,153 @@ mod tests {
 
                 #[unsafe(no_mangle)]
                 pub extern "Rust" fn make_centroid(
-                    geom: Option<MultiPolygon>
+                    var_geom: Option<MultiPolygon>
                 ) -> Option<MultiPoint> {
-                    expression_fn_centroid__q(geom)
+                    expression_fn_centroid__q(var_geom)
                 }
             }
             .to_string()
         );
+    }
+
+    #[test]
+    fn it_resolves_aliases() {
+        let parameters = [
+            Parameter::Number("red".into()),
+            Parameter::Number("nir".into()),
+        ];
+        let parse = |input: &str| {
+            ExpressionParser::new(&parameters, DataType::Number)?
+                .with_aliases([("A".into(), "red".into()), ("B".into(), "nir".into())])?
+                .parse("expression", input)
+        };
+
+        assert_eq_pretty!(
+            parse("if A IS NODATA { 0 } else { nir - A }")
+                .unwrap()
+                .into_token_stream()
+                .to_string(),
+            quote! {
+                #Prelude
+
+                #SUB_FN
+
+                #[unsafe(no_mangle)]
+                pub extern "Rust" fn expression(var_red: Option<f64>, var_nir: Option<f64>) -> Option<f64> {
+                    let var_A = var_red;
+                    if ((var_A) == (None)) {
+                        Some(0f64)
+                    } else {
+                        expression_fn_sub__n_n(var_nir, var_A)
+                    }
+                }
+            }
+            .to_string()
+        );
+
+        assert_eq!(
+            parse("nir - red").unwrap().used_aliases().count(),
+            0,
+            "no aliases used"
+        );
+
+        assert_eq!(
+            parse("let A = 1; A").unwrap_err().to_string(),
+            " --> 1:1\n  |\n1 | let A = 1; A\n  | ^----------^\n  |\n  = The variable `A` was already defined",
+            "aliases cannot be shadowed"
+        );
+
+        assert_eq!(
+            parse("C").unwrap_err().to_string(),
+            " --> 1:1\n  |\n1 | C\n  | ^\n  |\n  = The variable `C` was not defined. Available variables: `nir`, `red`",
+            "aliases are not listed as available variables"
+        );
+    }
+
+    #[test]
+    fn it_rejects_invalid_aliases() {
+        let parser =
+            || ExpressionParser::new(&[Parameter::Number("red".into())], DataType::Number).unwrap();
+
+        assert!(parser().with_aliases([("A".into(), "nir".into())]).is_err());
+        assert!(
+            parser()
+                .with_aliases([("red".into(), "red".into())])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn it_shadows_parameters_only_if_allowed() {
+        let parameters = [Parameter::Number("red".into())];
+
+        assert!(
+            ExpressionParser::new(&parameters, DataType::Number)
+                .unwrap()
+                .parse("expression", "let red = 1; red")
+                .is_err()
+        );
+
+        assert_eq_pretty!(
+            ExpressionParser::new(&parameters, DataType::Number)
+                .unwrap()
+                .with_parameter_shadowing(true)
+                .parse("expression", "let red = red * 2; red")
+                .unwrap()
+                .into_token_stream()
+                .to_string(),
+            quote! {
+                #Prelude
+
+                #MUL_FN
+
+                #[unsafe(no_mangle)]
+                pub extern "Rust" fn expression(var_red: Option<f64>) -> Option<f64> {
+                    let var_red = expression_fn_mul__n_n(var_red, Some(2f64));
+                    var_red
+                }
+            }
+            .to_string()
+        );
+
+        assert!(
+            ExpressionParser::new(&parameters, DataType::Number)
+                .unwrap()
+                .with_parameter_shadowing(true)
+                .parse("expression", "let red = 1; let red = 2; red")
+                .is_err(),
+            "a parameter can only be shadowed once"
+        );
+    }
+
+    #[test]
+    fn it_finds_free_variables() {
+        let free_variables = |input: &str| {
+            ExpressionParser::free_variables(input)
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(free_variables("1 + 2"), Vec::<String>::new());
+        assert_eq!(
+            free_variables("(nir - red) / (nir + red)"),
+            vec!["nir", "red"]
+        );
+        assert_eq!(free_variables("max(A, sqrt(B))"), vec!["A", "B"]);
+        assert_eq!(
+            free_variables("if A IS NODATA { B } else if C > 1 { NODATA } else { D }"),
+            vec!["A", "B", "C", "D"]
+        );
+        assert_eq!(
+            free_variables("let red = A * 2; let x = red + red2; red + x + B"),
+            vec!["A", "B", "red2"]
+        );
+        assert_eq!(
+            free_variables("let red = red * 2; red"),
+            vec!["red"],
+            "the right-hand side is evaluated before the assignment"
+        );
+        assert!(ExpressionParser::free_variables("1 +").is_err());
     }
 }

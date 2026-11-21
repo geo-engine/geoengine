@@ -15,7 +15,7 @@ Method | HTTP request | Description
 [**list_volumes_handler**](DatasetsApi.md#list_volumes_handler) | **GET** /dataset/volumes | Lists available volumes.
 [**suggest_meta_data_handler**](DatasetsApi.md#suggest_meta_data_handler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 [**update_dataset_handler**](DatasetsApi.md#update_dataset_handler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
-[**update_dataset_provenance_handler**](DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | 
+[**update_dataset_provenance_handler**](DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | Updates the dataset's provenance.
 [**update_dataset_symbology_handler**](DatasetsApi.md#update_dataset_symbology_handler) | **PUT** /dataset/{dataset}/symbology | Updates the dataset's symbology
 [**update_loading_info_handler**](DatasetsApi.md#update_loading_info_handler) | **PUT** /dataset/{dataset}/loadingInfo | Updates the dataset's loading info
 
@@ -336,7 +336,7 @@ Name | Type | Description  | Required | Notes
 ## update_dataset_provenance_handler
 
 > update_dataset_provenance_handler(dataset, provenances)
-
+Updates the dataset's provenance.
 
 ### Parameters
 

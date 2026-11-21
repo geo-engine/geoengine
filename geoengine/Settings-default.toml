@@ -54,6 +54,17 @@ multi_band_gdal_source_read_ahead = 16
 # Sub-queries of one query that may run at once. 1 = sequential (default); e.g. 4 runs the
 # sub-queries of reprojection, downsampling etc. in parallel. A query always gets at least one.
 available_parallelism_per_query = 1
+# Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
+# tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
+# it is still reading. Warp estimates the worst case when it is initialized and rejects the
+# processing graph if that exceeds the limit, e.g. for a large factor on 16-bit data without
+# overviews; usually, it needs far less.
+warp_mode_max_memory_per_tile_mb = 64
+# the largest error in input pixels of the approximate coordinate transformation of a raster
+# reprojection, as `gdalwarp -et`, for a `Warp` without the parameter `approximationErrorThreshold`.
+# Rows of output pixels are projected exactly only at a few points and interpolated in between,
+# which is much faster. `0.125` is the default of `gdalwarp -et`; `0` projects every pixel exactly.
+reprojection_approximation_error_px = 0.125
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep
@@ -103,6 +114,12 @@ filename_prefix = "geo_engine"
 # when the source is part of #[snafu(display())]. But in some cases this could
 # improve debugging.
 raw_error_messages = false
+
+[ogc]
+# How WMS GetMap and OGC API tiles resample rasters onto the requested grid: "symbology" uses the
+# methods for the colorizer ("mode" for palettes, "average"/"bilinear" for gradients and RGB),
+# "nearest" always uses nearest neighbor, which is faster. WCS always uses nearest neighbor.
+map_resampling = "symbology"
 
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
@@ -239,12 +256,6 @@ scopes = []
 enabled = false
 endpoint = "http://127.0.0.1:4317"
 
-[gdal_process_pool.worker]
-# Threads of the OpenBLAS and OpenMP pools in each worker process. GDAL links them via Armadillo,
-# and a threaded OpenBLAS otherwise starts one idle thread per core in every worker. GDAL reads do
-# not use them.
-blas_threads = 1
-
 [gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
 #
@@ -258,6 +269,7 @@ blas_threads = 1
 #    - GDAL_DISABLE_READDIR_ON_OPEN
 #    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
 #    - GDAL_HTTP_LOW_SPEED_LIMIT, GDAL_HTTP_LOW_SPEED_TIME, GDAL_HTTP_CONNECTTIMEOUT
+#    - GDAL_HTTP_MAX_RETRY, GDAL_HTTP_RETRY_DELAY
 #
 # Every worker process has its own caches, so the GDAL memory bound of the pool is about
 # number_of_processes * (GDAL_CACHEMAX + VSI_CACHE_SIZE + CPL_VSIL_CURL_CACHE_SIZE (default 16mb)).
@@ -276,9 +288,29 @@ GDAL_CACHEMAX = "256"
 GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
 GDAL_HTTP_LOW_SPEED_TIME = "30"
 GDAL_HTTP_CONNECTTIMEOUT = "10"
-# Decode with one thread per worker: the pool already runs one read per worker in parallel, and
-# JP2OpenJPEG would otherwise start a thread per CPU in every worker.
-GDAL_NUM_THREADS = "1"
+# Retry requests that fail with HTTP 429 or 5xx, which object stores answer under load (GDAL's
+# default is no retry, so a single failed request fails the tile).
+GDAL_HTTP_MAX_RETRY = "5"
+GDAL_HTTP_RETRY_DELAY = "0.5"
+# Threads per worker for decoding (`ALL_CPUS` would start a thread per CPU in every worker). With
+# 4, JPEG 2000 reads several tiles of a file at once: zoomed-out Sentinel-2 views on CODE-DE were
+# about 40% faster than with 1 (level 16, 6.8 s -> 4.0 s) with the same download, and 2 to 3 times
+# faster on a local bench. 8 was not faster and downloaded up to 45% more. COG reads did not change.
+GDAL_NUM_THREADS = "4"
+
+[gdal_process_pool.worker.environment]
+# Environment variables of each worker process, set when it starts, in addition to those of the
+# server. For what GDAL reads as a config option, use `gdal_config_options` above instead; this is
+# for the dynamic loader and for libraries that read variables themselves, e.g. a different
+# OpenJPEG and its options:
+# LD_LIBRARY_PATH = "/opt/openjpeg/lib"
+# OPJ_PLT_MIN_GAP = "131072"
+#
+# One thread for the OpenBLAS and OpenMP pools: GDAL links them via Armadillo, and a threaded
+# OpenBLAS starts one idle thread per core in every worker as soon as it is loaded, before any GDAL
+# option applies. GDAL reads do not use them.
+OPENBLAS_NUM_THREADS = "1"
+OMP_NUM_THREADS = "1"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because

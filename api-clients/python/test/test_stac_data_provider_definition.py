@@ -77,11 +77,16 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                                         y_idx = 56, 
                                         x_idx = 56, ), ), ), 
                             descriptor = 'source', 
-                            max_overview_level = 0, ), 
+                            max_overview_level = 1, ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                                 asset_band = null, 
-                                band_descriptor = null, )
+                                band_descriptor = null, 
+                                coarser_assets = [
+                                    geoengine_api_client.models.stac_coarser_asset.StacCoarserAsset(
+                                        factor = 2, 
+                                        asset_band = null, )
+                                    ], )
                             ], )
                     ],
                 query_timeout_secs = 56,
@@ -125,11 +130,16 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                                         y_idx = 56, 
                                         x_idx = 56, ), ), ), 
                             descriptor = 'source', 
-                            max_overview_level = 0, ), 
+                            max_overview_level = 1, ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                                 asset_band = null, 
-                                band_descriptor = null, )
+                                band_descriptor = null, 
+                                coarser_assets = [
+                                    geoengine_api_client.models.stac_coarser_asset.StacCoarserAsset(
+                                        factor = 2, 
+                                        asset_band = null, )
+                                    ], )
                             ], )
                     ],
         )

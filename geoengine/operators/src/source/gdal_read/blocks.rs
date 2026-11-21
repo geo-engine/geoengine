@@ -35,12 +35,15 @@ use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
     GridAndProperties, RasterInfo,
 };
+use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
+use futures::stream::FuturesUnordered;
 use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIdx2D,
-    GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
+    ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridBounds,
+    GridIdx2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel,
+    RasterTile2D,
 };
 use num::FromPrimitive;
 use std::num::NonZeroUsize;
@@ -147,12 +150,62 @@ impl BlockIo {
         block_cache_hint(cache_hint, self.min_ttl).may_cache()
     }
 
-    /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
-    /// than the full resolution.
+    /// The file's header: its levels with their sizes and block sizes, which a block read needs
+    /// to find the level and map the read onto whole blocks. `None` if the file does not exist
+    /// and its dataset counts a missing file as no data.
+    ///
+    /// It comes from the pool's header cache if any worker read it before. Otherwise one worker
+    /// reads it (concurrent reads of the same file join that read), and it is cached for as long
+    /// as the file's blocks: the dataset's cache lifetime, but at least `min_ttl`.
+    async fn header(
+        &self,
+        params: &GdalDatasetParameters,
+        file: &Arc<str>,
+        cache_hint: CacheHint,
+    ) -> Result<Option<Header>, GdalProcessPoolError> {
+        if let Some(info) = self.reader.cached_header(file) {
+            return Ok(Some(Header {
+                info,
+                newly_cached: false,
+            }));
+        }
+        // A missing file is not cached: every read asks a worker again, as the window read does,
+        // so a file that appears later is read at once.
+        let Some(info) = self
+            .reader
+            .read_raster_info_or_no_data(params.clone())
+            .await?
+        else {
+            return Ok(None);
+        };
+        let newly_cached = self.reader.cache_header(
+            file.clone(),
+            info.clone(),
+            block_cache_hint(cache_hint, self.min_ttl),
+        );
+        let ttl = cache_hint.total_ttl_seconds();
+        if newly_cached && ttl < self.min_ttl {
+            tracing::debug!(
+                "{} has a cache TTL of {} s, its blocks stay cached for at least {} s",
+                params.file_path.display(),
+                ttl.seconds(),
+                self.min_ttl.seconds(),
+            );
+        }
+        Ok(Some(Header { info, newly_cached }))
+    }
+
+    /// Reads `read_advise` of the file at the level `factor` times coarser than the full
+    /// resolution, from whole cached blocks.
+    ///
+    /// It reads the coarsest level of the file that is not coarser than `factor`: the level
+    /// itself if the file has it, else a finer overview, at last the full resolution. Each output
+    /// pixel takes the pixel of that level under its center, placed by the level's real size
+    /// (see [`source_pixels`]). For the full resolution, and for a level whose size fits its
+    /// factor, those are the level's pixels as they are, and nothing is resampled.
     ///
     /// # Errors
-    /// Returns an error if a header or block read fails, if the file lacks the level or if the
-    /// read does not start at a pixel of the level.
+    /// Returns an error if a header or block read fails, or if the read is not inside the file.
     ///
     /// # Panics
     /// Never: the level window has the size of the read by construction.
@@ -167,52 +220,61 @@ impl BlockIo {
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
         let file = file_id(params);
-        let info = match self.reader.remembered_raster_info(&file) {
-            Some(info) => Some(info),
-            None => {
-                let info = self
-                    .reader
-                    .read_raster_info_or_no_data(params.clone())
-                    .await?;
-                if let Some(info) = &info {
-                    let is_new = self.reader.remember_raster_info(
-                        file.clone(),
-                        info.clone(),
-                        block_cache_hint(cache_hint, self.min_ttl),
-                    );
-                    let ttl = cache_hint.total_ttl_seconds();
-                    if is_new && ttl < self.min_ttl {
-                        tracing::debug!(
-                            "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
-                            params.file_path.display(),
-                            ttl.seconds(),
-                            self.min_ttl.seconds(),
-                        );
-                    }
-                }
-                info
-            }
-        };
-        let Some(info) = info else {
+        let Some(Header { info, newly_cached }) = self.header(params, &file, cache_hint).await?
+        else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
-        let Some(level) = info.level_of_factor(factor) else {
+        // A file without the level reads its coarsest finer one, at last the full resolution,
+        // and resamples it, as GDAL does. Only a header without any level has none.
+        let Some(file_level) = info
+            .level_of_factor(factor)
+            .map(|index| FileLevel { index, factor })
+            .or_else(|| finer_level(&info, factor))
+        else {
             return Err(IpcProcessError::MissingOverviewLevel {
                 file: params.file_path.display().to_string(),
                 factor,
             }
             .into());
         };
-        let Some(level_window) = level_window(&info, level, factor, read_advise) else {
-            return Err(IpcProcessError::IpcOther {
+        let not_inside = || -> GdalProcessPoolError {
+            IpcProcessError::IpcOther {
                 msg: format!(
                     "read {:?} of {} is not inside its level {factor}",
                     read_advise.gdal_read_widow,
                     params.file_path.display()
                 ),
             }
-            .into());
+            .into()
         };
+        if file_level.factor != factor && newly_cached {
+            tracing::info!(
+                "{} has no overview level {factor}, its level {} is read and resampled",
+                params.file_path.display(),
+                file_level.factor,
+            );
+        }
+        let Some(LevelRead { advise, picked }) = level_read(&info, file_level, factor, read_advise)
+        else {
+            return Err(not_inside());
+        };
+        let Some(level_window) = level_window(&info, file_level.index, file_level.factor, advise)
+        else {
+            return Err(not_inside());
+        };
+
+        if let Some(picked) = picked {
+            return self
+                .read_picked::<T>(
+                    params,
+                    &file,
+                    &level_window,
+                    &picked,
+                    read_advise,
+                    cache_hint,
+                )
+                .await;
+        }
 
         let blocks = try_join_all(
             level_window
@@ -238,18 +300,101 @@ impl BlockIo {
             let grid = compose(window, &blocks);
             let properties = blocks.first().map(|block| block.properties.clone());
             let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
-                .set_grid_bounds(read_advise.read_window_bounds)
-                .expect("the level window has the size of the read");
+                .set_grid_bounds(read_advise.read_window_bounds);
             (grid, properties)
         })
         .await
         .map_err(|source| IpcProcessError::IpcOther {
             msg: format!("could not compose blocks: {source}"),
         })?;
+        let grid = grid.map_err(|source| grid_error(params, source))?;
 
         Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
             properties: properties.unwrap_or_default(),
+        })))
+    }
+
+    /// Reads the pixels `picked` of `level_window`, for a read that resamples a level.
+    ///
+    /// The window can be many times the output: a level 64 from the full resolution spans 64
+    /// times the output per axis. So the window is never composed. Each unit is fetched, its
+    /// picked pixels are written into the output, and it is dropped; the cache keeps its pieces
+    /// within its size limit. The read thus holds the output and the units in flight, which the
+    /// worker pool bounds.
+    async fn read_picked<T>(
+        &self,
+        params: &GdalDatasetParameters,
+        file: &Arc<str>,
+        level_window: &LevelWindow,
+        picked: &Picked,
+        read_advise: GdalReadAdvise,
+        cache_hint: CacheHint,
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
+        let mut units: FuturesUnordered<_> = level_window
+            .pieces_in(level_window.window)
+            .enumerate()
+            .filter(|&(_, piece)| picked.has_pixels_in(level_window.piece_bounds(piece)))
+            .map(|(index, piece)| async move {
+                let unit = self
+                    .piece::<T>(params, file, level_window, piece, cache_hint)
+                    .await;
+                (index, piece, unit)
+            })
+            .collect();
+
+        let pixels = picked.rows.len() * picked.columns.len();
+        let mut data = vec![T::zero(); pixels];
+        let mut valid = vec![false; pixels];
+        let mut any_valid = false;
+        // of the first piece in piece order, as for reads that compose
+        let mut properties = None;
+        while let Some((index, piece, unit)) = units.next().await {
+            let Some(unit) = unit? else {
+                return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
+            };
+            // A unit that was just read comes back for each of its pieces. Each piece writes
+            // only its own pixels, so none is written twice.
+            any_valid |= picked.blit_from(
+                &unit,
+                level_window.piece_bounds(piece),
+                &mut data,
+                &mut valid,
+            );
+            if properties.as_ref().is_none_or(|&(first, _)| index < first) {
+                properties = Some((index, unit.properties.clone()));
+            }
+        }
+
+        let bounds = GridBoundingBox2D::new_min_max(
+            0,
+            picked.rows.len() as isize - 1,
+            0,
+            picked.columns.len() as isize - 1,
+        )
+        .map_err(|source| grid_error(params, source))?;
+        // as for window reads, a read without valid pixels is empty
+        let grid: GridOrEmpty<GridBoundingBox2D, T> = if any_valid {
+            Grid::new(bounds, data)
+                .and_then(|data| MaskedGrid::new(data, Grid::new(bounds, valid)?))
+                .map_err(|source| grid_error(params, source))?
+                .into()
+        } else {
+            EmptyGrid::new(bounds).into()
+        };
+        // the pixels are in the file's row order, south-up files are flipped afterwards
+        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
+            .set_grid_bounds(read_advise.read_window_bounds)
+            .map_err(|source| grid_error(params, source))?;
+
+        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
+            grid,
+            properties: properties
+                .map(|(_, properties)| properties)
+                .unwrap_or_default(),
         })))
     }
 
@@ -417,6 +562,187 @@ fn compose<T: Pixel>(
     grid
 }
 
+/// The file's header, see [`BlockIo::header`].
+struct Header {
+    info: RasterInfo,
+    /// Whether this call put the header into the cache: once per file and cache lifetime, so
+    /// that what the header tells, such as a missing level, is logged once and not per tile.
+    newly_cached: bool,
+}
+
+/// A level of a file: its index in the file's levels (0 is the full resolution) and how many
+/// times coarser than the full resolution it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileLevel {
+    index: usize,
+    factor: NonZeroUsize,
+}
+
+/// The read of a file level for a read of the wanted level, see [`level_read`].
+struct LevelRead {
+    /// The window of the file level to read.
+    advise: GdalReadAdvise,
+    /// The pixels of that window the output takes, unless it takes them all one to one.
+    picked: Option<Picked>,
+}
+
+/// Pixels of a level that a read takes, per axis, counted in the level from 0 and ascending. The
+/// output pixel (i, j) is the level pixel (`rows[i]`, `columns[j]`).
+struct Picked {
+    rows: Vec<usize>,
+    columns: Vec<usize>,
+}
+
+impl Picked {
+    /// The positions in `pixels` (rows or columns) of those in `min..=max`.
+    fn positions(pixels: &[usize], min: isize, max: isize) -> std::ops::Range<usize> {
+        pixels.partition_point(|&pixel| (pixel as isize) < min)
+            ..pixels.partition_point(|&pixel| pixel as isize <= max)
+    }
+
+    /// Whether one of the pixels lies in `bounds` of the level.
+    fn has_pixels_in(&self, bounds: GridBoundingBox2D) -> bool {
+        !Self::positions(&self.rows, bounds.y_min(), bounds.y_max()).is_empty()
+            && !Self::positions(&self.columns, bounds.x_min(), bounds.x_max()).is_empty()
+    }
+
+    /// Writes the pixels that lie in `bounds` of the level from `block`, which covers `bounds`,
+    /// to their places in `data` and `valid`, the output in row order. Returns whether one of
+    /// them is valid.
+    fn blit_from<T: Pixel>(
+        &self,
+        block: &Block<T>,
+        bounds: GridBoundingBox2D,
+        data: &mut [T],
+        valid: &mut [bool],
+    ) -> bool {
+        let GridOrEmpty::Grid(grid) = &block.grid else {
+            return false;
+        };
+        let block_bounds = grid.inner_grid.shape;
+        let [_, block_width] = block_bounds.axis_size();
+        let rows = Self::positions(&self.rows, bounds.y_min(), bounds.y_max());
+        let columns = Self::positions(&self.columns, bounds.x_min(), bounds.x_max());
+        let mut any_valid = false;
+        for row in rows {
+            let from_row = (self.rows[row] as isize - block_bounds.y_min()) as usize * block_width;
+            let to_row = row * self.columns.len();
+            for column in columns.clone() {
+                let from =
+                    from_row + (self.columns[column] as isize - block_bounds.x_min()) as usize;
+                let is_valid = grid.validity_mask.data[from];
+                data[to_row + column] = grid.inner_grid.data[from];
+                valid[to_row + column] = is_valid;
+                any_valid |= is_valid;
+            }
+        }
+        any_valid
+    }
+}
+
+/// The coarsest level of the file with a whole-number factor below `factor`: the level GDAL
+/// resamples from. That is the full resolution if the file has no overview below `factor`.
+fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<FileLevel> {
+    (1..factor.get())
+        .rev()
+        .filter_map(NonZeroUsize::new)
+        .find_map(|finer| {
+            info.level_of_factor(finer).map(|index| FileLevel {
+                index,
+                factor: finer,
+            })
+        })
+}
+
+/// The read of `file_level` for `read_advise` of the level `factor`: its window, and the pixels
+/// of it that the output takes, unless those are the whole window. `None` if the read is not
+/// inside the file.
+fn level_read(
+    info: &RasterInfo,
+    file_level: FileLevel,
+    factor: NonZeroUsize,
+    read_advise: GdalReadAdvise,
+) -> Option<LevelRead> {
+    let layout = info.levels.get(file_level.index)?;
+    let full = info.levels.first()?;
+    let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
+    let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
+    let [out_y, out_x] = read_advise.read_window_bounds.axis_size();
+    // a file without pixels has no read inside it
+    let full_y = NonZeroUsize::new(full.size_y)?;
+    let full_x = NonZeroUsize::new(full.size_x)?;
+    let rows = source_pixels(start_y, out_y, factor, layout.size_y, full_y)?;
+    let columns = source_pixels(start_x, out_x, factor, layout.size_x, full_x)?;
+    // the pixels the output takes, as a read of the finer level starting at its first one
+    let advise = GdalReadAdvise {
+        gdal_read_widow: GdalReadWindow::new(
+            GridIdx2D::new([
+                (rows[0] * file_level.factor.get()) as isize,
+                (columns[0] * file_level.factor.get()) as isize,
+            ]),
+            GridShape2D::new([size_y, size_x]),
+        ),
+        read_window_bounds: GridBoundingBox2D::new_min_max(
+            0,
+            (rows[rows.len() - 1] - rows[0]) as isize,
+            0,
+            (columns[columns.len() - 1] - columns[0]) as isize,
+        )
+        .ok()?,
+        ..read_advise
+    };
+    // pixels next to each other are the window as it is: nothing to pick
+    let is_window = |pixels: &[usize]| pixels.windows(2).all(|pair| pair[1] == pair[0] + 1);
+    let picked = (!is_window(&rows) || !is_window(&columns)).then_some(Picked { rows, columns });
+    Some(LevelRead { advise, picked })
+}
+
+/// Per axis, the pixels of a level of `level_size` that `out` output pixels of the level `factor`
+/// take: the one under each output pixel's center, and the level's last pixel for centers beyond
+/// it. As GDAL, this scales by the sizes of the level and the full resolution (`full_size`), not
+/// by the level's nominal factor: GDAL sizes a level 3 of 64 px 22 px, 2.9 times smaller.
+/// `start` is the read's first pixel at full resolution.
+///
+/// Note: GDAL's window read does not return these pixels for every window. It rounds the start
+/// and the size of each window in the level to whole pixels and takes the pixels from there, so
+/// it moves a whole window by a pixel where this rule decides pixel by pixel. Where the factor
+/// does not divide the file evenly (level 16 of 10 980 px has 687 px), a tile read through blocks
+/// can therefore differ from a window read by one level pixel, in the part of the file where
+/// the two scales are half a pixel or more apart. Unlike GDAL's, the pixels here do not depend
+/// on the tile grid. This is a deliberate choice: one rule for every tile, not GDAL's per window.
+fn source_pixels(
+    start: isize,
+    out: usize,
+    factor: NonZeroUsize,
+    level_size: usize,
+    full_size: NonZeroUsize,
+) -> Option<Vec<usize>> {
+    let factor = factor.get();
+    let first = usize::try_from(start).ok()? / factor;
+    let last_pixel = level_size.checked_sub(1)?;
+    Some(
+        (first..first + out)
+            .map(|pixel| {
+                ((2 * pixel + 1) * factor * level_size / (2 * full_size.get())).min(last_pixel)
+            })
+            .collect(),
+    )
+}
+
+/// The pixels read from a file do not form the grid of the read.
+fn grid_error(
+    params: &GdalDatasetParameters,
+    source: impl std::fmt::Display,
+) -> GdalProcessPoolError {
+    IpcProcessError::IpcOther {
+        msg: format!(
+            "could not build the grid of a read of {}: {source}",
+            params.file_path.display()
+        ),
+    }
+    .into()
+}
+
 /// Identifies a file and everything that changes how its pixels and properties are read.
 fn file_id(params: &GdalDatasetParameters) -> Arc<str> {
     serde_json::to_string(params)
@@ -530,6 +856,173 @@ mod tests {
             block_size_x: block,
             block_size_y: block,
         }
+    }
+
+    #[test]
+    fn it_takes_the_pixel_under_each_center_of_any_whole_number_level() {
+        // level 4 of 64 px from its level 3 of 22 px, as GDAL with the ratio 4 * 22 / 64
+        assert_eq!(
+            source_pixels(0, 5, factor(4), 22, factor(64)),
+            Some(vec![0, 2, 3, 4, 6])
+        );
+        // a read starting at the output pixel 8, i.e. at 32 px: centers at 34 and 38 px
+        assert_eq!(
+            source_pixels(32, 2, factor(4), 22, factor(64)),
+            Some(vec![11, 13])
+        );
+        // level 8 of 60 px from its level 4 of 15 px: every second pixel, the last center beyond
+        assert_eq!(
+            source_pixels(0, 8, factor(8), 15, factor(60)),
+            Some(vec![1, 3, 5, 7, 9, 11, 13, 14])
+        );
+    }
+
+    #[test]
+    fn it_blits_the_picked_pixels_of_a_piece() {
+        // the level pixels (2, 4, 5) x (2, 4, 6, 9): a 3 x 4 output
+        let picked = Picked {
+            rows: vec![2, 4, 5],
+            columns: vec![2, 4, 6, 9],
+        };
+        let bounds = |y_min, y_max, x_min, x_max| {
+            GridBoundingBox2D::new_min_max(y_min, y_max, x_min, x_max).unwrap()
+        };
+        // a unit of the level pixels (0..=7, 0..=7) whose values are `y * 10 + x`
+        let unit_bounds = bounds(0, 7, 0, 7);
+        let mut unit = MaskedGrid::new_with_data(
+            Grid::new(
+                unit_bounds,
+                (0..64_u16).map(|i| i / 8 * 10 + i % 8).collect(),
+            )
+            .unwrap(),
+        );
+        // (5, 6) is no data
+        unit.validity_mask.data[5 * 8 + 6] = false;
+        let unit = Block {
+            grid: GridOrEmpty::from(unit),
+            properties: RasterProperties::default(),
+        };
+
+        let mut data = vec![0_u16; 12];
+        let mut valid = vec![false; 12];
+        // the piece (4..=7, 4..=7) of the unit: only its pixels are written
+        let piece = bounds(4, 7, 4, 7);
+        assert!(picked.has_pixels_in(piece));
+        assert!(picked.blit_from(&unit, piece, &mut data, &mut valid));
+        assert_eq!(data, vec![0, 0, 0, 0, 0, 44, 46, 0, 0, 54, 56, 0]);
+        assert_eq!(
+            valid,
+            vec![
+                false, false, false, false, false, true, true, false, false, true, false, false
+            ]
+        );
+        // the piece (0..=3, 0..=3) holds the pixel (2, 2) only
+        assert!(picked.blit_from(&unit, bounds(0, 3, 0, 3), &mut data, &mut valid));
+        assert_eq!(data[0], 22);
+        assert!(valid[0]);
+
+        // pieces without picked pixels: no picked row, no picked column
+        assert!(!picked.has_pixels_in(bounds(6, 7, 0, 7)));
+        assert!(!picked.has_pixels_in(bounds(0, 7, 7, 8)));
+        // the piece of the column 9 alone, at the edge of its bounds
+        assert!(picked.has_pixels_in(bounds(0, 7, 9, 15)));
+
+        // an empty block writes nothing and has no valid pixel
+        let empty = Block::<u16> {
+            grid: EmptyGrid::new(unit_bounds).into(),
+            properties: RasterProperties::default(),
+        };
+        let before = data.clone();
+        assert!(!picked.blit_from(&empty, piece, &mut data, &mut valid));
+        assert_eq!(data, before);
+    }
+
+    /// One rule for every read: a level whose size fits its factor, and the full resolution, are
+    /// read as they are; a level whose size does not fit, and a missing level, are resampled.
+    #[test]
+    fn it_resamples_only_where_the_level_does_not_fit() {
+        // 64 px with a level 4 of 16 px: fits
+        let fits = raster_info(vec![level(64, 16), level(16, 16)]);
+        let full = FileLevel {
+            index: 0,
+            factor: factor(1),
+        };
+        let level_4 = FileLevel {
+            index: 1,
+            factor: factor(4),
+        };
+        // the full resolution: the window as it is
+        let read = level_read(&fits, full, factor(1), advise([8, 8], [16, 16], [16, 16])).unwrap();
+        assert!(read.picked.is_none());
+        assert_eq!(read.advise.gdal_read_widow.gdal_window_start(), (8, 8));
+        // the level itself: its window as it is
+        let read = level_read(
+            &fits,
+            level_4,
+            factor(4),
+            advise([0, 0], [64, 64], [16, 16]),
+        );
+        assert!(read.unwrap().picked.is_none());
+        // level 8 from level 4: every second pixel
+        let read = level_read(&fits, level_4, factor(8), advise([0, 0], [64, 64], [8, 8]));
+        assert_eq!(
+            read.unwrap().picked.unwrap().rows,
+            vec![1, 3, 5, 7, 9, 11, 13, 15]
+        );
+
+        // 61 px with a level 4 of 16 px, 3.8 times fewer: resampled from itself
+        let shifted = raster_info(vec![level(61, 16), level(16, 16)]);
+        let read = level_read(
+            &shifted,
+            level_4,
+            factor(4),
+            advise([0, 0], [61, 61], [16, 16]),
+        );
+        let picked = read.unwrap().picked.unwrap();
+        assert_eq!(picked.rows.len(), 16);
+        assert_ne!(picked.rows, (0..16).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn it_finds_the_coarsest_finer_level_of_a_whole_number_factor() {
+        let level = |size: usize| RasterLevelLayout {
+            size_x: size,
+            size_y: size,
+            block_size_x: 16,
+            block_size_y: 16,
+        };
+        // levels 2, 3 and 6
+        let info = raster_info(vec![level(64), level(32), level(22), level(11)]);
+        assert_eq!(
+            finer_level(&info, factor(16)),
+            Some(FileLevel {
+                index: 3,
+                factor: factor(6)
+            })
+        );
+        assert_eq!(
+            finer_level(&info, factor(4)),
+            Some(FileLevel {
+                index: 2,
+                factor: factor(3)
+            })
+        );
+        assert_eq!(
+            finer_level(&info, factor(3)),
+            Some(FileLevel {
+                index: 1,
+                factor: factor(2)
+            })
+        );
+        let info = raster_info(vec![level(64)]);
+        assert_eq!(
+            finer_level(&info, factor(8)),
+            Some(FileLevel {
+                index: 0,
+                factor: factor(1)
+            }),
+            "a file without overviews is resampled from its full resolution"
+        );
     }
 
     #[test]

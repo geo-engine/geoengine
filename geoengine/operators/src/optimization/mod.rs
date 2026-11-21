@@ -361,7 +361,7 @@ mod tests {
             serde_json::json!({
                     "params": {
                         "data": "ndvi_downscaled_3x",
-                        "overviewLevel": 0
+                        "overviewLevel": 1
                     },
                     "type": "GdalSource"
                 }
@@ -465,10 +465,8 @@ mod tests {
                         },
                         {
                             "params": {
-                                "interpolation": "nearestNeighbor",
-                                "outputOriginReference": null,
+                                "outputOriginReference": {"x": -180.0, "y": 90.0},
                                 "outputResolution": {
-                                    "type": "resolution",
                                     "x": 0.2,
                                     "y": 0.2
                                 }
@@ -477,12 +475,12 @@ mod tests {
                                 "raster": {
                                     "params": {
                                         "data": "ndvi_downscaled_3x",
-                                        "overviewLevel": 0
+                                        "overviewLevel": 1
                                     },
                                     "type": "GdalSource"
                                 }
                             },
-                            "type": "Interpolation"
+                            "type": "Warp"
                         }
                     ]
                 },
@@ -587,13 +585,11 @@ mod tests {
                         },
                         {
                             "params": {
-                                "outputOriginReference": null,
+                                "outputOriginReference": {"x": -180.0, "y": 90.0},
                                 "outputResolution": {
-                                    "type": "resolution",
                                     "x": 0.8,
                                     "y": 0.8
-                                },
-                                "samplingMethod": "nearestNeighbor"
+                                }
                             },
                             "sources": {
                                 "raster": {
@@ -604,7 +600,7 @@ mod tests {
                                     "type": "GdalSource"
                                 }
                             },
-                            "type": "Downsampling"
+                            "type": "Warp"
                         }
                     ]
                 },
@@ -709,13 +705,11 @@ mod tests {
                         },
                         {
                             "params": {
-                                "outputOriginReference": null,
+                                "outputOriginReference": {"x": -180.0, "y": 90.0},
                                 "outputResolution": {
-                                    "type": "resolution",
                                     "x": 0.6,
                                     "y": 0.6
-                                },
-                                "samplingMethod": "nearestNeighbor"
+                                }
                             },
                             "sources": {
                                 "raster": {
@@ -726,7 +720,7 @@ mod tests {
                                     "type": "GdalSource"
                                 }
                             },
-                            "type": "Downsampling"
+                            "type": "Warp"
                         }
                     ]
                 },
@@ -799,40 +793,31 @@ mod tests {
 
         let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
-        // require an interpolation in addition to the reprojection
-        // TODO: should we instead load the source in higher resolution and downsample?
-        //       or: we could make an exception that the reprojection may not have to produce the exact resolution, but how would we choose the correct resolution for the top level operator then?
+        // a single `Warp` reprojects the overview level and puts it onto the target resolution
         assert_eq!(
             json,
             serde_json::json!({
                 "params": {
-                    "interpolation": "nearestNeighbor",
-                    "outputOriginReference": null,
+                    "targetSpatialReference": "EPSG:3857",
                     "outputResolution": {
-                        "type": "resolution",
                         "x": 28_510.031_017_633_697,
                         "y": 28_510.031_017_633_697
+                    },
+                    "outputOriginReference": {
+                        "x": -20_037_508.342_789_244,
+                        "y": 20_100_884.943_711_966
                     }
                 },
                 "sources": {
                     "raster": {
                         "params": {
-                            "deriveOutSpec": "projectionBounds",
-                            "targetSpatialReference": "EPSG:3857"
+                            "data": "ndvi",
+                            "overviewLevel": 2
                         },
-                        "sources": {
-                            "source": {
-                                "params": {
-                                    "data": "ndvi",
-                                    "overviewLevel": 2
-                                },
-                                "type": "GdalSource"
-                            }
-                        },
-                        "type": "Reprojection"
+                        "type": "GdalSource"
                     }
                 },
-                "type": "Interpolation"
+                "type": "Warp"
             })
         );
 
@@ -863,7 +848,7 @@ mod tests {
                     GdalSource {
                         params: GdalSourceParameters {
                             data: ndvi_id.clone(),
-                            overview_level: Some(2),
+                            overview_level: std::num::NonZeroU32::new(2),
                         },
                     }
                     .typed(),
@@ -1072,11 +1057,11 @@ mod tests {
                   "sources": {
                     "rasters": [
                       {
-                        "params": { "data": "ndvi", "overviewLevel": 0 },
+                        "params": { "data": "ndvi", "overviewLevel": 1 },
                         "type": "GdalSource"
                       },
                       {
-                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 0 },
+                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 1 },
                         "type": "GdalSource"
                       }
                     ],
@@ -1389,14 +1374,14 @@ mod tests {
                         {
                             "params": {
                                 "data": "ndvi",
-                                "overviewLevel": 0
+                                "overviewLevel": 1
                             },
                             "type": "GdalSource"
                         },
                         {
                             "params": {
                                 "data": "ndvi_downscaled_3x",
-                                "overviewLevel": 0
+                                "overviewLevel": 1
                             },
                             "type": "GdalSource"
                         }
@@ -1659,13 +1644,11 @@ mod tests {
                                                         "rasters": [
                                                             {
                                                                 "params": {
-                                                                    "outputOriginReference": null,
+                                                                    "outputOriginReference": {"x": -180.0, "y": 90.0},
                                                                     "outputResolution": {
-                                                                        "type": "resolution",
                                                                         "x": 0.6,
                                                                         "y": 0.6
-                                                                    },
-                                                                    "samplingMethod": "nearestNeighbor"
+                                                                    }
                                                                 },
                                                                 "sources": {
                                                                     "raster": {
@@ -1676,7 +1659,7 @@ mod tests {
                                                                         "type": "GdalSource"
                                                                     }
                                                                 },
-                                                                "type": "Downsampling"
+                                                                "type": "Warp"
                                                             }
                                                         ],
                                                         "vector": {
@@ -1830,7 +1813,7 @@ mod tests {
         // the native resolution of the NDVI dataset is 0.1
         for (x, y, expected_overview_level) in [
             // finer than native resolution
-            (0.05, 0.05, 0),
+            (0.05, 0.05, 1),
             // not a multiple of the native resolution
             (0.3, 0.3, 2),
             (0.7, 0.7, 4),

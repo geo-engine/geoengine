@@ -600,7 +600,10 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
+                    params: GdalSourceParameters::new_with_overview_level(
+                        ndvi_id,
+                        std::num::NonZeroU32::new(10).unwrap(),
+                    ),
                 }
                 .typed(),
             },
@@ -670,7 +673,10 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
+                    params: GdalSourceParameters::new_with_overview_level(
+                        ndvi_id,
+                        std::num::NonZeroU32::new(10).unwrap(),
+                    ),
                 }
                 .typed(),
             },

@@ -3980,7 +3980,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ProviderCapabilities:
-        """provider_capabilities_handler
+        """Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 
 
         :param provider: Data provider id (required)
@@ -4046,7 +4046,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[ProviderCapabilities]:
-        """provider_capabilities_handler
+        """Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 
 
         :param provider: Data provider id (required)
@@ -4112,7 +4112,7 @@ class LayersApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """provider_capabilities_handler
+        """Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 
 
         :param provider: Data provider id (required)

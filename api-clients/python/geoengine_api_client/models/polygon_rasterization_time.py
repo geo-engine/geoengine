@@ -17,14 +17,14 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
+from geoengine_api_client.models.polygon_rasterization_time_all_features import PolygonRasterizationTimeAllFeatures
 from geoengine_api_client.models.polygon_rasterization_time_feature_times import PolygonRasterizationTimeFeatureTimes
-from geoengine_api_client.models.polygon_rasterization_time_ignore import PolygonRasterizationTimeIgnore
 from geoengine_api_client.models.polygon_rasterization_time_regular import PolygonRasterizationTimeRegular
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-POLYGONRASTERIZATIONTIME_ONE_OF_SCHEMAS = ["PolygonRasterizationTimeFeatureTimes", "PolygonRasterizationTimeIgnore", "PolygonRasterizationTimeRegular"]
+POLYGONRASTERIZATIONTIME_ONE_OF_SCHEMAS = ["PolygonRasterizationTimeAllFeatures", "PolygonRasterizationTimeFeatureTimes", "PolygonRasterizationTimeRegular"]
 
 class PolygonRasterizationTime(BaseModel):
     """
@@ -34,10 +34,10 @@ class PolygonRasterizationTime(BaseModel):
     oneof_schema_1_validator: Optional[PolygonRasterizationTimeFeatureTimes] = None
     # data type: PolygonRasterizationTimeRegular
     oneof_schema_2_validator: Optional[PolygonRasterizationTimeRegular] = None
-    # data type: PolygonRasterizationTimeIgnore
-    oneof_schema_3_validator: Optional[PolygonRasterizationTimeIgnore] = None
-    actual_instance: Optional[Union[PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular]] = None
-    one_of_schemas: Set[str] = { "PolygonRasterizationTimeFeatureTimes", "PolygonRasterizationTimeIgnore", "PolygonRasterizationTimeRegular" }
+    # data type: PolygonRasterizationTimeAllFeatures
+    oneof_schema_3_validator: Optional[PolygonRasterizationTimeAllFeatures] = None
+    actual_instance: Optional[Union[PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular]] = None
+    one_of_schemas: Set[str] = { "PolygonRasterizationTimeAllFeatures", "PolygonRasterizationTimeFeatureTimes", "PolygonRasterizationTimeRegular" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -73,17 +73,17 @@ class PolygonRasterizationTime(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `PolygonRasterizationTimeRegular`")
         else:
             match += 1
-        # validate data type: PolygonRasterizationTimeIgnore
-        if not isinstance(v, PolygonRasterizationTimeIgnore):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `PolygonRasterizationTimeIgnore`")
+        # validate data type: PolygonRasterizationTimeAllFeatures
+        if not isinstance(v, PolygonRasterizationTimeAllFeatures):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `PolygonRasterizationTimeAllFeatures`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -104,14 +104,14 @@ class PolygonRasterizationTime(BaseModel):
         if not _data_type:
             raise ValueError(f"Failed to lookup data type from the field `{_discriminator_property}` in the input.")
 
+        # check if data type is `PolygonRasterizationTimeAllFeatures`
+        if _data_type == "allFeatures":
+            instance.actual_instance = PolygonRasterizationTimeAllFeatures.from_json(json_str)
+            return instance
+
         # check if data type is `PolygonRasterizationTimeFeatureTimes`
         if _data_type == "featureTimes":
             instance.actual_instance = PolygonRasterizationTimeFeatureTimes.from_json(json_str)
-            return instance
-
-        # check if data type is `PolygonRasterizationTimeIgnore`
-        if _data_type == "ignore":
-            instance.actual_instance = PolygonRasterizationTimeIgnore.from_json(json_str)
             return instance
 
         # check if data type is `PolygonRasterizationTimeRegular`
@@ -131,19 +131,19 @@ class PolygonRasterizationTime(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into PolygonRasterizationTimeIgnore
+        # deserialize data into PolygonRasterizationTimeAllFeatures
         try:
-            instance.actual_instance = PolygonRasterizationTimeIgnore.from_json(json_str)
+            instance.actual_instance = PolygonRasterizationTimeAllFeatures.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into PolygonRasterizationTime with oneOf schemas: PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -157,7 +157,7 @@ class PolygonRasterizationTime(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeIgnore, PolygonRasterizationTimeRegular]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], PolygonRasterizationTimeAllFeatures, PolygonRasterizationTimeFeatureTimes, PolygonRasterizationTimeRegular]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

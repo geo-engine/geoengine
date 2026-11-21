@@ -443,7 +443,13 @@ Constructs the operator from the given dictionary.
 class Expression(RasterOperator)
 ```
 
-An Expression operator.
+An Expression operator that computes a pixel-wise expression on the bands of a raster.
+
+The expression refers to the bands by their names, e.g., `(nir - red) / (nir + red)`.
+Characters in band names that are not letters or digits are replaced by underscores, e.g., `nir 1` becomes `nir_1`.
+Rename bands with the `RasterStacker` operator to refer to them by other names.
+
+Referring to the bands as `A`, `B`, `C`, … is deprecated.
 
 #### \_\_init\_\_
 
@@ -853,14 +859,14 @@ def regular(
 
 Regular time slices of length `step`, aligned to `reference` (default: Unix epoch).
 
-#### ignore
+#### all\_features
 
 ```python
 @classmethod
-def ignore(cls) -> PolygonRasterizationTime
+def all_features(cls) -> PolygonRasterizationTime
 ```
 
-All features are rasterized into one time slice that is valid forever.
+All features, regardless of their times, are rasterized into one time slice that is valid forever.
 
 ## PolygonRasterizationTimeFeatureTimes Objects
 
@@ -880,14 +886,14 @@ class PolygonRasterizationTimeRegular(PolygonRasterizationTime)
 
 Regular time slices that contain all features whose time intersects them.
 
-## PolygonRasterizationTimeIgnore Objects
+## PolygonRasterizationTimeAllFeatures Objects
 
 ```python
 @dataclass
-class PolygonRasterizationTimeIgnore(PolygonRasterizationTime)
+class PolygonRasterizationTimeAllFeatures(PolygonRasterizationTime)
 ```
 
-All features are rasterized into one time slice that is valid forever.
+All features, regardless of their times, are rasterized into one time slice that is valid forever.
 
 ## PolygonRasterization Objects
 

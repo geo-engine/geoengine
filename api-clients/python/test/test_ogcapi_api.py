@@ -33,6 +33,20 @@ class TestOGCAPIApi(unittest.TestCase):
         """
         pass
 
+    def test_collection_coverage_tileset(self) -> None:
+        """Test case for collection_coverage_tileset
+
+        OGC API Collection Coverage Tileset Metadata
+        """
+        pass
+
+    def test_collection_coverage_tilesets(self) -> None:
+        """Test case for collection_coverage_tilesets
+
+        OGC API Collection Coverage Tilesets List
+        """
+        pass
+
     def test_collection_tileset(self) -> None:
         """Test case for collection_tileset
 
@@ -58,6 +72,13 @@ class TestOGCAPIApi(unittest.TestCase):
         """Test case for conformance
 
         OGC API Conformance Classes
+        """
+        pass
+
+    def test_coverage_tile(self) -> None:
+        """Test case for coverage_tile
+
+        OGC API Coverage Tile
         """
         pass
 

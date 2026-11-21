@@ -29,7 +29,7 @@ class ExpressionParameters(BaseModel):
     """
     ## Types  The following describes the types used in the parameters.
     """ # noqa: E501
-    expression: StrictStr = Field(description="Expression script  Example: `\"(A - B) / (A + B)\"`")
+    expression: StrictStr = Field(description="Expression script  Example: `\"(nir - red) / (nir + red)\"`")
     output_type: RasterDataType = Field(description="A raster data type for the output", alias="outputType")
     output_band: Optional[RasterBandDescriptor] = Field(default=None, description="Description about the output", alias="outputBand")
     map_no_data: StrictBool = Field(description="Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.", alias="mapNoData")

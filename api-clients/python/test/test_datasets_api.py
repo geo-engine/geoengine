@@ -106,6 +106,7 @@ class TestDatasetsApi(unittest.TestCase):
     def test_update_dataset_provenance_handler(self) -> None:
         """Test case for update_dataset_provenance_handler
 
+        Updates the dataset's provenance.
         """
         pass
 

@@ -66,6 +66,9 @@ _build-typescript-postprocess:
     echo "node_modules" > typescript/.gitignore
     echo "typings" > typescript/.gitignore
     find ./typescript -name "*.ts" -exec sed -i '/The version of the OpenAPI document/d' {} +
+    # hand-written tests in `typescript/test/`, which the generator leaves untouched
+    cd typescript && npm pkg set scripts.test="node --test test/*.test.mjs"
+    printf '\ntest\n' >> typescript/.npmignore
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
@@ -101,6 +104,11 @@ _build-rust-postprocess:
 [working-directory("rust")]
 build-rust-dist: common::_clear
     cargo fetch
+
+# Download the OpenAPI Generator jar (from Maven Central into the `npx` cache), retrying on failure, since the CLI tries only once.
+[group('install')]
+prefetch-generator attempts="5" backoff="15":
+    just common::retry {{ attempts }} {{ backoff }} {{ OPENAPI_GENERATOR_CLI }} version
 
 lint: lint-openapi-spec lint-generator-version
 
@@ -221,6 +229,7 @@ test-rust: common::_clear
 test-typescript: common::_clear
     npm install
     npm run build
+    npm test
 
 # Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]

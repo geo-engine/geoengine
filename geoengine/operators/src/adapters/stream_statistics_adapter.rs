@@ -74,6 +74,47 @@ impl<S> StreamStatisticsAdapter<S> {
         operator_name: &'static str,
         data: Option<String>,
     ) -> StreamStatisticsAdapter<S> {
+        Self::with_metrics(
+            stream,
+            span,
+            quota,
+            path,
+            operator_name,
+            data,
+            tracing::enabled!(Level::DEBUG),
+        )
+    }
+
+    /// Like [`Self::new`], but `metrics` is passed in instead of being decided by `tracing::enabled!`.
+    ///
+    /// Tests that set a thread-local subscriber with `tracing::subscriber::set_default` cannot
+    /// rely on `enabled!` in `new`, even though they build their own subscriber and adapters:
+    ///
+    /// - Every `tracing` macro expands to a `static` callsite per source location. It caches
+    ///   whether any subscriber is interested (`never`, `sometimes`, `always`) the first time
+    ///   it is reached, and this cache is shared by all threads of the process.
+    /// - While only one subscriber is registered in the process, tracing-core only asks the
+    ///   subscriber of the thread that reaches the callsite first, not all registered ones.
+    /// - `set_default` raises the global max level to DEBUG. From then on, the other tests that
+    ///   `cargo test` runs in parallel in the same process (without a subscriber) no longer skip
+    ///   `enabled!` in `new`. If one of them gets there first, the callsite is cached as `never`
+    ///   for the whole process, and the subscriber of the test is never asked.
+    ///
+    /// Calling this constructor avoids that callsite. Other threads never get metrics, so only
+    /// the test's thread reaches the `debug!` in [`StreamMetrics::log`], which is then cached
+    /// with the test's subscriber.
+    ///
+    /// Production is not affected, since the server sets a global subscriber that all threads
+    /// share.
+    fn with_metrics(
+        stream: S,
+        span: Span,
+        quota: QuotaTracking,
+        path: ProcessingGraphOperatorPath,
+        operator_name: &'static str,
+        data: Option<String>,
+        metrics: bool,
+    ) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
             poll_next_count: 0,
@@ -83,7 +124,7 @@ impl<S> StreamStatisticsAdapter<S> {
             path,
             operator_name,
             data,
-            metrics: tracing::enabled!(Level::DEBUG).then(StreamMetrics::default),
+            metrics: metrics.then(StreamMetrics::default),
         }
     }
 
@@ -223,14 +264,17 @@ mod tests {
 
         let (tx, _rx) = unbounded_channel::<QuotaMessage>();
         let quota = QuotaTracking::new(tx, Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+        // `new` would decide `metrics` via a process-wide cached `enabled!` callsite
+        // that other test threads can set to `never` first, see `with_metrics`
         let adapter = |items: Vec<Result<i32, ()>>| {
-            StreamStatisticsAdapter::new(
+            StreamStatisticsAdapter::with_metrics(
                 futures::stream::iter(items),
                 span!(Level::DEBUG, "test"),
                 quota.clone(),
                 ProcessingGraphOperatorPath::initialize_root(),
                 "test",
                 None,
+                true,
             )
         };
 

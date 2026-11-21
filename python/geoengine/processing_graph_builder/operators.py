@@ -807,7 +807,14 @@ class Reprojection(Operator):
 
 
 class Expression(RasterOperator):
-    """An Expression operator."""
+    """An Expression operator that computes a pixel-wise expression on the bands of a raster.
+
+    The expression refers to the bands by their names, e.g., `(nir - red) / (nir + red)`.
+    Characters in band names that are not letters or digits are replaced by underscores, e.g., `nir 1` becomes `nir_1`.
+    Rename bands with the `RasterStacker` operator to refer to them by other names.
+
+    Referring to the bands as `A`, `B`, `C`, … is deprecated.
+    """
 
     expression: str
     source: RasterOperator
@@ -1543,8 +1550,8 @@ class PolygonRasterizationTime:
                 step=time_dict["step"]["step"],
                 reference=np.datetime64(reference, "ms") if reference is not None else None,
             )
-        if time_dict["type"] == "ignore":
-            return PolygonRasterizationTimeIgnore()
+        if time_dict["type"] == "allFeatures":
+            return PolygonRasterizationTimeAllFeatures()
         raise ValueError(f"Invalid polygon rasterization time type {time_dict['type']}")
 
     @classmethod
@@ -1568,9 +1575,9 @@ class PolygonRasterizationTime:
         return PolygonRasterizationTimeRegular(granularity, step, reference)
 
     @classmethod
-    def ignore(cls) -> PolygonRasterizationTime:
-        """All features are rasterized into one time slice that is valid forever."""
-        return PolygonRasterizationTimeIgnore()
+    def all_features(cls) -> PolygonRasterizationTime:
+        """All features, regardless of their times, are rasterized into one time slice that is valid forever."""
+        return PolygonRasterizationTimeAllFeatures()
 
 
 @dataclass
@@ -1600,11 +1607,11 @@ class PolygonRasterizationTimeRegular(PolygonRasterizationTime):
 
 
 @dataclass
-class PolygonRasterizationTimeIgnore(PolygonRasterizationTime):
-    """All features are rasterized into one time slice that is valid forever."""
+class PolygonRasterizationTimeAllFeatures(PolygonRasterizationTime):
+    """All features, regardless of their times, are rasterized into one time slice that is valid forever."""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "ignore"}
+        return {"type": "allFeatures"}
 
 
 class PolygonRasterization(RasterOperator):

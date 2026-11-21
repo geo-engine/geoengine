@@ -18,7 +18,7 @@ All URIs are relative to *https://geoengine.io/api*
 | [**listCollectionHandler**](LayersApi.md#listcollectionhandler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider |
 | [**listProviders**](LayersApi.md#listproviders) | **GET** /layerDb/providers | List all providers |
 | [**listRootCollectionsHandler**](LayersApi.md#listrootcollectionshandler) | **GET** /layers/collections | List all layer collections |
-| [**providerCapabilitiesHandler**](LayersApi.md#providercapabilitieshandler) | **GET** /layers/{provider}/capabilities |  |
+| [**providerCapabilitiesHandler**](LayersApi.md#providercapabilitieshandler) | **GET** /layers/{provider}/capabilities | Returns the capabilities of the given provider, e.g., whether it supports listing and search. |
 | [**removeCollection**](LayersApi.md#removecollection) | **DELETE** /layerDb/collections/{collection} | Remove a collection |
 | [**removeCollectionFromCollection**](LayersApi.md#removecollectionfromcollection) | **DELETE** /layerDb/collections/{parent}/collections/{collection} | Delete a collection from a collection |
 | [**removeLayer**](LayersApi.md#removelayer) | **DELETE** /layerDb/layers/{layer} | Remove a collection |
@@ -1051,7 +1051,7 @@ example().catch(console.error);
 
 > ProviderCapabilities providerCapabilitiesHandler(provider)
 
-
+Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 
 ### Example
 

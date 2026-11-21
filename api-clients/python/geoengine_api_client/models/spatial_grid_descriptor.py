@@ -32,7 +32,7 @@ class SpatialGridDescriptor(BaseModel):
     """ # noqa: E501
     spatial_grid: SpatialGridDefinition = Field(alias="spatialGrid")
     descriptor: SpatialGridDescriptorState
-    max_overview_level: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset. Sources read only these and downsample further themselves. Unset: the levels are unknown and GDAL chooses, which may resample.", alias="maxOverviewLevel")
+    max_overview_level: Optional[Annotated[int, Field(strict=True, ge=1)]] = Field(default=None, description="The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset; `1` says that the files have no overviews. Sources read only these and downsample further themselves. Unset: the levels are unknown and GDAL chooses, which may resample.", alias="maxOverviewLevel")
     __properties: ClassVar[List[str]] = ["spatialGrid", "descriptor", "maxOverviewLevel"]
 
     model_config = ConfigDict(

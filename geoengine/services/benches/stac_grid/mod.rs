@@ -459,6 +459,7 @@ async fn run_case(case: &BenchCase<'_>, repeat: u64, output: &mut BenchOutput) -
                     .await
                     .expect("baseline STAC search succeeds")
                     .into_iter()
+                    .map(|file| file.file)
                     .filter(|file| {
                         file.time.intersects(&time) && file.spatial_partition.intersects(&spatial)
                     })

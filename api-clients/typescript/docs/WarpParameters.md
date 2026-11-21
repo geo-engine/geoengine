@@ -1,0 +1,49 @@
+
+# WarpParameters
+
+Parameters for the `Warp` operator.
+
+## Properties
+
+Name | Type
+------------ | -------------
+`targetSpatialReference` | string
+`outputResolution` | [SpatialResolution](SpatialResolution.md)
+`outputOriginReference` | [Coordinate2D](Coordinate2D.md)
+`downsampling` | [WarpDownsamplingMethod](WarpDownsamplingMethod.md)
+`upsampling` | [WarpUpsamplingMethod](WarpUpsamplingMethod.md)
+`outputDataType` | [RasterDataType](RasterDataType.md)
+`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
+`approximationErrorThreshold` | number
+
+## Example
+
+```typescript
+import type { WarpParameters } from '@geoengine/api-client'
+
+// TODO: Update the object below with actual values
+const example = {
+  "targetSpatialReference": null,
+  "outputResolution": null,
+  "outputOriginReference": null,
+  "downsampling": null,
+  "upsampling": null,
+  "outputDataType": null,
+  "deriveOutSpec": null,
+  "approximationErrorThreshold": null,
+} satisfies WarpParameters
+
+console.log(example)
+
+// Convert the instance to a JSON string
+const exampleJSON: string = JSON.stringify(example)
+console.log(exampleJSON)
+
+// Parse the JSON string back to an object
+const exampleParsed = JSON.parse(exampleJSON) as WarpParameters
+console.log(exampleParsed)
+```
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+

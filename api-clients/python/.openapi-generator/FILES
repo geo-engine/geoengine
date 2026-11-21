@@ -257,8 +257,8 @@ docs/PolygonRasterization.md
 docs/PolygonRasterizationAggregation.md
 docs/PolygonRasterizationParameters.md
 docs/PolygonRasterizationTime.md
+docs/PolygonRasterizationTimeAllFeatures.md
 docs/PolygonRasterizationTimeFeatureTimes.md
-docs/PolygonRasterizationTimeIgnore.md
 docs/PolygonRasterizationTimeRegular.md
 docs/PolygonRasterizationValue.md
 docs/PolygonRasterizationValueAttribute.md
@@ -352,6 +352,7 @@ docs/SpatialReferencesApi.md
 docs/SpatialResolution.md
 docs/StacApiRetries.md
 docs/StacAssetBand.md
+docs/StacCoarserAsset.md
 docs/StacDataProviderDefinition.md
 docs/StacGrid.md
 docs/StacProviderAuthentication.md
@@ -458,6 +459,10 @@ docs/VisualPointClustering.md
 docs/VisualPointClusteringParameters.md
 docs/Volume.md
 docs/VolumeFileLayersResponse.md
+docs/Warp.md
+docs/WarpDownsamplingMethod.md
+docs/WarpParameters.md
+docs/WarpUpsamplingMethod.md
 docs/WcsRequest.md
 docs/WcsService.md
 docs/WcsVersion.md
@@ -738,8 +743,8 @@ geoengine_api_client/models/polygon_rasterization.py
 geoengine_api_client/models/polygon_rasterization_aggregation.py
 geoengine_api_client/models/polygon_rasterization_parameters.py
 geoengine_api_client/models/polygon_rasterization_time.py
+geoengine_api_client/models/polygon_rasterization_time_all_features.py
 geoengine_api_client/models/polygon_rasterization_time_feature_times.py
-geoengine_api_client/models/polygon_rasterization_time_ignore.py
 geoengine_api_client/models/polygon_rasterization_time_regular.py
 geoengine_api_client/models/polygon_rasterization_value.py
 geoengine_api_client/models/polygon_rasterization_value_attribute.py
@@ -829,6 +834,7 @@ geoengine_api_client/models/spatial_resolution.py
 geoengine_api_client/models/st_rectangle.py
 geoengine_api_client/models/stac_api_retries.py
 geoengine_api_client/models/stac_asset_band.py
+geoengine_api_client/models/stac_coarser_asset.py
 geoengine_api_client/models/stac_data_provider_definition.py
 geoengine_api_client/models/stac_grid.py
 geoengine_api_client/models/stac_provider_authentication.py
@@ -932,6 +938,10 @@ geoengine_api_client/models/visual_point_clustering.py
 geoengine_api_client/models/visual_point_clustering_parameters.py
 geoengine_api_client/models/volume.py
 geoengine_api_client/models/volume_file_layers_response.py
+geoengine_api_client/models/warp.py
+geoengine_api_client/models/warp_downsampling_method.py
+geoengine_api_client/models/warp_parameters.py
+geoengine_api_client/models/warp_upsampling_method.py
 geoengine_api_client/models/wcs_request.py
 geoengine_api_client/models/wcs_service.py
 geoengine_api_client/models/wcs_version.py
@@ -1207,8 +1217,8 @@ test/test_polygon_rasterization.py
 test/test_polygon_rasterization_aggregation.py
 test/test_polygon_rasterization_parameters.py
 test/test_polygon_rasterization_time.py
+test/test_polygon_rasterization_time_all_features.py
 test/test_polygon_rasterization_time_feature_times.py
-test/test_polygon_rasterization_time_ignore.py
 test/test_polygon_rasterization_time_regular.py
 test/test_polygon_rasterization_value.py
 test/test_polygon_rasterization_value_attribute.py
@@ -1302,6 +1312,7 @@ test/test_spatial_resolution.py
 test/test_st_rectangle.py
 test/test_stac_api_retries.py
 test/test_stac_asset_band.py
+test/test_stac_coarser_asset.py
 test/test_stac_data_provider_definition.py
 test/test_stac_grid.py
 test/test_stac_provider_authentication.py
@@ -1408,6 +1419,10 @@ test/test_visual_point_clustering.py
 test/test_visual_point_clustering_parameters.py
 test/test_volume.py
 test/test_volume_file_layers_response.py
+test/test_warp.py
+test/test_warp_downsampling_method.py
+test/test_warp_parameters.py
+test/test_warp_upsampling_method.py
 test/test_wcs_request.py
 test/test_wcs_service.py
 test/test_wcs_version.py

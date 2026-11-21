@@ -22,6 +22,7 @@ use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Deserializer, Serialize};
 use snafu::ensure;
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroU32;
 use std::ops::Index;
 
 /// A descriptor that contains information about the query result, for instance, the data type
@@ -111,9 +112,10 @@ pub struct SpatialGridDescriptor {
     spatial_grid: SpatialGridDefinition,
     state: SpatialGridDescriptorState,
     /// A source dataset declares that every file has the power-of-two overview levels
-    /// `2..=max_overview_level`. `None`: unknown, GDAL chooses and may resample.
+    /// `2..=max_overview_level`; 1 declares that they have no overviews. `None`: unknown, GDAL
+    /// chooses and may resample.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    max_overview_level: Option<u32>,
+    max_overview_level: Option<NonZeroU32>,
 }
 
 impl SpatialGridDescriptor {
@@ -127,7 +129,7 @@ impl SpatialGridDescriptor {
 
     /// Declares the overview levels `2..=max_overview_level` of a source dataset.
     #[must_use]
-    pub fn with_max_overview_level(self, max_overview_level: Option<u32>) -> Self {
+    pub fn with_max_overview_level(self, max_overview_level: Option<NonZeroU32>) -> Self {
         Self {
             max_overview_level,
             ..self
@@ -135,7 +137,7 @@ impl SpatialGridDescriptor {
     }
 
     /// The largest declared overview level, see [`Self::with_max_overview_level`].
-    pub fn max_overview_level(&self) -> Option<u32> {
+    pub fn max_overview_level(&self) -> Option<NonZeroU32> {
         self.max_overview_level
     }
 
@@ -1080,7 +1082,7 @@ mod db_types {
                 state: SpatialGridDescriptorStateDbType::from(&value.state),
                 max_overview_level: value
                     .max_overview_level
-                    .map(|level| i32::try_from(level).unwrap_or(i32::MAX)),
+                    .map(|level| i32::try_from(level.get()).unwrap_or(i32::MAX)),
             }
         }
     }
@@ -1092,7 +1094,8 @@ mod db_types {
                 state: SpatialGridDescriptorState::from(value.state),
                 max_overview_level: value
                     .max_overview_level
-                    .and_then(|level| u32::try_from(level).ok()),
+                    .and_then(|level| u32::try_from(level).ok())
+                    .and_then(NonZeroU32::new),
             }
         }
     }

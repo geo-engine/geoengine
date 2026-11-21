@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// ExpressionParameters : ## Types  The following describes the types used in the parameters.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExpressionParameters {
-    /// Expression script  Example: `\"(A - B) / (A + B)\"`
+    /// Expression script  Example: `\"(nir - red) / (nir + red)\"`
     #[serde(rename = "expression")]
     pub expression: String,
     /// A raster data type for the output
