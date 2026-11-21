@@ -938,6 +938,15 @@ pub struct StacCache {
     pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+    /// Number of time steps one calendar search asks the STAC server for at once, per grid cell. The
+    /// result is stored per step. Chunks start at the origin of the time axis, not at months.
+    pub search_chunk_steps: u32,
+    /// Footprint queries needing more searches than this are rejected as too large.
+    pub max_footprint_searches: usize,
+    /// A calendar request for at most this many grid cells searches the files, which gives exact
+    /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
+    /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
+    pub availability_search_cells: usize,
 }
 
 impl TestDefault for StacCache {
@@ -945,6 +954,9 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
+            search_chunk_steps: 30,
+            max_footprint_searches: 50,
+            availability_search_cells: 4,
         }
     }
 }

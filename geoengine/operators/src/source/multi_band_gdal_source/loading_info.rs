@@ -25,6 +25,10 @@ pub struct MultiBandGdalLoadingInfo {
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
+    /// The queried time after this answer, as one interval from the end of this answer to the end
+    /// of the query, if the provider answered only the first part of a long time range. Query it
+    /// for the next part. That answer can have a `next` again, so follow it until there is none.
+    next: Option<TimeInterval>,
     /// For each time step whether it has data, if the provider could tell without the files.
     /// The answer then has no files.
     availability: Option<Vec<bool>>,
@@ -78,6 +82,7 @@ impl MultiBandGdalLoadingInfo {
             files,
             time_steps,
             cache_ttl,
+            next: None,
             availability: None,
         }
     }
@@ -104,6 +109,19 @@ impl MultiBandGdalLoadingInfo {
         self.availability
             .as_ref()
             .and_then(|has_data| has_data.get(time_step_index).copied())
+    }
+
+    /// Marks this answer as covering only the start of the queried time. `next` is the rest.
+    #[must_use]
+    pub fn with_next(mut self, next: Option<TimeInterval>) -> Self {
+        self.next = next;
+        self
+    }
+
+    /// The queried time after this answer, as one interval, if any. Its answer can have a `next`
+    /// again, so the parts form a chain.
+    pub fn next(&self) -> Option<TimeInterval> {
+        self.next
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.

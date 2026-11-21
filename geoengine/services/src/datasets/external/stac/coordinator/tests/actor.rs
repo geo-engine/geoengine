@@ -165,6 +165,7 @@ fn execute_job_with_policy(
         // Use the fixture's registry and origin so lookup selects its dispatcher.
         let registry = StacRequestRegistry {
             coordinators: coordinator.registry.upgrade().unwrap(),
+            ..StacRequestRegistry::default()
         };
         let origin = format!("https://{}/", coordinator.identity.host);
         let client = StacClient::new(reqwest::Client::new(), &origin, registry).unwrap();

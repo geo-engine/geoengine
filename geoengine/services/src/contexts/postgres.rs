@@ -111,6 +111,12 @@ where
         Ok(get_config_element::<crate::config::QueryContext>()?.footprint_boxes_per_step_limit)
     }
 
+    /// The registry of the STAC request coordinators, configured by `[stac_cache]`.
+    fn stac_request_registry() -> Result<StacRequestRegistry> {
+        let config = get_config_element::<crate::config::StacCache>()?;
+        Ok(StacRequestRegistry::new().with_config(config))
+    }
+
     pub async fn new_with_context_spec(
         ContextSpec {
             config,
@@ -131,7 +137,7 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new();
+        let stac_request_registry = Self::stac_request_registry()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -208,7 +214,7 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new();
+        let stac_request_registry = Self::stac_request_registry()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -297,7 +303,7 @@ where
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new();
+        let stac_request_registry = Self::stac_request_registry()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),

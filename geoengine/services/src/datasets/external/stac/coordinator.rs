@@ -21,7 +21,10 @@
 //! unless the server supplies quota windows or usable retry timing. Admission
 //! waits for the cooldown and all quota constraints.
 use super::{StacProviderAuthentication, auth::StacAuthentication};
+
+mod aggregation;
 use crate::util::retry::{RetryAction, RetryPolicy, retry_http_with_action};
+pub(crate) use aggregation::step_has_items;
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -47,6 +50,7 @@ const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_PENDING_ATTEMPTS: usize = 256;
 /// Bound retained quota identities per application or harvesting operation.
 const MAX_COORDINATORS: usize = 1024;
+
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -345,6 +349,9 @@ struct AttemptReply {
 /// Shared request channel and cancellation notification plus their registry identity.
 #[derive(Debug)]
 pub(super) struct ActorChannels {
+    /// Set when the server has shown that it does not answer aggregation requests. Like the learned
+    /// quota, it belongs to the server and is shared by all providers that use it. It ends after a
+    /// while, because a gateway can answer 404 for a moment only.
     // Each job owns a permit until its completion is processed, so draining the
     // channel into the actor's queue cannot bypass backpressure.
     jobs: mpsc::Sender<AttemptJob>,
@@ -410,12 +417,30 @@ impl Default for CoordinatorMap {
 #[derive(Clone, Debug, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
+    /// The settings of `[stac_cache]`, which the contexts read. Without them (tests, harvester)
+    /// providers get a standalone cache.
+    config: Option<crate::config::StacCache>,
 }
 
 impl StacRequestRegistry {
     /// Create an empty request registry.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Configures the registry and the caches of the providers that use it.
+    #[must_use]
+    pub fn with_config(mut self, config: crate::config::StacCache) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    /// The query cache of a new provider.
+    pub(super) fn new_query_cache(&self) -> super::cache::StacQueryCache {
+        self.config.as_ref().map_or_else(
+            super::cache::StacQueryCache::standalone,
+            super::cache::StacQueryCache::from_config,
+        )
     }
 
     /// Find or create the coordinator for this origin and authentication.
