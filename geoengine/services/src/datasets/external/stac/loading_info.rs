@@ -298,6 +298,30 @@ impl
     }
 }
 
+/// The files of a span, split into its time steps. An item on the span's closed end belongs to the
+/// next step and is dropped here.
+fn files_per_step(
+    time_dimension: TimeDimension,
+    span: TimeInterval,
+    files: &[StacTileFile],
+) -> geoengine_operators::util::Result<Vec<(TimeInterval, Vec<StacTileFile>)>> {
+    regular_time_steps(time_dimension, span)?
+        .map(|step| {
+            let step = step?;
+            let step_files = files
+                .iter()
+                .filter(|file| file.file.time == step)
+                .cloned()
+                .collect();
+            Ok((step, step_files))
+        })
+        .collect()
+}
+
+/// What a window search found, per cell and time step. The part of the loading info reads it
+/// before the cache, so the searches it counted are all that run, whatever the cache keeps.
+type KnownSteps = HashMap<(GridIdx2D, TimeInterval), Arc<Vec<StacTileFile>>>;
+
 impl StacMultiBandMetaData {
     /// The part of the answer to `query` for `time_interval`, which lies in one chunk.
     async fn part(
@@ -354,17 +378,19 @@ impl StacMultiBandMetaData {
                 .with_availability(has_data);
         }
 
+        let mut known = KnownSteps::new();
         if query.detail.is_for_footprints() {
             if one_step_request {
                 self.reject_too_many_searches(self.missing_searches(&time_steps, &cell_bboxes))?;
             } else {
-                self.prepare_window_search(
-                    &items_url,
-                    time_interval,
-                    time_steps.len(),
-                    &cell_bboxes,
-                )
-                .await?;
+                known = self
+                    .prepare_window_search(
+                        &items_url,
+                        time_interval,
+                        time_steps.len(),
+                        &cell_bboxes,
+                    )
+                    .await?;
             }
         }
 
@@ -372,14 +398,22 @@ impl StacMultiBandMetaData {
         let searches = time_steps.iter().copied().cartesian_product(cell_bboxes);
         let mut tile_files = futures::stream::iter(searches)
             .map(|(step, (cell, bbox))| {
+                let found = known.get(&(cell, step)).cloned();
                 let metadata = self.clone();
                 let url = items_url.clone();
-                self.query_cache.get_or_fetch(
-                    self.dataset.clone(),
-                    cell,
-                    step,
-                    move || async move { metadata.search_bbox(url, bbox, step).await },
-                )
+                async move {
+                    // the window search found it, which the limit counted; the cache may not have kept it
+                    if let Some(found) = found {
+                        return Ok(found);
+                    }
+                    metadata
+                        .query_cache
+                        .clone()
+                        .get_or_fetch(metadata.dataset.clone(), cell, step, move || async move {
+                            metadata.search_bbox(url, bbox, step).await
+                        })
+                        .await
+                }
             })
             .buffer_unordered(self.max_concurrent_cell_searches)
             .map_err(
@@ -510,8 +544,9 @@ impl StacMultiBandMetaData {
         Ok(cell_bboxes)
     }
 
-    /// Fills the cache for a part of a window, so that the per-step lookups of the loading info
-    /// find it, and refuses a window that needs too many searches.
+    /// Searches the steps of a part of a window that are not known yet, refuses a window that
+    /// needs too many searches, and returns what is known of each cell and step. It also fills the
+    /// cache for later requests.
     ///
     /// Not called for a request of one time step. That has no window to prepare: it runs the
     /// searches the map tiles of that step run, with the same cache entries. It is only limited
@@ -522,11 +557,12 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-    ) -> geoengine_operators::util::Result<()> {
+    ) -> geoengine_operators::util::Result<KnownSteps> {
         if !self.query_cache.stores_results() {
-            // Nothing found for the window would be kept, so the loading info searches every
-            // step of every cell afterwards. These are the searches the limit has to count.
-            return self.reject_too_many_searches(number_of_steps * cell_bboxes.len());
+            // Without a cache the loading info searches every step of every cell, one by one.
+            // These are the searches the limit has to count.
+            self.reject_too_many_searches(number_of_steps * cell_bboxes.len())?;
+            return Ok(KnownSteps::new());
         }
         self.search_missing_steps(items_url, time_interval, cell_bboxes)
             .await
@@ -702,42 +738,43 @@ impl StacMultiBandMetaData {
         Ok(())
     }
 
-    /// Fills the per-step cache entries of one part of a time window with at most one search per
-    /// cell. The part lies in one chunk of `search_chunk_steps` steps (see `first_chunk`), and the
-    /// whole chunk is looked at, so that requests for different parts of it share their searches.
-    /// A cell whose steps are all cached costs no request; otherwise only the span from its first
-    /// to its last missing step is searched.
+    /// Finds the files of every cell and step of one part of a time window with at most one search
+    /// per cell. The part lies in one chunk of `search_chunk_steps` steps (see `first_chunk`), and
+    /// the whole chunk is looked at, so that requests for different parts of it share their
+    /// searches. A cell whose steps are all cached costs no request; otherwise only the span from
+    /// its first to its last missing step is searched.
     ///
-    /// Reading the steps afterwards goes through the normal per-step lookup, so a step
-    /// that was not stored just gets its own search.
+    /// What is found is returned, not only cached: the cache may refuse or drop an entry, and the
+    /// loading info would then search that step again, which the limit did not count.
     async fn search_missing_steps(
         &self,
         items_url: &Url,
         time_interval: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-    ) -> geoengine_operators::util::Result<()> {
+    ) -> geoengine_operators::util::Result<KnownSteps> {
+        let mut known = KnownSteps::new();
         let TimeDimension::Regular(regular) = self.time_dimension else {
-            return Ok(());
+            return Ok(known);
         };
         let Some(chunk) = self
             .chunk_dimension(regular)
             .intersecting_intervals(time_interval)?
             .next()
         else {
-            return Ok(());
+            return Ok(known);
         };
         let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
         let steps = regular_time_steps(self.time_dimension, chunk)?
             .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
+        for (step, (cell, _)) in steps.iter().cartesian_product(cell_bboxes) {
+            if let Some(files) = self.query_cache.get(dataset_id, *cell, *step).await {
+                known.insert((*cell, *step), files);
+            }
+        }
         // A warm view needs no request at all, not even the one that plans the searches.
-        let anything_missing = steps.iter().any(|step| {
-            cell_bboxes
-                .iter()
-                .any(|(cell, _)| !self.query_cache.contains(dataset_id, *cell, *step))
-        });
-        if !anything_missing {
-            return Ok(());
+        if known.len() == steps.len() * cell_bboxes.len() {
+            return Ok(known);
         }
 
         // More cells than the limit of searches are not planned: storing their empty steps would
@@ -749,13 +786,22 @@ impl StacMultiBandMetaData {
         {
             self.store_empty_steps(dataset_id, &steps, &with_items, cell_bboxes)
                 .await;
+            let empty = Arc::new(Vec::new());
+            for step in steps
+                .iter()
+                .filter(|step| !step_has_items(**step, &with_items))
+            {
+                for (cell, _) in cell_bboxes {
+                    known.entry((*cell, *step)).or_insert_with(|| empty.clone());
+                }
+            }
         }
 
         let mut searches = Vec::new();
         for (cell, bbox) in cell_bboxes.iter().copied() {
             let missing = steps
                 .iter()
-                .filter(|step| !self.query_cache.contains(dataset_id, cell, **step))
+                .filter(|step| !known.contains_key(&(cell, **step)))
                 .collect::<Vec<_>>();
             if let (Some(first), Some(last)) = (missing.first(), missing.last()) {
                 let span = TimeInterval::new(first.start(), last.end())?;
@@ -764,17 +810,19 @@ impl StacMultiBandMetaData {
         }
 
         self.reject_too_many_searches(searches.len())?;
-        self.search_spans(items_url, dataset_id, searches).await
+        known.extend(self.search_spans(items_url, dataset_id, searches).await?);
+        Ok(known)
     }
 
-    /// Runs the searches of spans of missing steps, each for one cell, and stores their results.
+    /// Runs the searches of spans of missing steps, each for one cell, stores their results per
+    /// step and returns them.
     async fn search_spans(
         &self,
         items_url: &Url,
         dataset_id: u64,
         searches: Vec<(GridIdx2D, BoundingBox2D, TimeInterval, bool)>,
-    ) -> geoengine_operators::util::Result<()> {
-        futures::stream::iter(searches)
+    ) -> geoengine_operators::util::Result<KnownSteps> {
+        let found = futures::stream::iter(searches)
             .map(|(cell, bbox, span, single_step)| {
                 let metadata = self.clone();
                 let url = items_url.clone();
@@ -783,38 +831,43 @@ impl StacMultiBandMetaData {
                     if single_step {
                         // The span is the step itself, so the normal step entry is the shared search.
                         // A map tile for the same step joins it.
-                        return cache
+                        let files = cache
                             .get_or_fetch(
                                 metadata.dataset.clone(),
                                 cell,
                                 span,
                                 move || async move { metadata.search_bbox(url, bbox, span).await },
                             )
-                            .await;
+                            .await?;
+                        return Ok(vec![((cell, span), files)]);
                     }
-                    // The entry for the span only makes concurrent callers share one search.
+                    let time_dimension = metadata.time_dimension;
+                    // The entry for the span only makes concurrent callers share one search; its
+                    // result is the span's files, which every caller splits into steps itself.
                     let result = cache
                         .get_or_fetch(metadata.dataset.clone(), cell, span, move || async move {
                             let files = metadata.search_bbox(url, bbox, span).await?;
-                            for step in regular_time_steps(metadata.time_dimension, span)? {
-                                let step = step?;
-                                // An item on the span's closed end belongs to the next step and is dropped here.
-                                let step_files = files
-                                    .iter()
-                                    .filter(|file| file.file.time == step)
-                                    .cloned()
-                                    .collect();
+                            for (step, step_files) in files_per_step(time_dimension, span, &files)?
+                            {
                                 metadata
                                     .query_cache
                                     .insert(metadata.dataset.clone(), cell, step, step_files)
                                     .await;
                             }
-                            Ok(Vec::new())
+                            Ok(files)
                         })
                         .await;
                     // Only the step entries count: a stale marker must not hide evicted steps.
                     cache.remove(dataset_id, cell, span).await;
-                    result
+                    let files = result?;
+                    files_per_step(time_dimension, span, &files)
+                        .map_err(Arc::new)
+                        .map(|steps| {
+                            steps
+                                .into_iter()
+                                .map(|(step, step_files)| ((cell, step), Arc::new(step_files)))
+                                .collect::<Vec<_>>()
+                        })
                 }
             })
             .buffer_unordered(self.max_concurrent_cell_searches)
@@ -826,7 +879,7 @@ impl StacMultiBandMetaData {
             .try_collect::<Vec<_>>()
             .await?;
 
-        Ok(())
+        Ok(found.into_iter().flatten().collect())
     }
 
     /// Search a WGS84 bounding box for a time interval, following all result pages.
@@ -4188,6 +4241,44 @@ mod grid_request_tests {
             result,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn a_window_runs_only_the_counted_searches_when_the_cache_keeps_nothing() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_aggregation_unsupported(&server);
+        // the one search of the cell's chunk; a search of a single day would be unexpected and fail
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        // a cache that takes no result, like a full one that refuses new entries
+        provider.query_cache =
+            Arc::new(StacQueryCache::new(1, Duration::from_mins(1)).with_max_footprint_searches(1));
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+
+        // the file of the first day, and the second day searched by the same request
+        assert_eq!(info.time_steps(), &[interval(3), interval(4)]);
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
+        assert_eq!(starts.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
