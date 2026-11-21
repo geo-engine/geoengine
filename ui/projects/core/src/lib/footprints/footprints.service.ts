@@ -22,9 +22,11 @@ import {boxFeatures, overlayStyle, viewCoverage, ViewCoverage} from './footprint
 import {
     calendarHint,
     calendarStartView,
+    canPickDate,
     cellClasses,
     Footprints,
     footprintsOrTooLarge,
+    isShorterThanMonth,
     mergeFootprints,
     monthStartOfTime,
     stepAt,
@@ -48,6 +50,11 @@ const VIEWPORT_DEBOUNCE_MS = 500;
 const OVERLAY_MARGIN = 0.25;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
+
+/** The time one step after `timeMs`. */
+function nextStepStart(timeMs: number, timeStep: TimeStepDuration): number {
+    return new Time(new Date(timeMs)).add(timeStep.durationAmount, timeStep.durationUnit).start.valueOf();
+}
 
 /** The raster layer an app wants to know the footprints of. */
 export interface FootprintLayer {
@@ -128,7 +135,11 @@ export class FootprintsService {
             if (!query) return undefined;
 
             const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
-            const end = Math.max(window.end, minimalEnd.start.valueOf());
+            const fullEnd = Math.max(window.end, minimalEnd.start.valueOf());
+            // nothing after today has data, so the window ends with the step of today, unless it starts later or
+            // the calendar shows more
+            const todayEnd = nextStepStart(Date.now(), timeStep);
+            const end = window.start < todayEnd ? Math.min(fullEnd, Math.max(todayEnd, window.end)) : fullEnd;
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -146,17 +157,20 @@ export class FootprintsService {
                     ),
                 );
 
-            // the month of the start first, so the visible month shows soonest, then the server's cursor is followed
+            // the month of the start first, so the visible month shows soonest, then the server's cursor is followed;
+            // a month holds one step of a month or more, so then the window is asked at once
             const startDate = new Date(window.start);
             const monthEnd = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1);
-            let range = {start: window.start, end: Math.min(monthEnd, end)};
+            const firstEnd = isShorterThanMonth(timeStep.durationUnit) ? Math.min(monthEnd, end) : end;
+            let range = {start: window.start, end: firstEnd};
             let footprints: Footprints | undefined;
             for (let request = 0; request < MAX_WINDOW_REQUESTS; request++) {
                 const part = await get(range);
                 // a newer load has reset the partial answer, which this one must not bring back
                 if (abortSignal.aborted) return undefined;
                 footprints = footprints ? mergeFootprints(footprints, part) : part;
-                const next = part.next?.start ?? range.end;
+                // a step that crosses the end of the range is answered whole, so the rest starts after it
+                const next = part.next?.start ?? Math.max(range.end, part.steps.at(-1)?.time.end ?? range.end);
                 if (part.tooLarge || next >= end) break;
                 this.partialFootprints.set(footprints);
                 range = {start: next, end};
@@ -199,10 +213,45 @@ export class FootprintsService {
         this.overlayStepResource.hasValue() ? this.overlayStepResource.value() : undefined,
     );
 
-    private readonly footprints = computed(() =>
+    /** The dates of the current request, or the loaded part of them. */
+    private readonly currentFootprints = computed(() =>
         this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
     );
+    /**
+     * The dates to show. While those of a moved view load, the ones of the same layer and time step stay, like map
+     * tiles, so a strip of dates does not blink; `datesStale` tells. Another layer or time step clears them at once.
+     */
+    private readonly footprints = linkedSignal<{key: string; current?: Footprints; isLoading: boolean}, Footprints | undefined>({
+        source: () => ({
+            key: `${this.layer()?.key}/${this.timeStep()?.durationAmount} ${this.timeStep()?.durationUnit}`,
+            current: this.currentFootprints(),
+            isLoading: this.footprintsResource.isLoading(),
+        }),
+        computation: (source, previous) =>
+            source.current ?? (source.isLoading && previous?.source.key === source.key ? previous.value : undefined),
+    });
     readonly steps = computed(() => this.footprints()?.steps ?? []);
+    /** The dates shown are those of an earlier view, kept while the ones of this view load. */
+    readonly datesStale = computed(() => !this.currentFootprints() && this.footprints() !== undefined);
+    /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
+    readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
+    /**
+     * The start of the time step of the selected date, if the date lies inside it but is not its start, e.g. 1 April
+     * in a yearly step. Only from the dates of this view, so the dates of another layer never move it.
+     */
+    readonly selectedStepStart = computed(() => {
+        const time = this.time();
+        const step = time && stepAt(this.freshSteps(), time.start.valueOf());
+        return step && step.time.start !== time.start.valueOf() ? step.time.start : undefined;
+    });
+    /**
+     * The selected date certainly has no data in this view, so an app need not load its tiles. Only from the dates of
+     * this view: while they load, or where the layer cannot tell, this is false and tiles load as usual.
+     */
+    readonly selectedDateEmpty = computed(() => {
+        const time = this.time();
+        return !!time && stepAt(this.freshSteps(), time.start.valueOf())?.status === TimeStepFootprintStatus.Empty;
+    });
     /** The dates with data of the view need too many catalog searches, so the user has to zoom in. */
     readonly tooLarge = computed(() => this.footprints()?.tooLarge ?? false);
     /**
@@ -227,7 +276,7 @@ export class FootprintsService {
         if (!footprints || footprints.tooLarge || !mapSpatialReference || !time) return undefined;
         const step = stepAt(footprints.steps, time.start.valueOf());
         return {
-            date: time.start.valueOf(),
+            key: this.overlayKey(),
             isUnknown: step?.status === TimeStepFootprintStatus.Unknown,
             features: boxFeatures(step?.bounds ?? [], footprints.spatialReference, mapSpatialReference.srsString),
         };
@@ -247,7 +296,7 @@ export class FootprintsService {
             const extent =
                 viewport && mapSpatialReference && this.spatialReferenceService.clipBoundsIfAvailable(viewport.extent, mapSpatialReference);
             return {
-                key: `${this.layer()?.key}/${this.time()?.start.valueOf()}`,
+                key: this.overlayKey(),
                 isLoading: this.overlayLoading(),
                 loaded: !overlay || !extent ? undefined : overlay.isUnknown ? 'unknown' : viewCoverage(overlay.features, extent),
             };
@@ -264,8 +313,8 @@ export class FootprintsService {
     });
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
-    /** The date whose boxes the overlay shows. */
-    private overlayDate?: number;
+    /** The layer and date whose boxes the overlay shows, see `overlayKey`. */
+    private overlayShows?: string;
 
     constructor() {
         effect(() => this.updateOverlay());
@@ -278,6 +327,15 @@ export class FootprintsService {
                 if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
             });
         });
+    }
+
+    /** Whether a later time step can still have data: not once the selected step reaches today. */
+    canGoLater(): boolean {
+        const time = this.time();
+        const timeStep = this.timeStep();
+        if (!time || !timeStep) return true;
+        const end = stepAt(this.steps(), time.start.valueOf())?.time.end ?? nextStepStart(time.start.valueOf(), timeStep);
+        return end <= Date.now();
     }
 
     /**
@@ -300,11 +358,13 @@ export class FootprintsService {
     /**
      * Where to look on when `dateWithData` finds nothing: the first time step after (1) the loaded ones or the last
      * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
+     * Undefined after the loaded ones too once they reach today, since nothing later has data.
      */
     dateBeyondLoaded(direction: 1 | -1): Time | undefined {
         const steps = this.steps();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
+        if (direction === 1 && steps[steps.length - 1].time.end > Date.now()) return undefined;
         return direction === 1
             ? new Time(new Date(steps[steps.length - 1].time.end))
             : new Time(new Date(steps[0].time.start)).subtract(timeStep.durationAmount, timeStep.durationUnit);
@@ -368,9 +428,7 @@ export class FootprintsService {
         this.calendarHint(view) ? [] : cellClasses(this.steps(), date, view);
 
     /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
-    readonly dateFilter = (date: Date | null): boolean =>
-        !date ||
-        stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
+    readonly dateFilter = (date: Date | null): boolean => !date || canPickDate(this.steps(), date);
 
     /** The hint of a view that is too coarse for the time step to show the dates with data, see `calendarHint`. */
     calendarHint(view: MatCalendarView): string | undefined {
@@ -393,16 +451,21 @@ export class FootprintsService {
         this.overlayLight();
         // the calendar window only has availability, so the boxes come from the request of the overlay
         const overlay = this.overlayFeatures();
-        // like map tiles, the boxes of the date stay while those of a moved view load;
-        // a new date clears them at once, else the map would show the coverage of the wrong date
-        const isSameDate = this.time()?.start.valueOf() === this.overlayDate;
-        if (!overlay && this.overlayStepResource.isLoading() && isSameDate && this.overlayVisible()) return;
+        // like map tiles, the boxes of the layer and date stay while those of a moved view load;
+        // a new layer or date clears them at once, else the map would show the coverage of the wrong one
+        const isSame = this.overlayKey() === this.overlayShows;
+        if (!overlay && this.overlayStepResource.isLoading() && isSame && this.overlayVisible()) return;
 
         source?.clear();
-        this.overlayDate = undefined;
+        this.overlayShows = undefined;
         if (!source || !this.overlayVisible() || !overlay) return;
 
         source.addFeatures(overlay.features);
-        this.overlayDate = overlay.date;
+        this.overlayShows = overlay.key;
+    }
+
+    /** What the boxes of the overlay belong to: the layer and the date. */
+    private overlayKey(): string {
+        return `${this.layer()?.key}/${this.time()?.start.valueOf()}`;
     }
 }

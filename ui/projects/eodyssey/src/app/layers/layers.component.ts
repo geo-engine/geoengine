@@ -3,6 +3,7 @@ import {ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject
 import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatListModule} from '@angular/material/list';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
@@ -116,8 +117,15 @@ function formatDate(timeMs: number): string {
                 ></mat-datepicker>
             </div>
             @if (strip(); as ticks) {
-                @if (ticks.length) {
-                    <div class="date-strip" role="group" aria-label="Dates around the selected date">
+                <!-- the strip keeps its place while dates load, so the panel below it does not move -->
+                @if (ticks.length || footprintsService.isLoading()) {
+                    <div
+                        class="date-strip"
+                        [class.strip-stale]="footprintsService.datesStale()"
+                        role="group"
+                        aria-label="Dates around the selected date"
+                        [attr.aria-busy]="footprintsService.isLoading()"
+                    >
                         @for (tick of ticks; track tick.start) {
                             <!-- not in the tab order: the buttons below and the calendar reach every date -->
                             <button
@@ -133,10 +141,17 @@ function formatDate(timeMs: number): string {
                                 (click)="selectTime(tick.start)"
                             ></button>
                         }
+                        @if (footprintsService.isLoading()) {
+                            <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
+                        }
                     </div>
                     <p class="catalogue-message strip-range">
-                        <span>{{ ticks[0].date }}</span>
-                        <span>{{ ticks[ticks.length - 1].date }}</span>
+                        @if (ticks.length) {
+                            <span>{{ ticks[0].date }}</span>
+                            <span>{{ ticks[ticks.length - 1].date }}</span>
+                        } @else {
+                            <span>&nbsp;</span>
+                        }
                     </p>
                     @if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes for {{ preset.displayName }}</p>
@@ -148,7 +163,7 @@ function formatDate(timeMs: number): string {
                     <mat-icon>navigate_before</mat-icon>
                     {{ backwards()?.label }}
                 </button>
-                <button mat-stroked-button type="button" class="time-forward" (click)="timeForward()">
+                <button mat-stroked-button type="button" class="time-forward" [disabled]="!forward()?.time" (click)="timeForward()">
                     {{ forward()?.label }}
                     <mat-icon iconPositionEnd>navigate_next</mat-icon>
                 </button>
@@ -380,6 +395,7 @@ function formatDate(timeMs: number): string {
 
             // a box like the buttons around it, in the light blue of the data source list
             .date-strip {
+                position: relative;
                 display: flex;
                 box-sizing: border-box;
                 height: 2.75rem;
@@ -426,6 +442,19 @@ function formatDate(timeMs: number): string {
                 &.tick-selected {
                     background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
                 }
+            }
+
+            // dates of an earlier view, shown while those of this view load
+            .strip-stale .tick::after {
+                opacity: 0.4;
+            }
+
+            // inside the strip, so loading does not change the height of the panel
+            .strip-loading {
+                position: absolute;
+                left: 0.5rem;
+                right: 0.5rem;
+                bottom: 0.125rem;
             }
 
             .strip-range {
@@ -651,6 +680,7 @@ function formatDate(timeMs: number): string {
         MatFormFieldModule,
         MatListModule,
         MatSelectModule,
+        MatProgressBarModule,
         MatProgressSpinnerModule,
         MatSlideToggleModule,
         RasterLegendViewComponent,
@@ -782,6 +812,12 @@ export class LayersComponent {
                 untracked(() => this.applySelectedPreset());
             }
         });
+        // the date is the start of its time step, so the date field, the strip and the map show the same, e.g. after
+        // switching from daily to yearly data
+        effect(() => {
+            const start = this.footprintsService.selectedStepStart();
+            if (start !== undefined) untracked(() => void this.projectService.setTime(new Time(start)));
+        });
     }
 
     /** Shows a preset, or no imagery. Then the default preset is selected, whose dates and availability the panel names. */
@@ -815,12 +851,13 @@ export class LayersComponent {
 
     /**
      * The nearest date with scenes. Without one in the loaded dates, the first date beyond them, whose dates load then.
-     * One time step where the data source cannot tell its dates.
+     * One time step where the data source cannot tell its dates. Nowhere later once the selected date reaches today.
      */
-    private jump(direction: 1 | -1): {time: Time; label: string} | undefined {
+    private jump(direction: 1 | -1): {time?: Time; label: string} | undefined {
         const time = this.currentTime();
         const timeStep = this.footprintsService.timeStep();
         if (!time || !timeStep) return undefined;
+        if (direction === 1 && !this.footprintsService.canGoLater()) return {label: 'No later dates'};
 
         const withData = this.footprintsService.dateWithData(direction);
         if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
@@ -834,8 +871,8 @@ export class LayersComponent {
     }
 
     private async stepTime(direction: 1 | -1): Promise<void> {
-        const jump = this.jump(direction);
-        if (jump) await this.projectService.setTime(jump.time);
+        const target = this.jump(direction)?.time;
+        if (target) await this.projectService.setTime(target);
     }
 
     async selectTime(start: number): Promise<void> {

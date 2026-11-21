@@ -45,6 +45,16 @@ export function calendarStartView(unit: string | undefined): MatCalendarView {
     return 'month';
 }
 
+/**
+ * Whether a calendar day can be picked: unless every loaded time step that overlaps it is empty. A day can hold
+ * several steps, e.g. of hourly data, and one with data is enough. A day without loaded steps may have data.
+ */
+export function canPickDate(steps: ReadonlyArray<TimeStepFootprint>, date: Date): boolean {
+    const day = calendarCellRange(date, 'month');
+    const overlapping = steps.filter((step) => step.time.start < day.end && day.start < step.time.end);
+    return overlapping.length === 0 || overlapping.some((step) => step.status !== TimeStepFootprintStatus.Empty);
+}
+
 /** The time step containing `timeMs`, or starting there for instants. */
 export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number): TimeStepFootprint | undefined {
     return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);
@@ -88,6 +98,11 @@ function stepLevel(unit: string | undefined): number {
     if (unit === 'month' || unit === 'months') return 1;
     if (unit === 'day' || unit === 'days' || unit === undefined) return 0;
     return -1;
+}
+
+/** Whether a month holds several time steps of this unit, e.g. days or hours, and not one step or a part of one. */
+export function isShorterThanMonth(unit: string | undefined): boolean {
+    return stepLevel(unit) < 1;
 }
 
 /**

@@ -70,6 +70,7 @@ describe('EOdyssey debug reprojection', () => {
                         timeStepOverride: signal(undefined),
                         overlayVisible: signal(false),
                         overlayTooLarge: signal(false),
+                        selectedDateEmpty: signal(false),
                     },
                 },
                 {
@@ -193,6 +194,20 @@ describe('EOdyssey debug reprojection', () => {
         fixture.detectChanges();
 
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+    });
+
+    it('loads no tiles and says so while the date of the layer on the map has certainly no scenes in the view', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const isVisible = (): unknown => fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['isVisible'];
+        expect(isVisible()).toBe(true);
+        expect(element.querySelector('.zoom-prompt')).toBeNull();
+
+        (TestBed.inject(FootprintsService).selectedDateEmpty as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+
+        expect(isVisible()).toBe(false);
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
     });
 
     it('asks to zoom in on the map when the availability is shown where the tiles of the layer do not load', () => {

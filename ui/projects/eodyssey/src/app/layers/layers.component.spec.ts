@@ -159,9 +159,12 @@ describe('LayersComponent', () => {
                         dateFilter: (): boolean => true,
                         dateWithData: vi.fn(),
                         dateBeyondLoaded: vi.fn(),
+                        canGoLater: vi.fn().mockReturnValue(true),
                         stepsAround: vi.fn().mockReturnValue([]),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
+                        datesStale: signal(false),
+                        selectedStepStart: signal(undefined),
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
@@ -346,7 +349,11 @@ describe('LayersComponent', () => {
             datesNeeded: WritableSignal<boolean>;
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
+            canGoLater: Mock;
             stepsAround: Mock;
+            isLoading: WritableSignal<boolean>;
+            datesStale: WritableSignal<boolean>;
+            selectedStepStart: WritableSignal<number | undefined>;
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
@@ -413,6 +420,40 @@ describe('LayersComponent', () => {
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 1)));
         });
 
+        it('keeps the place of the strip while the dates load, so the panel does not move', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+
+            // the first dates of a layer load: an empty strip with a bar, and the line below it keeps its height
+            footprints().isLoading.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('.date-strip')).not.toBeNull();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(0);
+            expect(element.querySelector('.date-strip .strip-loading')).not.toBeNull();
+            expect(element.querySelector('.strip-range')?.textContent?.trim()).toBe('');
+            expect(element.querySelector('.date-strip')?.getAttribute('aria-busy')).toBe('true');
+
+            // the dates of an earlier view stay, faded, while those of a moved view load
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().datesStale.set(true);
+            // the strip is computed from signals, which the mocked `stepsAround` is not
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip.strip-stale')).not.toBeNull();
+
+            footprints().isLoading.set(false);
+            footprints().datesStale.set(false);
+            fixture.detectChanges();
+            expect(element.querySelector('.strip-loading')).toBeNull();
+            expect(element.querySelector('.strip-stale')).toBeNull();
+        });
+
         it('names where the buttons below the date go', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
             const label = (name: string): string =>
@@ -438,6 +479,34 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 2, 31)));
+        });
+
+        it('offers no later date once the selected one reaches today', async () => {
+            footprints().canGoLater.mockReturnValue(false);
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const forward = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.time-forward');
+            expect(forward?.textContent?.replace(/navigate_\w+/, '').trim()).toBe('No later dates');
+            expect(forward?.disabled).toBe(true);
+            setTime.mockClear();
+            await fixture.componentInstance.timeForward();
+            expect(setTime).not.toHaveBeenCalled();
+            // backwards still goes on
+            expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.time-backwards')?.disabled).toBe(false);
+        });
+
+        it('moves the date to the start of its time step, e.g. after switching to yearly data', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            setTime.mockClear();
+
+            footprints().selectedStepStart.set(Date.UTC(2026, 0, 1));
+            TestBed.tick();
+
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 0, 1)));
         });
 
         it('goes to the next date with data', async () => {
