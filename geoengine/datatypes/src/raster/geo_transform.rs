@@ -15,6 +15,10 @@ use typed_floats::tf64;
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
+/// The largest distance, in pixels, at which [`GeoTransform::is_valid_pixel_edge`] still accepts a coordinate as a
+/// pixel edge.
+pub const PIXEL_EDGE_TOLERANCE: f64 = 1e-6;
+
 /// The `GeoTransform` specifies the relation between pixel coordinates and geographic coordinates.
 /// The pixel sizes are always finite and non-zero, which is enforced by their type.
 /// Usually, the x pixel size is positive and the y pixel size is negative, but upside-down datasets
@@ -339,13 +343,23 @@ impl GeoTransform {
         dist
     }
 
-    /// `coordinate` is a valid pixel edge if it is approximately equal to the nearest pixel edge, within floating point precision
+    /// `coordinate` is a valid pixel edge if it is approximately equal to the nearest pixel edge, within floating point
+    /// precision or within [`PIXEL_EDGE_TOLERANCE`] pixels.
+    ///
+    /// The pixel tolerance covers grids whose pixel sizes differ in the last bits, e.g. when GDAL derives them from
+    /// the coordinate vectors of `NetCDF` files: over thousands of pixels, the edges then drift apart by far more than
+    /// the floating point precision of the coordinates, but by far less than a pixel.
     pub fn is_valid_pixel_edge(&self, coordinate: Coordinate2D) -> bool {
         let edge = self.nearest_pixel_edge(coordinate);
         let edge_coord = self.grid_idx_to_pixel_upper_left_coordinate_2d(edge);
         // compare x and y separately to account for difference in magnitude
+        let is_edge = |value: f64, edge: f64, pixel_size: f64| {
+            approx_eq!(f64, value, edge)
+                || (value - edge).abs() <= pixel_size.abs() * PIXEL_EDGE_TOLERANCE
+        };
 
-        approx_eq!(f64, coordinate.x, edge_coord.x) && approx_eq!(f64, coordinate.y, edge_coord.y)
+        is_edge(coordinate.x, edge_coord.x, self.x_pixel_size().get())
+            && is_edge(coordinate.y, edge_coord.y, self.y_pixel_size().get())
     }
 
     pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
@@ -705,6 +719,25 @@ mod tests {
         assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
             10_000_000_000_000_000_f64.next_up(),
             -10_000_000_000_000_000_f64.next_up()
+        )));
+    }
+
+    #[test]
+    fn it_accepts_pixel_edges_of_grids_whose_pixel_sizes_differ_in_the_last_bit() {
+        // Sentinel-3 SYN NetCDF files: GDAL derives the pixel size from the coordinate vectors, so the files of
+        // different regions of the same 1/112 degree grid differ in the last bit of the pixel size
+        let asian_islands = GeoTransform::new_unchecked(
+            (92.004_464_285_701_19, 28.995_535_714_287_925).into(),
+            0.008_928_571_428_571_001,
+            -0.008_928_571_428_571,
+        );
+        let europe_origin = Coordinate2D::new(-10.995_535_714_293_83, 75.004_464_285_714_29);
+        assert!(asian_islands.is_valid_pixel_edge(europe_origin));
+
+        // a coordinate a thousandth of a pixel off the grid is still no pixel edge
+        assert!(!asian_islands.is_valid_pixel_edge(Coordinate2D::new(
+            europe_origin.x + 0.008_928_571_428_571 * 1e-3,
+            europe_origin.y
         )));
     }
 }
