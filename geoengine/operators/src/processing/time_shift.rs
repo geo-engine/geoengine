@@ -588,6 +588,30 @@ where
 
         Ok(stream)
     }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let (time_interval, state) = self.shift.shift(query.time_interval())?;
+        let stream = self
+            .processor
+            .footprint_query(query.select_time_interval(time_interval), precision, ctx)
+            .await?;
+
+        Ok(stream
+            .map(move |footprint| {
+                footprint.and_then(|footprint| {
+                    Ok(crate::engine::Footprint {
+                        time: self.shift.reverse_shift(footprint.time, state)?,
+                        bounds: footprint.bounds,
+                    })
+                })
+            })
+            .boxed())
+    }
 }
 
 #[cfg(test)]
@@ -1327,5 +1351,30 @@ mod tests {
 
         let reverse_shifted = f_shift.reverse_shift(expected_shift, state).unwrap();
         assert_eq!(reverse_shifted, time);
+    }
+}
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn time_shift_answers_with_the_output_times() {
+        let shifted = RasterOperator::typed(TimeShift {
+            params: TimeShiftParams::Relative {
+                granularity: TimeGranularity::Millis,
+                value: 5,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: stack_inputs().remove(0).into(),
+            },
+        });
+
+        // shifted by one step, the query of [0, 5) reads the empty input step [5, 10)
+        let footprints = checked_footprints(shifted, &[0]).await;
+
+        assert_eq!(footprints[0].time, TimeInterval::new_unchecked(0, 5));
+        assert!(footprints[0].bounds.is_empty());
     }
 }

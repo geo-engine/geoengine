@@ -62,6 +62,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
+    query_ctx_footprint_boxes_per_step_limit: usize,
     task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
@@ -105,6 +106,11 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    /// The most boxes a footprint keeps for one time step, from `[query_context]`.
+    fn footprint_boxes_per_step_limit() -> Result<usize> {
+        Ok(get_config_element::<crate::config::QueryContext>()?.footprint_boxes_per_step_limit)
+    }
+
     pub async fn new_with_context_spec(
         ContextSpec {
             config,
@@ -160,6 +166,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
             oidc_manager,
             quota,
             pool,
@@ -233,6 +240,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
+            query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
             oidc_manager: oidc_db,
             quota,
             pool,
@@ -321,6 +329,7 @@ where
             thread_pool: create_rayon_thread_pool(rayon_threads),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
             oidc_manager: OidcManager::from(oidc_config),
             quota,
             pool,
@@ -589,7 +598,8 @@ where
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
             self.context.gdal_read_ahead,
             self.context.processing_runtime.clone(),
-        ))
+        )
+        .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit))
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {

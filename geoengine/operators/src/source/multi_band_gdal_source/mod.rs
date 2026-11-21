@@ -1,7 +1,8 @@
 use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, ProcessingGraphOperatorPath,
-    QueryContext, QueryProcessor, SpatialGridDescriptor, TypedRasterOperator,
+    CanonicOperatorName, Footprint, FootprintBounds, FootprintPrecision, MetaData, OperatorData,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, SpatialGridDescriptor,
+    TypedRasterOperator,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
@@ -26,8 +27,8 @@ use geoengine_datatypes::{
         SpatialResolution, TimeInterval,
     },
     raster::{
-        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
-        TilingSpatialGridDefinition, TilingSpecification,
+        GridBoundingBox2D, GridIntersection, Pixel, RasterDataType, RasterTile2D,
+        SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
     },
 };
 
@@ -90,13 +91,24 @@ type MultiBandGdalMetaData = Box<
         >,
 >;
 
-/// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request tiles that are anchored in coordinates space.
-/// Additionaly you can also specify to fetch tiles (with gdal params).
-/// Set `fetch_tiles` to false if you only want to access the time steps.
+/// What a caller needs to know about the data of a loading-info query, from least to most.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoadingInfoDetail {
+    /// Only the time steps, without files.
+    TimeSteps,
+    /// For each time step whether it has data. A provider that can tell without the files
+    /// answers with [`MultiBandGdalLoadingInfo::has_data`] and no files, others with the files.
+    Availability,
+    /// The files to read.
+    Files,
+}
+
+/// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request
+/// tiles that are anchored in coordinates space.
 #[derive(Clone, Debug)]
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-    pub fetch_tiles: bool,
+    pub detail: LoadingInfoDetail,
     /// The resolution the source produces its tiles in: the native resolution or an
     /// overview level.
     ///
@@ -120,22 +132,21 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         spatial_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
-        fetch_tiles: bool,
+        detail: LoadingInfoDetail,
     ) -> Self {
-        Self {
-            query_rectangle: QueryRectangle::new(spatial_bounds, time_interval, attributes),
-            fetch_tiles,
-            resolution: LoadingInfoResolution::Native,
-        }
+        Self::with_query_rectangle(
+            QueryRectangle::new(spatial_bounds, time_interval, attributes),
+            detail,
+        )
     }
 
     pub fn with_query_rectangle(
         query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-        fetch_tiles: bool,
+        detail: LoadingInfoDetail,
     ) -> Self {
         Self {
             query_rectangle,
-            fetch_tiles,
+            detail,
             resolution: LoadingInfoResolution::Native,
         }
     }
@@ -152,14 +163,14 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
     resolution: LoadingInfoResolution,
-    fetch_tiles: bool,
+    detail: LoadingInfoDetail,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
     MultiBandGdalLoadingInfoQueryRectangle::new(
         tiling_geo_transform.grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
-        fetch_tiles,
+        detail,
     )
     .with_resolution(resolution)
 }
@@ -265,7 +276,7 @@ where
                 &query,
                 produced_tiling_grid,
                 self.loading_info_resolution(),
-                true,
+                LoadingInfoDetail::Files,
             ))
             .await?;
         if let Some(loading_info_start) = loading_info_start {
@@ -345,7 +356,7 @@ where
             &query,
             produced_tiling_grid,
             LoadingInfoResolution::Native,
-            false,
+            LoadingInfoDetail::TimeSteps,
         );
 
         let loading_info = self.meta_data.loading_info(qrect).await?;
@@ -355,6 +366,62 @@ where
         let stream = stream::iter(time_steps).map(Result::Ok).boxed();
 
         Ok(stream)
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        let max_boxes = ctx.footprint_boxes_per_step_limit();
+        let tiling_grid = self
+            .result_descriptor()
+            .spatial_grid
+            .tiling_grid_definition(self.tiling_specification);
+        let geo_transform = tiling_grid.tiling_geo_transform();
+        let query_bounds = query.spatial_bounds();
+        let bands = query.attributes().clone().as_vec();
+
+        let detail = match precision {
+            FootprintPrecision::Availability => LoadingInfoDetail::Availability,
+            FootprintPrecision::Coverage => LoadingInfoDetail::Files,
+        };
+        let loading_info_query = raster_query_rectangle_to_loading_info_query_rectangle(
+            &query,
+            tiling_grid,
+            LoadingInfoResolution::Native,
+            detail,
+        );
+        let loading_info = self.meta_data.loading_info(loading_info_query).await?;
+
+        let footprints = loading_info
+            .time_steps()
+            .iter()
+            .enumerate()
+            .map(|(i, &time)| {
+                // A provider may tell whether a step has data without its files. Then the whole
+                // query is the box of a step with data.
+                let bounds = match loading_info.has_data(i) {
+                    Some(true) => FootprintBounds::from_boxes([query_bounds], max_boxes),
+                    Some(false) => FootprintBounds::empty(),
+                    None => FootprintBounds::from_boxes(
+                        loading_info
+                            .file_bounds(time, &bands)
+                            .filter_map(|partition| {
+                                geo_transform
+                                    .spatial_to_grid_bounds(&partition)
+                                    .intersection(&query_bounds)
+                            }),
+                        max_boxes,
+                    ),
+                };
+
+                Ok(Footprint { time, bounds })
+            })
+            .collect::<Vec<Result<Footprint>>>();
+
+        Ok(stream::iter(footprints).boxed())
     }
 }
 
@@ -1059,6 +1126,253 @@ mod tests {
                     .unwrap()
             })
             .collect()
+    }
+
+    /// A provider with steps of 10 and no files.
+    #[derive(Debug, Clone)]
+    struct StepsMetaData {
+        result_descriptor: RasterResultDescriptor,
+    }
+
+    const STEP_MS: i64 = 10;
+
+    #[async_trait::async_trait]
+    impl
+        MetaData<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > for StepsMetaData
+    {
+        async fn loading_info(
+            &self,
+            query: MultiBandGdalLoadingInfoQueryRectangle,
+        ) -> Result<MultiBandGdalLoadingInfo> {
+            let time = query.query_rectangle.time_interval();
+
+            let first = time.start().inner().div_euclid(STEP_MS);
+            let last = (time.end().inner() - 1).div_euclid(STEP_MS);
+            let steps = (first..=last)
+                .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+
+            // answers an availability query without files, with data in every second step
+            let has_data = (query.detail == LoadingInfoDetail::Availability)
+                .then(|| (first..=last).map(|i| i % 2 == 0).collect::<Vec<_>>());
+            let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None);
+            match has_data {
+                Some(has_data) => info.with_availability(has_data),
+                None => Ok(info),
+            }
+        }
+
+        async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+            Ok(self.result_descriptor.clone())
+        }
+
+        fn box_clone(
+            &self,
+        ) -> Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        > {
+            Box::new(self.clone())
+        }
+    }
+
+    /// A source on the fake provider and the context to query it with.
+    async fn steps_source() -> Result<(
+        crate::engine::BoxRasterQueryProcessor<u16>,
+        crate::engine::MockQueryContext,
+    )> {
+        let mut execution_context = MockExecutionContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U16,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(None),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
+                GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+            ),
+            bands: vec![RasterBandDescriptor::new(
+                "band 0".to_string(),
+                Measurement::Unitless,
+            )]
+            .try_into()
+            .unwrap(),
+        };
+        let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("steps");
+        let meta: MultiBandGdalMetaData = Box::new(StepsMetaData { result_descriptor });
+        execution_context.add_meta_data(id, name.clone(), meta);
+
+        let processor = MultiBandGdalSource {
+            params: GdalSourceParameters::new(name),
+        }
+        .typed()
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
+        .await?
+        .query_processor()?
+        .get_u16()
+        .unwrap();
+
+        Ok((processor, query_ctx))
+    }
+
+    fn ten_steps_query() -> RasterQueryRectangle {
+        RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+            TimeInterval::new(0, 10 * STEP_MS).unwrap(),
+            BandSelection::first(),
+        )
+    }
+
+    #[tokio::test]
+    async fn availability_gives_the_query_bounds_to_steps_with_data() -> Result<()> {
+        let (processor, query_ctx) = steps_source().await?;
+        let query = ten_steps_query();
+
+        let footprints: Vec<Footprint> = processor
+            .footprint_query(query.clone(), FootprintPrecision::Availability, &query_ctx)
+            .await?
+            .try_collect()
+            .await?;
+
+        // the fake provider says that every second step has data
+        assert_eq!(footprints.len(), 10);
+        for (i, footprint) in footprints.iter().enumerate() {
+            let expected = if i % 2 == 0 {
+                FootprintBounds::from_boxes(
+                    [query.spatial_bounds()],
+                    crate::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+                )
+            } else {
+                FootprintBounds::empty()
+            };
+            assert_eq!(footprint.bounds, expected, "step {i}");
+        }
+
+        // with boxes asked for, the fake provider does not tell and has no files
+        let footprints: Vec<Footprint> = processor
+            .footprint_query(query, FootprintPrecision::Coverage, &query_ctx)
+            .await?
+            .try_collect()
+            .await?;
+        assert!(
+            footprints
+                .iter()
+                .all(|footprint| footprint.bounds.is_empty())
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn footprints_cover_the_loaded_tiles_and_tell_empty_steps_and_bands() -> Result<()> {
+        let mut execution_context = MockExecutionContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
+
+        let january = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+        let february = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-03-01T00:00:00Z").unwrap(),
+        );
+
+        let files = tiles_by_file_name(&["2025-01-01_tile_x0_y0_b0.tif"]);
+        let partition = files[0].spatial_partition;
+        let dataset_name =
+            add_multi_tile_dataset(&mut execution_context, files, vec![january, february]);
+
+        let processor = MultiBandGdalSource {
+            params: GdalSourceParameters::new(dataset_name),
+        }
+        .typed()
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
+        .await?
+        .query_processor()?;
+
+        let tiling_grid = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(execution_context.tiling_specification());
+        let geo_transform = tiling_grid.tiling_geo_transform();
+        let query_bounds = tiling_grid
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ))
+            .grid_bounds();
+        let query = |band: u32| {
+            RasterQueryRectangle::new(
+                query_bounds,
+                TimeInterval::new_unchecked(january.start(), february.end()),
+                BandSelection::new(vec![band]).unwrap(),
+            )
+        };
+
+        let processor = processor.get_u16().unwrap();
+
+        let footprints: Vec<Footprint> = processor
+            .footprint_query(query(0), FootprintPrecision::Coverage, &query_ctx)
+            .await?
+            .try_collect()
+            .await?;
+
+        assert_eq!(
+            footprints,
+            [
+                Footprint {
+                    time: january,
+                    bounds: FootprintBounds::from_boxes(
+                        [geo_transform.spatial_to_grid_bounds(&partition)],
+                        crate::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+                    ),
+                },
+                Footprint {
+                    time: february,
+                    bounds: FootprintBounds::empty(),
+                },
+            ]
+        );
+
+        let tiles: Vec<_> = processor
+            .query(query(0), &query_ctx)
+            .await?
+            .try_collect()
+            .await?;
+        let valid_tiles = tiles.iter().filter(|tile| !tile.is_empty());
+        assert!(valid_tiles.clone().next().is_some());
+        for tile in valid_tiles {
+            assert_eq!(tile.time, january);
+            assert!(
+                footprints[0]
+                    .bounds
+                    .intersects(&tile.tile_information().global_pixel_bounds())
+            );
+        }
+
+        let other_band: Vec<Footprint> = processor
+            .footprint_query(query(1), FootprintPrecision::Coverage, &query_ctx)
+            .await?
+            .try_collect()
+            .await?;
+        assert!(other_band.iter().all(|step| step.bounds.is_empty()));
+
+        Ok(())
     }
 
     #[tokio::test]
