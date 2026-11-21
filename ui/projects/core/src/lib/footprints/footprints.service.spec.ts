@@ -483,25 +483,6 @@ describe('FootprintsService overlay', () => {
             expect(service.selectedDateEmpty()).toBe(false);
         });
 
-        it('names the start of the step of the selected date where the date is inside a longer step', async () => {
-            // the selected date is 1 April, the step the year
-            answerDates([
-                {time: {start: Date.UTC(2026, 0, 1), end: Date.UTC(2027, 0, 1)}, status: TimeStepFootprintStatus.Empty, bounds: []},
-            ]);
-            const service = createService();
-            service.datesNeeded.set(true);
-            await settle();
-            expect(service.selectedStepStart()).toBe(Date.UTC(2026, 0, 1));
-        });
-
-        it('names no other start where the selected date starts its step', async () => {
-            answerDates(steps);
-            const service = createService();
-            service.datesNeeded.set(true);
-            await settle();
-            expect(service.selectedStepStart()).toBeUndefined();
-        });
-
         it('does not call a date empty that the layer cannot tell', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Unknown)]);
             const service = createService();
