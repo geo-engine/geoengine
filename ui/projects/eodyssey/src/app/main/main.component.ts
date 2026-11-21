@@ -98,8 +98,7 @@ export class MainComponent {
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     /**
      * The layer on the map, or the selected one hidden while nothing or the data availability is shown. A hidden layer loads no tiles, but tells
-     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out. The layer on the map is hidden too
-     * while its date certainly has no scenes in the view, whose tiles would all be empty.
+     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out.
      */
     readonly tileLayer = computed(() => {
         const onMap = this.mapTileLayer();
@@ -107,7 +106,7 @@ export class MainComponent {
             return {
                 ...onMap,
                 minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(),
-                isVisible: !this.footprintsService.selectedDateEmpty(),
+                isVisible: true,
             };
         }
         const preset = this.eodysseyLayerService.selectedPreset();

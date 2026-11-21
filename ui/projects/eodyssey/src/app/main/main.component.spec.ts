@@ -196,7 +196,7 @@ describe('EOdyssey debug reprojection', () => {
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
     });
 
-    it('loads no tiles and says so while the date of the layer on the map has certainly no scenes in the view', () => {
+    it('says so while the date of the layer on the map has certainly no scenes in the view, and still loads its tiles', () => {
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
         const isVisible = (): unknown => fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['isVisible'];
@@ -206,7 +206,7 @@ describe('EOdyssey debug reprojection', () => {
         (TestBed.inject(FootprintsService).selectedDateEmpty as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
 
-        expect(isVisible()).toBe(false);
+        expect(isVisible()).toBe(true);
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
     });
 
