@@ -2220,7 +2220,8 @@ mod tests {
         const FACTOR: isize = 6;
         const FILE_SIZE: isize = DATASET_SIZE / FACTOR;
         const LEVEL: isize = 8;
-        const TILE_SIZE: isize = 16;
+        // tiles of 64 dataset pixels, so tile edges cut file pixels of 6 dataset pixels
+        const TILE_SIZE: isize = 8;
 
         let temp_dir = tempfile::tempdir().unwrap();
         let time_interval = TimeInterval::new_unchecked(
@@ -2236,8 +2237,9 @@ mod tests {
         );
 
         let mut failures = Vec::new();
-        // an origin aligned to the tiles, and one that is not
-        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9)] {
+        // an origin aligned to the tiles, and two that are not: (5, -13) lies where the level pixel
+        // under the tile pixel centers differs from the one the tile pixel starts in
+        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9), (5, -13)] {
             let file_path = temp_dir
                 .path()
                 .join(format!("coarser_{origin_x}_{origin_y}.tif"));
@@ -2322,38 +2324,51 @@ mod tests {
                 ),
                 overview_level: std::num::NonZeroUsize::new(LEVEL as usize).unwrap(),
             });
-            let tile_info = TileInformation::new(
-                [0, 0].into(),
-                GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
-                GeoTransform::new_unchecked((0.0, 0.0).into(), LEVEL as f64, -LEVEL as f64),
-            );
-            let tile = assemble_tile::<u16>(
-                MultiBandGdalLoadingInfo::new(vec![time_interval], vec![file], None).tile_plan(
-                    time_interval,
-                    tile_info,
-                    0,
-                    CacheTtlSeconds::new(0),
-                ),
-                reader_mode,
-                &gpp.get_gdal_worker(),
-                None,
-            )
-            .await
-            .unwrap();
-
             // tile pixels that lie completely inside the file
             let x_min = -(-origin_x).div_euclid(LEVEL);
             let x_max = (origin_x + DATASET_SIZE).div_euclid(LEVEL) - 1;
             let y_min = -origin_y.div_euclid(LEVEL);
             let y_max = (DATASET_SIZE - origin_y).div_euclid(LEVEL) - 1;
-            for y in y_min..=y_max {
-                for x in x_min..=x_max {
-                    // the file pixel under the tile pixel's center
-                    let expected_col = (x * LEVEL + LEVEL / 2 - origin_x).div_euclid(FACTOR);
-                    let expected_row = (origin_y + y * LEVEL + LEVEL / 2).div_euclid(FACTOR);
-                    let Some(value) = tile
-                        .grid_array
-                        .get_at_grid_index_unchecked(GridIdx2D::new_y_x(y, x))
+            // Overview reads assign the file's level pixels, which start at the file's first
+            // pixel, to tile pixels with a constant integer shift: each tile pixel takes the level
+            // pixel under its center. A coarser file must give the file pixel under the center of
+            // the same dataset pixels.
+            let shift_x = (origin_x + LEVEL / 2 - 1).div_euclid(LEVEL);
+            let shift_y = (-origin_y + LEVEL / 2 - 1).div_euclid(LEVEL);
+            // several tiles, so that tile edges cut file pixels
+            for (tile_y, tile_x) in itertools::iproduct!(
+                y_min.div_euclid(TILE_SIZE)..=y_max.div_euclid(TILE_SIZE),
+                x_min.div_euclid(TILE_SIZE)..=x_max.div_euclid(TILE_SIZE)
+            ) {
+                let tile_info = TileInformation::new(
+                    [tile_y, tile_x].into(),
+                    GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
+                    GeoTransform::new_unchecked((0.0, 0.0).into(), LEVEL as f64, -LEVEL as f64),
+                );
+                let tile = assemble_tile::<u16>(
+                    MultiBandGdalLoadingInfo::new(vec![time_interval], vec![file.clone()], None)
+                        .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
+                    reader_mode,
+                    &gpp.get_gdal_worker(),
+                    None,
+                )
+                .await
+                .unwrap();
+
+                // the tile's pixels that lie completely inside the file
+                let (tile_y_min, tile_x_min) = (tile_y * TILE_SIZE, tile_x * TILE_SIZE);
+                for (y, x) in itertools::iproduct!(
+                    y_min.max(tile_y_min)..=y_max.min(tile_y_min + TILE_SIZE - 1),
+                    x_min.max(tile_x_min)..=x_max.min(tile_x_min + TILE_SIZE - 1)
+                ) {
+                    let expected_col = ((x - shift_x) * LEVEL + LEVEL / 2).div_euclid(FACTOR);
+                    let expected_row = ((y - shift_y) * LEVEL + LEVEL / 2).div_euclid(FACTOR);
+                    let Some(value) =
+                        tile.grid_array
+                            .get_at_grid_index_unchecked(GridIdx2D::new_y_x(
+                                y - tile_y_min,
+                                x - tile_x_min,
+                            ))
                     else {
                         failures.push(format!(
                             "origin ({origin_x}, {origin_y}): no data at ({y}, {x})"
@@ -2362,8 +2377,7 @@ mod tests {
                     };
                     let row = ((value as isize) - 1).div_euclid(FILE_SIZE);
                     let col = ((value as isize) - 1).rem_euclid(FILE_SIZE);
-                    // rounding the read window to file pixels moves it by less than one file pixel
-                    if (row - expected_row).abs() > 1 || (col - expected_col).abs() > 1 {
+                    if (row, col) != (expected_row, expected_col) {
                         failures.push(format!(
                             "origin ({origin_x}, {origin_y}): file pixel ({row}, {col}) at ({y}, {x}), expected ({expected_row}, {expected_col})"
                         ));

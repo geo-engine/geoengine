@@ -5,7 +5,9 @@ use geoengine_datatypes::raster::{
 use std::num::NonZeroUsize;
 use tracing::trace;
 
-use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
+use crate::source::gdal_worker_process::process_common::{
+    GdalReadAdvise, GdalReadWindow, SubpixelWindow,
+};
 
 #[derive(Copy, Clone, Debug)]
 pub struct ReaderState {
@@ -266,18 +268,14 @@ impl OverviewReaderState {
 
         // the read window refers to the actual file, so we need to reverse the y-axis if it is flipped
         let window_start_y = if flip_y {
-            file_size_y - (axis_y.window_start + axis_y.window_size as isize)
+            file_size_y - (axis_y.window_start + axis_y.window_size.get() as isize)
         } else {
             axis_y.window_start
         };
 
         let read_window = coarsen_read_window(
-            GdalReadWindow {
-                start_x: axis_x.window_start,
-                start_y: window_start_y,
-                size_x: axis_x.window_size,
-                size_y: axis_y.window_size,
-            },
+            [axis_x.window_start, window_start_y],
+            [axis_x.window_size, axis_y.window_size],
             coarseness,
         );
 
@@ -388,24 +386,37 @@ fn refine_grid(
     ))
 }
 
-/// Turns a read window in pixels `factor` times finer than the file into the file's pixels.
-/// The window grows to whole file pixels, so its edges move by less than one file pixel.
-fn coarsen_read_window(window: GdalReadWindow, factor: NonZeroUsize) -> GdalReadWindow {
-    if factor.get() == 1 {
-        return window;
-    }
+/// Turns a read window (`[x, y]` start and size) in pixels `factor` times finer than the file
+/// into the file's pixels. The window grows to whole file pixels, so its edges move by less than
+/// one file pixel; the exact window is kept as its [`SubpixelWindow`].
+fn coarsen_read_window(
+    [start_x, start_y]: [isize; 2],
+    [size_x, size_y]: [NonZeroUsize; 2],
+    factor: NonZeroUsize,
+) -> GdalReadWindow {
     let factor_isize = factor.get() as isize;
-    let start_x = window.start_x.div_euclid(factor_isize);
-    let start_y = window.start_y.div_euclid(factor_isize);
-    let end_x =
-        (window.start_x + window.size_x as isize + factor_isize - 1).div_euclid(factor_isize);
-    let end_y =
-        (window.start_y + window.size_y as isize + factor_isize - 1).div_euclid(factor_isize);
+    let end_x = start_x + size_x.get() as isize;
+    let end_y = start_y + size_y.get() as isize;
+    let file_start_x = start_x.div_euclid(factor_isize);
+    let file_start_y = start_y.div_euclid(factor_isize);
+    let file_end_x = (end_x + factor_isize - 1).div_euclid(factor_isize);
+    let file_end_y = (end_y + factor_isize - 1).div_euclid(factor_isize);
+    // the exact window, unless it already lies on whole file pixels
+    let aligned = [start_x, start_y, end_x, end_y]
+        .iter()
+        .all(|edge| edge.rem_euclid(factor_isize) == 0);
     GdalReadWindow {
-        start_x,
-        start_y,
-        size_x: (end_x - start_x) as usize,
-        size_y: (end_y - start_y) as usize,
+        start_x: file_start_x,
+        start_y: file_start_y,
+        size_x: (file_end_x - file_start_x) as usize,
+        size_y: (file_end_y - file_start_y) as usize,
+        subpixel: (!aligned).then_some(SubpixelWindow {
+            start_x,
+            start_y,
+            size_x,
+            size_y,
+            divisor: factor,
+        }),
     }
 }
 
@@ -421,7 +432,7 @@ struct OverviewAxisReadAdvise {
     /// start of the read window in original resolution pixels of the file
     window_start: isize,
     /// size of the read window in original resolution pixels of the file
-    window_size: usize,
+    window_size: NonZeroUsize,
     /// inclusive bounds of the filled tile pixels in tile grid pixels
     target_bounds: [isize; 2],
 }
@@ -458,10 +469,14 @@ impl OverviewAxisReadAdvise {
 
         let window_start = (phase + first_overview_pixel * overview_level).max(0);
         let window_end = (phase + (last_overview_pixel + 1) * overview_level).min(file_size);
+        // not empty if the readable pixels lie inside the file
+        let window_size = usize::try_from(window_end - window_start)
+            .ok()
+            .and_then(NonZeroUsize::new)?;
 
         Some(Self {
             window_start,
-            window_size: (window_end - window_start) as usize,
+            window_size,
             target_bounds: [first_overview_pixel + shift, last_overview_pixel + shift],
         })
     }
@@ -524,6 +539,7 @@ mod tests {
                 start_y: 0,
                 size_x: 512,
                 size_y: 512,
+                subpixel: None,
             },
         );
 
@@ -570,6 +586,7 @@ mod tests {
                 start_y: 90,
                 size_x: 180,
                 size_y: 90,
+                subpixel: None,
             },
         );
 
@@ -617,6 +634,7 @@ mod tests {
                 start_y: 100,
                 size_x: 170,
                 size_y: 80,
+                subpixel: None,
             },
         );
 
@@ -668,6 +686,7 @@ mod tests {
                 start_y: 0,
                 size_x: 180,
                 size_y: 90,
+                subpixel: None,
             },
         );
 
@@ -715,6 +734,7 @@ mod tests {
                 start_y: 0,
                 size_x: 1024,
                 size_y: 1024,
+                subpixel: None,
             },
         );
 
@@ -762,6 +782,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048,
                 size_y: 2048,
+                subpixel: None,
             },
         );
 
@@ -814,7 +835,8 @@ mod tests {
         let first = reader_state
             .tiling_to_dataset_read_advise(&coarser_file, &tile(0))
             .unwrap();
-        // 512 tile pixels are 4096 dataset pixels, i.e. 682 2/3 file pixels, rounded up
+        // 512 tile pixels are 4096 dataset pixels, i.e. 682 2/3 file pixels: the envelope is
+        // rounded up, the exact window keeps the fraction
         assert_eq!(
             first.gdal_read_widow,
             GdalReadWindow {
@@ -822,6 +844,13 @@ mod tests {
                 start_y: 0,
                 size_x: 683,
                 size_y: 683,
+                subpixel: Some(SubpixelWindow {
+                    start_x: 0,
+                    start_y: 0,
+                    size_x: NonZeroUsize::new(4096).unwrap(),
+                    size_y: NonZeroUsize::new(4096).unwrap(),
+                    divisor: NonZeroUsize::new(6).unwrap(),
+                }),
             },
         );
         assert_eq!(
@@ -840,6 +869,13 @@ mod tests {
                 start_y: 0,
                 size_x: 684,
                 size_y: 683,
+                subpixel: Some(SubpixelWindow {
+                    start_x: 4096,
+                    start_y: 0,
+                    size_x: NonZeroUsize::new(4096).unwrap(),
+                    size_y: NonZeroUsize::new(4096).unwrap(),
+                    divisor: NonZeroUsize::new(6).unwrap(),
+                }),
             },
         );
         assert_eq!(
@@ -914,6 +950,7 @@ mod tests {
                 start_y: 2048,
                 size_x: 2048,
                 size_y: 2048,
+                subpixel: None,
             },
         );
 
@@ -964,6 +1001,7 @@ mod tests {
                 start_y: 2048,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 
@@ -1016,6 +1054,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 
@@ -1063,6 +1102,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 
@@ -1138,7 +1178,7 @@ mod tests {
             let advise =
                 OverviewAxisReadAdvise::new(file_offset, 64, [0, 63], 0, 4, [-100, 100]).unwrap();
             assert_eq!(advise.target_bounds, target, "file offset {file_offset}");
-            assert_eq!((advise.window_start, advise.window_size), (0, 64));
+            assert_eq!((advise.window_start, advise.window_size.get()), (0, 64));
         }
     }
 
