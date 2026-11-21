@@ -812,6 +812,12 @@ export class LayersComponent {
                 untracked(() => this.applySelectedPreset());
             }
         });
+        // the date is the start of its time step, so the date field, the strip and the map show the same, e.g. after
+        // switching from daily to yearly data
+        effect(() => {
+            const start = this.footprintsService.selectedStepStart();
+            if (start !== undefined) untracked(() => void this.projectService.setTime(new Time(start)));
+        });
     }
 
     /** Shows a preset, or no imagery. Then the default preset is selected, whose dates and availability the panel names. */

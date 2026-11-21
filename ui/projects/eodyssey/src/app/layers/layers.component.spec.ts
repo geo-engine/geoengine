@@ -164,6 +164,7 @@ describe('LayersComponent', () => {
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
                         datesStale: signal(false),
+                        selectedStepStart: signal(undefined),
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
@@ -352,6 +353,7 @@ describe('LayersComponent', () => {
             stepsAround: Mock;
             isLoading: WritableSignal<boolean>;
             datesStale: WritableSignal<boolean>;
+            selectedStepStart: WritableSignal<number | undefined>;
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
@@ -493,6 +495,18 @@ describe('LayersComponent', () => {
             expect(setTime).not.toHaveBeenCalled();
             // backwards still goes on
             expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.time-backwards')?.disabled).toBe(false);
+        });
+
+        it('moves the date to the start of its time step, e.g. after switching to yearly data', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            setTime.mockClear();
+
+            footprints().selectedStepStart.set(Date.UTC(2026, 0, 1));
+            TestBed.tick();
+
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 0, 1)));
         });
 
         it('goes to the next date with data', async () => {

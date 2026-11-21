@@ -236,6 +236,15 @@ export class FootprintsService {
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
     readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
     /**
+     * The start of the time step of the selected date, if the date lies inside it but is not its start, e.g. 1 April
+     * in a yearly step. Only from the dates of this view, so the dates of another layer never move it.
+     */
+    readonly selectedStepStart = computed(() => {
+        const time = this.time();
+        const step = time && stepAt(this.freshSteps(), time.start.valueOf());
+        return step && step.time.start !== time.start.valueOf() ? step.time.start : undefined;
+    });
+    /**
      * The selected date certainly has no data in this view, so an app need not load its tiles. Only from the dates of
      * this view: while they load, or where the layer cannot tell, this is false and tiles load as usual.
      */
