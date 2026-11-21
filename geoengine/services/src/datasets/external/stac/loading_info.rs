@@ -31,8 +31,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, LoadingInfoDetail, LoadingInfoResolution, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoDetail, LoadingInfoPurpose, LoadingInfoResolution,
+    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -181,13 +181,9 @@ impl
             ));
         }
 
-        // A window search answers one chunk and tells where the rest starts. Map tiles read
-        // their own time step and are not split.
-        let (time_interval, next) = if query.in_parts {
-            self.first_chunk(time_interval)?
-        } else {
-            (time_interval, None)
-        };
+        // A long time range is answered one chunk at a time, and `next` tells where the rest
+        // starts. A query of one step, like a map tile's, fits into one chunk.
+        let (time_interval, next) = self.first_chunk(time_interval)?;
 
         let spatial_bounds = query.query_rectangle.spatial_bounds();
 
@@ -237,7 +233,7 @@ impl
                 .with_availability(has_data);
         }
 
-        if query.in_parts {
+        if query.purpose == LoadingInfoPurpose::Footprints {
             self.prepare_window_search(&items_url, time_interval, time_steps.len(), &cell_bboxes)
                 .await?;
         }
@@ -3391,7 +3387,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3437,7 +3433,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.time_steps().len(), 2);
@@ -3468,7 +3464,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).for_footprints())
             .await
             .unwrap();
 
@@ -3518,7 +3514,7 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3526,7 +3522,7 @@ mod grid_request_tests {
 
         // a warm window costs no request, and neither does a step it filled
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3560,7 +3556,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), interval(3)).for_footprints())
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -3616,7 +3612,7 @@ mod grid_request_tests {
         let mut answers = 0;
         while let Some(time) = rest {
             rest = meta
-                .loading_info(query(bounds(0.1, 0.4), time).in_parts())
+                .loading_info(query(bounds(0.1, 0.4), time).for_footprints())
                 .await
                 .unwrap()
                 .next();
@@ -3666,7 +3662,7 @@ mod grid_request_tests {
         .unwrap();
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window).for_footprints())
             .await
             .unwrap();
 
@@ -3734,7 +3730,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3795,7 +3791,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let info = meta
-            .loading_info(availability_query(world, window(3, 5)).in_parts())
+            .loading_info(availability_query(world, window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.has_data(1), Some(false));
@@ -3829,7 +3825,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3871,7 +3867,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3908,7 +3904,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         for _ in 0..2 {
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
                 .await
                 .unwrap();
         }
@@ -3938,8 +3934,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let (first, second) = futures::join!(
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts()),
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts()),
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
         );
         assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(
@@ -3965,7 +3961,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let result = meta
-            .loading_info(query(world, window(3, 5)).in_parts())
+            .loading_info(query(world, window(3, 5)).for_footprints())
             .await;
 
         assert!(matches!(
@@ -3997,12 +3993,12 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let one_step = meta
-            .loading_info(query(world, interval(3)).in_parts())
+            .loading_info(query(world, interval(3)).for_footprints())
             .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
         let window = meta
-            .loading_info(query(world, window(3, 5)).in_parts())
+            .loading_info(query(world, window(3, 5)).for_footprints())
             .await;
         assert!(matches!(
             window,

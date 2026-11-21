@@ -329,6 +329,7 @@ impl ConfigElement for ProcessingRuntime {
 pub struct DatasetService {
     pub list_limit: u32,
     pub json_size_limit: usize,
+    pub loading_info_part_steps: usize,
 }
 
 impl ConfigElement for DatasetService {
