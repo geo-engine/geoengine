@@ -955,16 +955,17 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
-        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            out_tiling_grid.generate_data_tiling_strategy(),
-            ctx,
-            sub_query,
-            time_stream,
-        )))
+        Ok(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
+                &self.source,
+                query,
+                out_tiling_grid.generate_data_tiling_strategy(),
+                ctx,
+                sub_query,
+            )
+            .await?
+            .box_pin(),
+        )
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

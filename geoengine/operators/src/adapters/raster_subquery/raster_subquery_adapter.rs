@@ -1,14 +1,17 @@
-use crate::engine::{QueryContext, RasterQueryProcessor};
+use crate::engine::{
+    Footprint, FootprintBounds, FootprintPrecision, QueryContext, RasterQueryProcessor,
+    unknown_footprints,
+};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::Stream;
 use futures::future::BoxFuture;
 use futures::{Future, stream::FusedStream};
 use futures::{
     FutureExt, TryFuture, TryStreamExt, ready,
     stream::{BoxStream, TryFold},
 };
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
@@ -103,16 +106,15 @@ type StateInnerType<'a, P, FoldFuture, FoldMethod, TileAccu> = StateInner<
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
 #[pin_project(project = RasterSubQueryAdapterProjection)]
-pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
+pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType>,
-    TimeStream: Stream<Item = Result<TimeInterval>>,
 {
-    /// The '`TimeStream`' providing the time steps to produce
-    #[pin]
-    time_stream: TimeStream,
+    /// The time steps to produce, each with where the source may have data. Without footprints of the
+    /// source, the time steps of the caller with unknown bounds, so no tile is skipped.
+    footprints: BoxStream<'a, Result<Footprint>>,
     /// The `RasterQueryProcessor` to answer the sub-queries
     source_processor: &'a RasterProcessorType,
     /// The `QueryContext` to use for sub-queries
@@ -121,12 +123,17 @@ where
     query_rect_to_answer: RasterQueryRectangle,
     /// The pixel bounds of the source data. Sub-queries outside of it produce empty tiles without querying the source.
     source_data_bounds: GridBoundingBox2D,
+    /// The tiles of the query, to find the area of the source they read
+    tiling_strategy: TilingStrategy,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
 
     /// This `TimeInterval` is the time currently worked on
     current_time: TimeInterval,
+
+    /// Where the source has data in the current time step.
+    current_bounds: FootprintBounds,
 
     band_tile_iter: TileInformationBandCrossProductIter,
 
@@ -141,13 +148,12 @@ where
     >,
 }
 
-impl<'a, PixelType, RasterProcessor, SubQuery, TimeStream>
-    RasterSubQueryAdapter<'a, PixelType, RasterProcessor, SubQuery, TimeStream>
+impl<'a, PixelType, RasterProcessor, SubQuery>
+    RasterSubQueryAdapter<'a, PixelType, RasterProcessor, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessor: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType>,
-    TimeStream: Stream<Item = Result<TimeInterval>>,
 {
     pub fn new(
         source_processor: &'a RasterProcessor,
@@ -155,7 +161,7 @@ where
         tiling_strategy: TilingStrategy,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
-        time_stream: TimeStream,
+        time_stream: impl Stream<Item = Result<TimeInterval>> + Send + 'a,
     ) -> Self {
         let tile_iter = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query_rect_to_answer.spatial_bounds());
@@ -172,46 +178,131 @@ where
 
         Self {
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
+            footprints: unknown_footprints(time_stream.boxed()),
+            current_bounds: FootprintBounds::Unknown,
             query_rect_to_answer,
             source_data_bounds,
+            tiling_strategy,
             band_tile_iter,
             query_ctx,
             source_processor,
             state: StateInner::CreateNextTime,
             sub_query,
-            time_stream,
         }
+    }
+
+    /// An adapter whose output has the time steps of its source. With footprint skipping on in the query
+    /// context, it asks the source where it has data in the area the tiles read and skips the tiles without.
+    pub async fn with_source_time_steps(
+        source_processor: &'a RasterProcessor,
+        query_rect_to_answer: RasterQueryRectangle,
+        tiling_strategy: TilingStrategy,
+        query_ctx: &'a dyn QueryContext,
+        sub_query: SubQuery,
+    ) -> Result<Self> {
+        let time = query_rect_to_answer.time_interval();
+        let mut adapter = Self::new(
+            source_processor,
+            query_rect_to_answer,
+            tiling_strategy,
+            query_ctx,
+            sub_query,
+            futures::stream::empty(),
+        );
+
+        if query_ctx.footprint_skipping()
+            && let Some(source_query) = adapter.source_query_rectangle()?
+        {
+            let footprints = source_processor
+                .footprint_query(source_query, FootprintPrecision::Coverage, query_ctx)
+                .await?;
+            return Ok(adapter.with_footprints(footprints));
+        }
+
+        adapter.footprints =
+            unknown_footprints(source_processor.time_query(time, query_ctx).await?);
+        Ok(adapter)
+    }
+
+    /// Produces the time steps of `footprints` instead of the time stream and skips the tiles where they
+    /// have no data. They must be the footprints of the source in its pixel space, which have the time
+    /// steps of the source.
+    #[must_use]
+    pub(crate) fn with_footprints(mut self, footprints: BoxStream<'a, Result<Footprint>>) -> Self {
+        self.footprints = footprints;
+        self
+    }
+
+    /// The area of the source that the tiles of the query together read, for all bands and the whole
+    /// time of the query. `None` if no tile reads the source.
+    fn source_query_rectangle(&self) -> Result<Option<RasterQueryRectangle>> {
+        let query = &self.query_rect_to_answer;
+        let Some(band) = query.attributes().as_slice().first().copied() else {
+            return Ok(None);
+        };
+
+        let mut hull: Option<GridBoundingBox2D> = None;
+        for tile in self
+            .tiling_strategy
+            .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
+        {
+            // the sub-queries of a tile differ in time and band, not in space
+            let Some(tile_query) = self.sub_query.tile_query_rectangle(
+                tile,
+                query.clone(),
+                query.time_interval(),
+                band,
+            )?
+            else {
+                continue;
+            };
+            let bounds = tile_query.spatial_bounds();
+            hull = Some(match hull {
+                None => bounds,
+                Some(hull) => GridBoundingBox2D::new_unchecked(
+                    [
+                        hull.y_min().min(bounds.y_min()),
+                        hull.x_min().min(bounds.x_min()),
+                    ],
+                    [
+                        hull.y_max().max(bounds.y_max()),
+                        hull.x_max().max(bounds.x_max()),
+                    ],
+                ),
+            });
+        }
+
+        Ok(hull.map(|bounds| {
+            RasterQueryRectangle::new(bounds, query.time_interval(), query.attributes().clone())
+        }))
     }
 
     pub fn box_pin(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
     where
         SubQuery: Send + 'static,
-        TimeStream: Send + 'a,
     {
         Box::pin(self)
     }
 }
 
-impl<'a, PixelType, RasterProcessorType, SubQuery, TimeStream> FusedStream
-    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
+impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
+    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
-    TimeStream: Stream<Item = Result<TimeInterval>> + Send,
 {
     fn is_terminated(&self) -> bool {
         matches!(self.state, StateInner::Ended)
     }
 }
 
-impl<'a, PixelType, RasterProcessorType, SubQuery, TimeStream> Stream
-    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
+impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
+    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
-    TimeStream: Stream<Item = Result<TimeInterval>> + Send,
 {
     type Item = Result<RasterTile2D<PixelType>>;
 
@@ -265,8 +356,7 @@ where
         }
 
         if matches!(*this.state, StateInner::CreateNextTime) {
-            let time_future = ready!(this.time_stream.poll_next(cx));
-            match time_future {
+            match ready!(this.footprints.poll_next_unpin(cx)) {
                 None => {
                     this.state.set(StateInner::Ended);
                     return Poll::Ready(None);
@@ -275,8 +365,9 @@ where
                     this.state.set(StateInner::Ended);
                     return Poll::Ready(Some(Err(e)));
                 }
-                Some(Ok(time)) => {
+                Some(Ok(Footprint { time, bounds })) => {
                     *this.current_time = time;
+                    *this.current_bounds = bounds;
                     this.band_tile_iter.reset();
                     let (tile, band) = this
                         .band_tile_iter
@@ -310,7 +401,10 @@ where
                     if raster_query_rect
                         .spatial_bounds()
                         .intersection(this.source_data_bounds)
-                        .is_some() =>
+                        .is_some()
+                        && this
+                            .current_bounds
+                            .intersects(&raster_query_rect.spatial_bounds()) =>
                 {
                     let tile_query_stream_fut = this
                         .source_processor
@@ -530,13 +624,13 @@ where
         ctx: &'a dyn QueryContext,
         tiling_strategy: TilingStrategy,
         time_stream: G,
-    ) -> RasterSubQueryAdapter<'a, T, S, Self, G>
+    ) -> RasterSubQueryAdapter<'a, T, S, Self>
     where
         S: RasterQueryProcessor<RasterType = T>,
-        G: Stream<Item = Result<TimeInterval>>,
+        G: Stream<Item = Result<TimeInterval>> + Send + 'a,
         Self: Sized,
     {
-        RasterSubQueryAdapter::<'a, T, S, Self, G>::new(
+        RasterSubQueryAdapter::<'a, T, S, Self>::new(
             source,
             query,
             tiling_strategy,

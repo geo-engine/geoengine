@@ -497,18 +497,18 @@ where
             .tiling_grid_definition(ctx.tiling_specification())
             .generate_data_tiling_strategy();
 
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            tiling_strat,
-            ctx,
-            sub_query_spec,
-            time_stream,
+        Ok(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
+                &self.source,
+                query,
+                tiling_strat,
+                ctx,
+                sub_query_spec,
+            )
+            .await?
+            .box_pin(),
         )
-        .box_pin())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

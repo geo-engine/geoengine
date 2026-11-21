@@ -287,22 +287,20 @@ where
                 let sub_query =
                     NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
-                let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
-
                 let tiling_strat = self
                     .source
                     .result_descriptor()
                     .tiling_grid_definition(self.tiling_specification)
                     .generate_data_tiling_strategy();
 
-                let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                let sq = RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
                     &self.source,
                     query,
                     tiling_strat,
                     ctx,
                     sub_query,
-                    time_stream,
-                );
+                )
+                .await?;
                 Ok(sq.box_pin())
             },
         )

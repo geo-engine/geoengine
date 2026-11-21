@@ -163,6 +163,7 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
+    #[allow(clippy::too_many_lines)]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -234,8 +235,14 @@ impl
         }
 
         if query.purpose == LoadingInfoPurpose::Footprints {
-            self.prepare_window_search(&items_url, time_interval, time_steps.len(), &cell_bboxes)
-                .await?;
+            self.prepare_window_search(
+                &items_url,
+                time_interval,
+                time_steps.len(),
+                &cell_bboxes,
+                query.for_display,
+            )
+            .await?;
         }
 
         // Searches are created lazily and are independent; the result is sorted and deduplicated below.
@@ -472,13 +479,14 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        for_display: bool,
     ) -> geoengine_operators::util::Result<()> {
         // A single step has no limit: it runs the searches the map tiles of that step run, with
         // the same cache entries, so the coverage of a date works wherever its tiles do.
         if number_of_steps <= 1 {
             return Ok(());
         }
-        self.search_missing_steps(items_url, time_interval, cell_bboxes)
+        self.search_missing_steps(items_url, time_interval, cell_bboxes, for_display)
             .await
     }
 
@@ -595,9 +603,14 @@ impl StacMultiBandMetaData {
         ))
     }
 
-    fn reject_too_many_searches(&self, searches: usize) -> geoengine_operators::util::Result<()> {
+    /// Footprints to show are bounded; those of a raster query search as much as the query would.
+    fn reject_too_many_searches(
+        &self,
+        searches: usize,
+        for_display: bool,
+    ) -> geoengine_operators::util::Result<()> {
         let limit = self.query_cache.max_footprint_searches();
-        if searches > limit {
+        if for_display && searches > limit {
             return Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
                 searches,
                 limit,
@@ -617,6 +630,7 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         time_interval: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        for_display: bool,
     ) -> geoengine_operators::util::Result<()> {
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return Ok(());
@@ -668,7 +682,7 @@ impl StacMultiBandMetaData {
             }
         }
 
-        self.reject_too_many_searches(searches.len())?;
+        self.reject_too_many_searches(searches.len(), for_display)?;
         if !self.query_cache.stores_results() {
             // the steps are searched one by one afterwards anyway
             return Ok(());
@@ -3961,7 +3975,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let result = meta
-            .loading_info(query(world, window(3, 5)).for_footprints())
+            .loading_info(query(world, window(3, 5)).for_footprints().for_display())
             .await;
 
         assert!(matches!(
@@ -3993,17 +4007,45 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let one_step = meta
-            .loading_info(query(world, interval(3)).for_footprints())
+            .loading_info(query(world, interval(3)).for_footprints().for_display())
             .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
         let window = meta
-            .loading_info(query(world, window(3, 5)).for_footprints())
+            .loading_info(query(world, window(3, 5)).for_footprints().for_display())
             .await;
         assert!(matches!(
             window,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn chunk_search_of_a_raster_query_is_not_limited() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(1..)
+                .respond_with(responders::json_encoded(collection(&[], None))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 256,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        // more cells than `max_footprint_searches` (50 in tests), which only bounds footprints to show
+        let loading_info = meta
+            .loading_info(query(world, window(3, 5)).for_footprints())
+            .await
+            .unwrap();
+
+        assert_eq!(loading_info.time_steps().len(), 2);
     }
 
     #[tokio::test]
