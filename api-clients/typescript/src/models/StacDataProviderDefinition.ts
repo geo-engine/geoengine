@@ -120,8 +120,14 @@ export interface StacDataProviderDefinition {
     maxConcurrentCellSearches?: number | null;
     /**
      * Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
-     * size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
-     * which time steps have items instead of searching them. Omitted values do not use it.
+     * size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the
+     * Copernicus Data Space cannot).
+     * 
+     * If set, the availability of a calendar comes from one aggregation over the view per chunk
+     * of time steps, at any zoom, instead of one search per grid cell and page, which is much
+     * faster. Days without items are stored as empty for the grid cells inside the view, so
+     * their map tiles need no search. Map tiles and the boxes of a date on the map still search.
+     * Omitted values do not use it.
      */
     datetimeFrequencyAggregation?: boolean | null;
 }

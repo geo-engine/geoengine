@@ -130,8 +130,14 @@ pub struct StacDataProviderDefinition {
     #[serde(default)]
     pub max_concurrent_cell_searches: Option<i32>,
     /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
-    /// size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
-    /// which time steps have items instead of searching them. Omitted values do not use it.
+    /// size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the
+    /// Copernicus Data Space cannot).
+    ///
+    /// If set, the availability of a calendar comes from one aggregation over the view per
+    /// `search_chunk_steps` time steps, at any zoom, instead of one search per grid cell and page
+    /// (measured on CODE-DE for 100 days: 0.6-1.3 s instead of 27-42 s). Days without items are
+    /// stored as empty for the grid cells inside the view, so their map tiles need no search. Map
+    /// tiles and the boxes of a date on the map still search. Omitted values do not use it.
     #[serde(default)]
     pub datetime_frequency_aggregation: Option<bool>,
 }
@@ -607,7 +613,6 @@ mod tests {
         let config = crate::config::StacCache {
             search_chunk_steps: std::num::NonZeroU32::new(11).unwrap(),
             max_footprint_searches: 7,
-            availability_search_cells: 3,
             ..crate::config::StacCache::test_default()
         };
 
@@ -620,7 +625,6 @@ mod tests {
         let cache = &configured.query_cache;
         assert_eq!(cache.search_chunk_steps().get(), 11);
         assert_eq!(cache.max_footprint_searches(), 7);
-        assert_eq!(cache.availability_search_cells(), 3);
     }
 
     type AuthenticationBucketArrivals =
