@@ -135,6 +135,7 @@ function formatDate(timeMs: number): string {
                                 [class.tick-data]="tick.status === 'data'"
                                 [class.tick-unknown]="tick.status === 'unknown'"
                                 [class.tick-selected]="tick.isSelected"
+                                [class.tick-today]="tick.isToday"
                                 [attr.aria-label]="tick.label"
                                 [attr.aria-current]="tick.isSelected ? 'date' : null"
                                 [matTooltip]="tick.label"
@@ -145,13 +146,12 @@ function formatDate(timeMs: number): string {
                             <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
                         }
                     </div>
-                    <p class="catalogue-message strip-range">
-                        @if (ticks.length) {
-                            <span>{{ ticks[0].date }}</span>
-                            <span>{{ ticks[ticks.length - 1].date }}</span>
-                        } @else {
-                            <span>&nbsp;</span>
-                        }
+                    <!-- what the bars mean; each bar names its date and status itself, so screen readers skip this -->
+                    <p class="catalogue-message strip-legend" aria-hidden="true">
+                        <span><span class="legend-bar legend-data"></span>Scenes</span>
+                        <span><span class="legend-bar legend-empty"></span>None</span>
+                        <span><span class="legend-bar legend-unknown"></span>Not known</span>
+                        <span><span class="legend-today"></span>Today</span>
                     </p>
                     @if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes for {{ preset.displayName }}</p>
@@ -442,6 +442,11 @@ function formatDate(timeMs: number): string {
                 &.tick-selected {
                     background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
                 }
+
+                // a line in the accent color above the bar, where the archive ends
+                &.tick-today {
+                    box-shadow: inset 0 2px 0 var(--geoengine-accent-color);
+                }
             }
 
             // dates of an earlier view, shown while those of this view load
@@ -459,9 +464,47 @@ function formatDate(timeMs: number): string {
                 width: auto;
             }
 
-            .strip-range {
+            .strip-legend {
                 display: flex;
-                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 0.25rem 0.75rem;
+
+                > span {
+                    display: inline-flex;
+                    align-items: flex-end;
+                    gap: 0.25rem;
+                }
+            }
+
+            // small copies of the bars of the strip
+            .legend-bar {
+                display: inline-block;
+                width: 0.375rem;
+                height: 0.75rem;
+                margin-bottom: 0.1875rem;
+                border-radius: 0.125rem;
+
+                &.legend-data {
+                    background: var(--geoengine-primary-color);
+                }
+
+                &.legend-empty {
+                    height: 0.25rem;
+                    background: color-mix(in srgb, var(--geoengine-primary-color) 30%, transparent);
+                }
+
+                &.legend-unknown {
+                    height: 0.25rem;
+                    background: color-mix(in srgb, var(--geoengine-primary-color) 12%, transparent);
+                }
+            }
+
+            .legend-today {
+                display: inline-block;
+                width: 0.75rem;
+                height: 2px;
+                margin-bottom: 0.625rem;
+                background: var(--geoengine-accent-color);
             }
 
             .catalogue-error {
@@ -738,15 +781,19 @@ export class LayersComponent {
     /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
     readonly strip = computed(() => {
         const now = this.currentTime()?.start.valueOf() ?? NaN;
+        // read once per change of the strip; a page left open past midnight moves it with the next change
+        const today = Date.now();
         return this.footprintsService.stepsAround(STRIP_DATES).map((step) => {
             const date = formatDate(step.time.start);
             const scenes = {data: 'scenes', empty: 'no scenes', unknown: 'not known'}[step.status];
+            const isToday = step.time.start <= today && today < step.time.end;
             return {
                 start: step.time.start,
                 date,
-                label: `${date}: ${scenes}`,
+                label: `${date}: ${scenes}${isToday ? ', today' : ''}`,
                 status: step.status,
                 isSelected: step.time.start <= now && now < step.time.end,
+                isToday,
             };
         });
     });
@@ -857,7 +904,8 @@ export class LayersComponent {
         const withData = this.footprintsService.dateWithData(direction);
         if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
         const beyond = this.footprintsService.dateBeyondLoaded(direction);
-        if (beyond) return {time: beyond, label: 'Look further'};
+        // the direction, since the date beyond the loaded ones is not known to have scenes
+        if (beyond) return {time: beyond, label: direction === 1 ? 'Later' : 'Earlier'};
 
         const amount = `${timeStep.durationAmount} ${timeStep.durationUnit}`;
         return direction === 1

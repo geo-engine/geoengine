@@ -431,7 +431,7 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.date-strip')).not.toBeNull();
             expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(0);
             expect(element.querySelector('.date-strip .strip-loading')).not.toBeNull();
-            expect(element.querySelector('.strip-range')?.textContent?.trim()).toBe('');
+            expect(element.querySelector('.strip-legend')).not.toBeNull();
             expect(element.querySelector('.date-strip')?.getAttribute('aria-busy')).toBe('true');
 
             // the dates of an earlier view stay, faded, while those of a moved view load
@@ -448,6 +448,22 @@ describe('LayersComponent', () => {
             fixture.detectChanges();
             expect(element.querySelector('.strip-loading')).toBeNull();
             expect(element.querySelector('.strip-stale')).toBeNull();
+        });
+
+        it('marks the date of today in the strip', async () => {
+            const now = Date.now();
+            const start = now - (now % 86_400_000);
+            footprints().time.set(new Time(start));
+            footprints().stepsAround.mockReturnValue([
+                {time: {start: start - 86_400_000, end: start}, status: 'data'},
+                {time: {start, end: start + 86_400_000}, status: 'empty'},
+            ]);
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
+            expect(Array.from(ticks, (tick) => tick.classList.contains('tick-today'))).toEqual([false, true]);
+            expect(ticks[1].getAttribute('aria-label')).toMatch(/: no scenes, today$/);
         });
 
         it('names where the buttons below the date go', async () => {
@@ -470,7 +486,7 @@ describe('LayersComponent', () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 2)));
             fixture.detectChanges();
             expect(label('forward')).toBe('17.04.2026');
-            expect(label('backwards')).toBe('Look further');
+            expect(label('backwards')).toBe('Earlier');
 
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
