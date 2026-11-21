@@ -20,7 +20,7 @@ Name | Type | Description | Notes
 **cache_ttl_secs** | Option<**i32**> | Optional output cache lifetime; omitted values use the global cache default. | [optional]
 **stac_grid** | Option<[**models::StacGrid**](StacGrid.md)> | Target number of square search cells per dataset CRS projected area of use; omitted values use 512. | [optional]
 **max_concurrent_cell_searches** | Option<**i32**> | STAC searches one loading info request runs in parallel; omitted values use 8. | [optional]
-**datetime_frequency_aggregation** | Option<**bool**> | Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it which time steps have items instead of searching them. Omitted values do not use it. | [optional]
+**datetime_frequency_aggregation** | Option<**bool**> | Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the Copernicus Data Space cannot).  If set, the availability of a calendar comes from one aggregation over the view per chunk of time steps, at any zoom, instead of one search per grid cell and page, which is much faster. Days without items are stored as empty for the grid cells inside the view, so their map tiles need no search. Map tiles and the boxes of a date on the map still search. Omitted values do not use it. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

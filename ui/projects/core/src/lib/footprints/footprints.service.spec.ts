@@ -144,7 +144,25 @@ describe('FootprintsService overlay', () => {
         const bounds = (precision: RasterFootprintsPrecision): string | undefined =>
             getFootprints.mock.calls.find(([, query]) => query.precision === precision)?.[1].spatialBounds;
         expect(bounds(RasterFootprintsPrecision.Coverage)).toBe('-0.25,-0.25,1.25,1.25');
-        expect(bounds(RasterFootprintsPrecision.Availability)).toBe('0,0,1,1');
+        expect(bounds(RasterFootprintsPrecision.Availability)).toBe('-0.05,-0.05,1.05,1.05');
+    });
+
+    it('asks no dates for a view moved inside the buffer of the asked one, but for a view leaving it', async () => {
+        const datesRequests = (): number =>
+            getFootprints.mock.calls.filter(([, query]) => query.precision === RasterFootprintsPrecision.Availability).length;
+        const service = createService();
+        service.datesNeeded.set(true);
+        await settle();
+        const asked = datesRequests();
+        expect(asked).toBeGreaterThan(0);
+
+        viewport.next({extent: [0.04, -0.04, 1.04, 0.96], resolution: 1});
+        await settle();
+        expect(datesRequests()).toBe(asked);
+
+        viewport.next({extent: [0.1, 0, 1.1, 1], resolution: 1});
+        await settle();
+        expect(datesRequests()).toBeGreaterThan(asked);
     });
 
     it('keeps the boxes of the date while those of a moved view load', async () => {

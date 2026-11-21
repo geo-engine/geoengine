@@ -1,7 +1,7 @@
 use crate::config::{StacCache, get_config_element};
 use crate::datasets::external::stac::{StacProviderDataset, StacTileFile};
 use futures::FutureExt;
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, TimeInterval};
 use geoengine_datatypes::raster::GridIdx2D;
 use geoengine_operators::{error::Error, source::gdal_worker_process::GdalMetadataMapping};
 use moka::future::Cache;
@@ -60,7 +60,16 @@ pub(crate) struct StacQueryCache {
     ttl: Duration,
     search_chunk_steps: std::num::NonZeroU32,
     max_footprint_searches: usize,
-    availability_search_cells: usize,
+    /// the steps with items per search box and chunk, from the aggregation of the calendar
+    aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct AggregationKey {
+    dataset_id: u64,
+    bbox: [u64; 4],
+    time_start: i64,
+    time_end: i64,
 }
 
 impl std::fmt::Debug for StacQueryCache {
@@ -92,6 +101,13 @@ impl Key {
     }
 }
 
+fn aggregation_cache(entries: u64, ttl: Duration) -> Cache<AggregationKey, Arc<Vec<TimeInterval>>> {
+    Cache::builder()
+        .max_capacity(entries)
+        .time_to_live(ttl)
+        .build()
+}
+
 #[derive(Debug)]
 enum InitError {
     Fetch(Arc<Error>),
@@ -106,7 +122,10 @@ impl StacQueryCache {
         Self {
             search_chunk_steps: config.search_chunk_steps,
             max_footprint_searches: config.max_footprint_searches,
-            availability_search_cells: config.availability_search_cells,
+            aggregations: aggregation_cache(
+                config.max_aggregations,
+                Duration::from_secs(config.ttl_secs),
+            ),
             ..Self::new(
                 config.size_in_mb * 1024 * 1024,
                 Duration::from_secs(config.ttl_secs),
@@ -125,6 +144,7 @@ impl StacQueryCache {
     pub(crate) async fn clear(&self) {
         self.cache.invalidate_all();
         self.cache.run_pending_tasks().await;
+        self.aggregations.invalidate_all();
     }
 
     /// A cache of the given size, for tests and benches: the planning values are fixed so that
@@ -144,19 +164,42 @@ impl StacQueryCache {
             ttl,
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
-            availability_search_cells: 0,
+            aggregations: aggregation_cache(1_000, ttl),
         }
+    }
+
+    /// The steps with items of an aggregation over `bbox` and `range`, aggregated once for
+    /// concurrent callers and kept while the server tells something.
+    pub(crate) async fn get_or_aggregate(
+        &self,
+        dataset_id: u64,
+        bbox: geoengine_datatypes::primitives::BoundingBox2D,
+        range: TimeInterval,
+        aggregate: impl Future<Output = Option<Vec<TimeInterval>>>,
+    ) -> Option<Arc<Vec<TimeInterval>>> {
+        let (ll, ur) = (bbox.lower_left(), bbox.upper_right());
+        let key = AggregationKey {
+            dataset_id,
+            bbox: [
+                ll.x.to_bits(),
+                ll.y.to_bits(),
+                ur.x.to_bits(),
+                ur.y.to_bits(),
+            ],
+            time_start: range.start().inner(),
+            time_end: range.end().inner(),
+        };
+        if !self.stores_results() {
+            return aggregate.await.map(Arc::new);
+        }
+        self.aggregations
+            .optionally_get_with(key, async move { aggregate.await.map(Arc::new) })
+            .await
     }
 
     #[cfg(test)]
     pub(crate) fn with_max_footprint_searches(mut self, searches: usize) -> Self {
         self.max_footprint_searches = searches;
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_availability_search_cells(mut self, cells: usize) -> Self {
-        self.availability_search_cells = cells;
         self
     }
 
@@ -166,10 +209,6 @@ impl StacQueryCache {
 
     pub(crate) fn max_footprint_searches(&self) -> usize {
         self.max_footprint_searches
-    }
-
-    pub(crate) fn availability_search_cells(&self) -> usize {
-        self.availability_search_cells
     }
 
     /// `true` if a completed search for this cell and time step is cached. Makes no request.

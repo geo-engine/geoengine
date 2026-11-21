@@ -15100,7 +15100,7 @@
               "boolean",
               "null"
             ],
-            "description": "Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket\nsize it is asked for with `datetime_frequency_interval`. Footprint requests then ask it\nwhich time steps have items instead of searching them. Omitted values do not use it."
+            "description": "Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket\nsize it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the\nCopernicus Data Space cannot).\n\nIf set, the availability of a calendar comes from one aggregation over the view per chunk\nof time steps, at any zoom, instead of one search per grid cell and page, which is much\nfaster. Days without items are stored as empty for the grid cells inside the view, so\ntheir map tiles need no search. Map tiles and the boxes of a date on the map still search.\nOmitted values do not use it."
           }
         }
       },

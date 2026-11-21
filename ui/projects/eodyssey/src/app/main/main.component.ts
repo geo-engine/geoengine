@@ -122,11 +122,15 @@ export class MainComponent {
     });
     readonly zoomRequired = signal(false);
     /**
-     * The data availability of a date is shown this many matrix levels before the tiles load.
-     * shortcut: estimated, not measured: one level out is about 16 to 77 catalog searches for a cold view, and the server refuses above its
-     * limit. Raise it only with a measurement of the searches per level.
+     * The coarsest matrix level at which the data availability of a date is shown, also before the tiles load. Measured on CODE-DE for one
+     * date and a cold view with its margin: level 5 needs 12 catalog searches in 1.9 s, level 4 28 in 4.7 s, level 3 48; the server refuses
+     * more than its `max_footprint_searches` (50).
      */
-    readonly AVAILABILITY_LEVELS_OUT = 1;
+    readonly COARSEST_AVAILABILITY_LEVEL = 4;
+    /** Matrix levels before the tiles load at which the data availability is shown. */
+    readonly availabilityLevelsOut = computed(() =>
+        Math.max(0, (this.tileLayer()?.minTileMatrixIndex ?? 0) - this.COARSEST_AVAILABILITY_LEVEL),
+    );
     /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
     readonly tilesLoadable = signal(false);
     /** One prompt on the map for the imagery and the data availability. */

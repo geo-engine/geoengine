@@ -1,6 +1,7 @@
 import {computed, effect, inject, linkedSignal, resource, Service, signal, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCalendarCellClassFunction, MatCalendarView} from '@angular/material/datepicker';
+import {containsExtent} from 'ol/extent';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
 import OlLayerVector from 'ol/layer/Vector';
@@ -48,12 +49,24 @@ const MAX_WINDOW_REQUESTS = 8;
 const VIEWPORT_DEBOUNCE_MS = 500;
 /** Extra view widths and heights the overlay asks for on each side, so a scene larger than the view is not drawn as the view. */
 const OVERLAY_MARGIN = 0.25;
+/**
+ * Extra view widths and heights the dates ask for on each side. Their answer is kept while the view stays inside, so small pans ask
+ * nothing. Measured on CODE-DE, 13 pans of 5 to 600 px: 5% halves the aggregations (30 instead of 65) with at most 2 days whose
+ * scenes lie only outside the view; 10% saves no more requests but shows up to 12 such days where a swath edge runs near the view.
+ */
+const DATES_BUFFER = 0.05;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
 /** Time steps before the selected one that its window loads too, so a strip of dates can show it in its middle. */
 const STEPS_BEFORE_SELECTED = 7;
 /** Opacity of the boxes of an earlier view while those of the current view load, like the faded dates of a strip. */
 const STALE_OVERLAY_OPACITY = 0.4;
+
+/** `extent` grown by `margin` of its width and height on each side. */
+function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin: number): ViewportSize['extent'] {
+    const [width, height] = [maxX - minX, maxY - minY];
+    return [minX - width * margin, minY - height * margin, maxX + width * margin, maxY + height * margin];
+}
 
 /** The time `count` steps before `timeMs`. */
 function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
@@ -98,6 +111,16 @@ export class FootprintsService {
     /** The calendar view that has one cell per time step. */
     readonly calendarStartView = computed(() => calendarStartView(this.timeStep()?.durationUnit));
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream().pipe(debounceTime(VIEWPORT_DEBOUNCE_MS)));
+    /** The view the dates are asked for: the view and its buffer, kept while the view stays inside it at the same zoom. */
+    private readonly datesViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
+        source: () => this.viewport(),
+        computation: (viewport, previous) => {
+            const kept = previous?.value;
+            if (!viewport) return undefined;
+            if (kept?.resolution === viewport.resolution && containsExtent(kept.extent, viewport.extent)) return kept;
+            return {...viewport, extent: bufferedExtent(viewport.extent, DATES_BUFFER)};
+        },
+    });
 
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
 
@@ -123,7 +146,7 @@ export class FootprintsService {
             const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
             const timeStep = this.timeStep();
-            const viewport = this.viewport();
+            const viewport = this.datesViewport();
             const window = this.window();
             if (!this.datesWanted() || !layer || !mapSpatialReference || !timeStep || !viewport || !window) {
                 return undefined;
@@ -393,15 +416,7 @@ export class FootprintsService {
         // makes the layer's spatial reference known to OpenLayers
         await firstValueFrom(this.spatialReferenceService.getSpatialReferenceSpecification(metadata.spatialReference.srsString));
 
-        const [minX, minY, maxX, maxY] = viewport.extent;
-        const [width, height] = [maxX - minX, maxY - minY];
-        const extent: ViewportSize['extent'] = [
-            minX - width * margin,
-            minY - height * margin,
-            maxX + width * margin,
-            maxY + height * margin,
-        ];
-
+        const extent = bufferedExtent(viewport.extent, margin);
         const spatialBounds = this.spatialReferenceService.reprojectExtent(
             this.spatialReferenceService.clipBoundsIfAvailable(extent, mapSpatialReference),
             mapSpatialReference,

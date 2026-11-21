@@ -120,7 +120,7 @@
                         [isVisible]="activeLayer.isVisible"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"
-                        [tilesLoadableLevelsOut]="AVAILABILITY_LEVELS_OUT"
+                        [tilesLoadableLevelsOut]="availabilityLevelsOut()"
                         (tilesLoadable)="tilesLoadable.set($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }
