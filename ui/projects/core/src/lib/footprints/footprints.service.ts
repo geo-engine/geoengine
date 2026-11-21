@@ -226,6 +226,14 @@ export class FootprintsService {
     readonly datesStale = computed(() => !this.currentFootprints() && this.footprints() !== undefined);
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
     readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
+    /**
+     * The selected date certainly has no data in this view, so an app need not load its tiles. Only from the dates of
+     * this view: while they load, or where the layer cannot tell, this is false and tiles load as usual.
+     */
+    readonly selectedDateEmpty = computed(() => {
+        const time = this.time();
+        return !!time && stepAt(this.freshSteps(), time.start.valueOf())?.status === TimeStepFootprintStatus.Empty;
+    });
     /** The dates with data of the view need too many catalog searches, so the user has to zoom in. */
     readonly tooLarge = computed(() => this.footprints()?.tooLarge ?? false);
     /**

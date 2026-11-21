@@ -98,11 +98,18 @@ export class MainComponent {
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     /**
      * The layer on the map, or the selected one hidden while nothing or the data availability is shown. A hidden layer loads no tiles, but tells
-     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out.
+     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out. The layer on the map is hidden too
+     * while its date certainly has no scenes in the view, whose tiles would all be empty.
      */
     readonly tileLayer = computed(() => {
         const onMap = this.mapTileLayer();
-        if (onMap) return {...onMap, minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(), isVisible: true};
+        if (onMap) {
+            return {
+                ...onMap,
+                minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(),
+                isVisible: !this.footprintsService.selectedDateEmpty(),
+            };
+        }
         const preset = this.eodysseyLayerService.selectedPreset();
         return (
             preset && {
@@ -123,12 +130,14 @@ export class MainComponent {
     /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
     readonly tilesLoadable = signal(false);
     /** One prompt on the map for the imagery and the data availability. */
-    readonly zoomPrompt = computed(() => {
-        if (this.mapTileLayer() && this.zoomRequired()) return 'Zoom in further to load the selected layer.';
+    readonly mapPrompt = computed<{icon: string; text: string} | undefined>(() => {
+        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         const footprints = this.footprintsService;
         if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
-            return 'Zoom in further to see the data availability.';
+            return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
         }
+        if (this.mapTileLayer() && footprints.selectedDateEmpty())
+            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
         return undefined;
     });
     readonly tileLoading = signal(false);

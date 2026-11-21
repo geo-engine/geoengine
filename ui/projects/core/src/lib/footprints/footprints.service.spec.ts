@@ -439,6 +439,31 @@ describe('FootprintsService overlay', () => {
             expect(service.datesStale()).toBe(false);
         });
 
+        it('says that the selected date has no data only from the dates of this view', async () => {
+            answerDates([day(1, TimeStepFootprintStatus.Empty), day(2, TimeStepFootprintStatus.Data)]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedDateEmpty()).toBe(true);
+            // shown, like in an app's strip of dates, so they are kept below
+            expect(service.steps()).toHaveLength(2);
+
+            // the dates of the moved view load: the kept ones of the earlier view decide nothing
+            getFootprints.mockReturnValue(new Promise(() => undefined));
+            viewport.next({extent: [0, 0, 2, 2], resolution: 1});
+            await settle();
+            expect(service.steps()).toHaveLength(2);
+            expect(service.selectedDateEmpty()).toBe(false);
+        });
+
+        it('does not call a date empty that the layer cannot tell', async () => {
+            answerDates([day(1, TimeStepFootprintStatus.Unknown)]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedDateEmpty()).toBe(false);
+        });
+
         it('tells how much of the view the selected date covers while the overlay is on, and asks nothing while it is off', async () => {
             // one degree is far more than the view of one metre
             const box = {upperLeftCoordinate: {x: -1, y: 1}, lowerRightCoordinate: {x: 1, y: -1}};

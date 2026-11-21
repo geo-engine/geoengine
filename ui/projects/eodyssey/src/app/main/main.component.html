@@ -127,10 +127,10 @@
             }
         </geoengine-map-container>
 
-        @if (zoomPrompt(); as prompt) {
+        @if (mapPrompt(); as prompt) {
             <div class="zoom-prompt" role="status">
-                <mat-icon aria-hidden="true">zoom_in</mat-icon>
-                <span>{{ prompt }}</span>
+                <mat-icon aria-hidden="true">{{ prompt.icon }}</mat-icon>
+                <span>{{ prompt.text }}</span>
             </div>
         }
 
