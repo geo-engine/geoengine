@@ -455,6 +455,8 @@ function formatDate(timeMs: number): string {
                 left: 0.5rem;
                 right: 0.5rem;
                 bottom: 0.125rem;
+                // the bar is 100 % wide by default, which would reach past the right inset
+                width: auto;
             }
 
             .strip-range {
