@@ -439,6 +439,24 @@ describe('FootprintsService overlay', () => {
             expect(service.datesStale()).toBe(false);
         });
 
+        it('never shows the dates of the previous layer, also not right after the layer changes', async () => {
+            // the dates come in two answers, so a partial answer exists during the load
+            answerDates(steps);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.steps()).toHaveLength(steps.length);
+
+            // read at once, as the template of an app does, before the load of the other layer starts
+            getFootprints.mockReturnValue(new Promise(() => undefined));
+            service.layer.set({key: 'provider/other', processingGraphId: () => registerLayer('provider', 'other')});
+            service.timeStepOverride.set({durationAmount: 1, durationUnit: 'years'});
+            expect(service.steps()).toEqual([]);
+            await settle();
+            expect(service.steps()).toEqual([]);
+            expect(service.datesStale()).toBe(false);
+        });
+
         it('says that the selected date has no data only from the dates of this view', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Empty), day(2, TimeStepFootprintStatus.Data)]);
             const service = createService();
