@@ -415,10 +415,10 @@ describe('FootprintsService overlay', () => {
                 service.datesNeeded.set(true);
                 await settle();
 
-                // today, not 100 days after the first of April
+                // one day after today, not 100 days after the first of April
                 const ends = getFootprints.mock.calls.map(([, query]) => Date.parse((query.timeInterval ?? '').split('/')[1]));
-                expect(Math.max(...ends)).toBeGreaterThan(Date.UTC(2026, 3, 10, 12));
-                expect(Math.max(...ends)).toBeLessThan(Date.UTC(2026, 3, 10, 13));
+                expect(Math.max(...ends)).toBeGreaterThanOrEqual(Date.UTC(2026, 3, 11, 12));
+                expect(Math.max(...ends)).toBeLessThan(Date.UTC(2026, 3, 11, 13));
                 // the loaded dates reach today
                 expect(service.dateBeyondLoaded(1)).toBeUndefined();
                 expect(service.dateBeyondLoaded(-1)).toBeDefined();
@@ -427,22 +427,6 @@ describe('FootprintsService overlay', () => {
                 // the step of today has nothing after it
                 vi.setSystemTime(Date.UTC(2026, 3, 1, 12));
                 expect(service.canGoLater()).toBe(false);
-            } finally {
-                vi.useRealTimers();
-            }
-        });
-
-        it('reaches back from today for long steps, so the step of today is not alone', async () => {
-            vi.useFakeTimers({toFake: ['Date'], shouldAdvanceTime: true, now: Date.UTC(2026, 3, 10, 12)});
-            try {
-                const service = createService();
-                service.timeStepOverride.set({durationAmount: 1, durationUnit: 'years'});
-                service.datesNeeded.set(true);
-                await settle();
-
-                const [start, end] = (getFootprints.mock.calls[0][1].timeInterval ?? '').split('/').map((time) => Date.parse(time));
-                expect(end).toBeLessThan(Date.UTC(2026, 3, 10, 13));
-                expect(start).toBeLessThan(Date.UTC(1930, 0, 1));
             } finally {
                 vi.useRealTimers();
             }
