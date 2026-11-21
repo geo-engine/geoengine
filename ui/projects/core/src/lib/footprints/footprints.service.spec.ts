@@ -158,6 +158,7 @@ describe('FootprintsService overlay', () => {
         service.overlayVisible.set(true);
         await settle();
         expect(boxesOnMap()).toBe(1);
+        expect(service.overlayLayer.getOpacity()).toBe(1);
 
         // the boxes of the moved view do not arrive
         getFootprints.mockReturnValue(new Promise(() => undefined));
@@ -166,6 +167,8 @@ describe('FootprintsService overlay', () => {
 
         expect(boxesRequests()).toBe(2);
         expect(boxesOnMap()).toBe(1);
+        // faded, so they are not taken for the boxes of the moved view
+        expect(service.overlayLayer.getOpacity()).toBeLessThan(1);
     });
 
     it('clears the boxes of a layer at once when another layer is set on the same date', async () => {
