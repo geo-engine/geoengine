@@ -957,14 +957,15 @@ where
 
         let time_stream = self.time_query(query.time_interval(), ctx).await?;
 
-        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+        Ok(RasterSubQueryAdapter::<'a, P>::new(
             &self.source,
             query,
             out_tiling_grid.generate_data_tiling_strategy(),
             ctx,
             sub_query,
             time_stream,
-        )))
+        )
+        .box_pin())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

@@ -23,8 +23,8 @@ pub use operator_impl::{
 };
 pub use processing_graph_path::ProcessingGraphOperatorPath;
 pub use query::{
-    ChunkByteSize, GdalReadAhead, MockQueryContext, QueryAbortRegistration, QueryAbortTrigger,
-    QueryContext,
+    ChunkByteSize, GdalReadAhead, MockQueryContext, ParallelismPermit, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, QueryParallelism,
 };
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,
