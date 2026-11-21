@@ -299,7 +299,9 @@ describe('FootprintsService overlay', () => {
             service.datesNeeded.set(true);
             await settle();
             const end = (call: number): number => Date.parse((getFootprints.mock.calls[call][1].timeInterval ?? '').split('/')[1]);
-            expect(end(0)).toBe(Date.UTC(2026, 4, 1));
+            // the month of the start of the window, which begins a week before the selected 1 April
+            expect(getFootprints.mock.calls[0][1].timeInterval?.split('/')[0]).toBe('2026-03-01T00:00:00.000Z');
+            expect(end(0)).toBe(Date.UTC(2026, 3, 1));
 
             // a quarter fills the first month alone, which would show one long step in a strip of dates
             getFootprints.mockClear();

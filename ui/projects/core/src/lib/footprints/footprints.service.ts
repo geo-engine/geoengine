@@ -50,6 +50,13 @@ const VIEWPORT_DEBOUNCE_MS = 500;
 const OVERLAY_MARGIN = 0.25;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
+/** Time steps before the selected one that its window loads too, so a strip of dates can show it in its middle. */
+const STEPS_BEFORE_SELECTED = 7;
+
+/** The time `count` steps before `timeMs`. */
+function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
+    return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
+}
 
 /** The raster layer an app wants to know the footprints of. */
 export interface FootprintLayer {
@@ -307,7 +314,10 @@ export class FootprintsService {
             const time = this.time();
             if (!time || this.calendarOpen() || !this.datesNeeded()) return;
             untracked(() => {
-                const start = monthStartOfTime(time.start.valueOf());
+                // from a month start a few steps before the time, so dates before it are loaded too
+                const timeStep = this.timeStep();
+                const before = timeStep ? minusSteps(time.start.valueOf(), timeStep, STEPS_BEFORE_SELECTED) : time.start.valueOf();
+                const start = monthStartOfTime(before);
                 if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
             });
         });
