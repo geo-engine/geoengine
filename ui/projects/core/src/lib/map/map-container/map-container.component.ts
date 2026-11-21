@@ -115,6 +115,8 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
     private backgroundLayers: Array<OlLayer<OlSource, any>> = [];
 
     readonly overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
+    /** A layer that describes the data on the map, kept below the `overlayLayer`. */
+    readonly dataOverlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
 
     private userSelect?: OlInteractionSelect;
 
@@ -164,6 +166,7 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
 
         effect(() => {
             this.overlayLayer();
+            this.dataOverlayLayer();
             this.projection$.pipe(first()).subscribe((projection) => {
                 this.redrawLayers(projection);
             });
@@ -556,6 +559,11 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
                 }
             } else {
                 this.mapLayers.forEach((layerComponent) => map.addLayer(layerComponent.mapLayer));
+            }
+
+            const dataOverlayLayer = this.dataOverlayLayer();
+            if (dataOverlayLayer) {
+                map.getLayers().push(dataOverlayLayer);
             }
 
             const overlayLayer = this.overlayLayer();

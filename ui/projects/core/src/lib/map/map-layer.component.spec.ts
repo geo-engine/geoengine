@@ -48,6 +48,7 @@ describe('OGC map tile minimum matrix index', () => {
     let deferMetadata: boolean;
     let pendingMetadata: Array<() => void>;
     const zoomRequired = vi.fn();
+    const tilesLoadable = vi.fn();
 
     function publishViewport(currentView: View): void {
         mapService.setViewportSize({extent: [0, -512000, 512000, 0], resolution: currentView.getResolution() ?? Infinity});
@@ -77,6 +78,7 @@ describe('OGC map tile minimum matrix index', () => {
             fixture.componentRef.setInput(key, value);
         }
         fixture.componentInstance.zoomRequired.subscribe(zoomRequired);
+        fixture.componentInstance.tilesLoadable.subscribe(tilesLoadable);
         fixture.detectChanges();
     }
 
@@ -173,11 +175,14 @@ describe('OGC map tile minimum matrix index', () => {
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(0);
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
         expect(zoomRequired).not.toHaveBeenCalledWith(true);
+        // unlike zoomRequired, not loadable while the limit is not known
+        expect(tilesLoadable).toHaveBeenLastCalledWith(false);
         expect(tileRequests).toHaveLength(0);
 
         for (const complete of pendingMetadata) complete();
         await vi.waitFor(() => expect(source.getState()).toBe('ready'));
         expect(zoomRequired).toHaveBeenLastCalledWith(blocked);
+        expect(tilesLoadable).toHaveBeenLastCalledWith(!blocked);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(!blocked);
         expect(tileRequests).toHaveLength(0);
 
