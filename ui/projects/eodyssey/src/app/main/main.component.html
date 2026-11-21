@@ -102,7 +102,7 @@
     <mat-drawer-content>
         <geoengine-map-container #map [grid]="false">
             @if (sessionToken()) {
-                @let activeLayer = mapTileLayer();
+                @let activeLayer = tileLayer();
                 @let currentSessionToken = sessionToken();
                 @let currentSpatialReference = spatialReference();
                 @let mapTileDate = currentTime();
@@ -115,20 +115,22 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="tileMatrixSet()"
-                        [minTileMatrixIndex]="minTileMatrixIndex()"
+                        [minTileMatrixIndex]="activeLayer.minTileMatrixIndex"
                         [minTileMatrixSetId]="'CustomWebMercator'"
-                        [isVisible]="testIsVisible()"
+                        [isVisible]="activeLayer.isVisible"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"
+                        [tilesLoadableLevelsOut]="AVAILABILITY_LEVELS_OUT"
+                        (tilesLoadable)="tilesLoadable.set($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }
             }
         </geoengine-map-container>
 
-        @if (mapTileLayer() && zoomRequired()) {
+        @if (mapPrompt(); as prompt) {
             <div class="zoom-prompt" role="status">
-                <mat-icon aria-hidden="true">zoom_in</mat-icon>
-                <span>Zoom in further to load the selected layer.</span>
+                <mat-icon aria-hidden="true">{{ prompt.icon }}</mat-icon>
+                <span>{{ prompt.text }}</span>
             </div>
         }
 

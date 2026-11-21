@@ -520,6 +520,13 @@ export class OlOgcApiMapTileLayerComponent
     /** Keep the map cutoff tied to this grid when imagery switches to a different tile matrix set. */
     readonly minTileMatrixSetId = input<TMSId>();
     readonly zoomRequired = output<boolean>();
+    /**
+     * Whether tiles load at the current zoom, or would `tilesLoadableLevelsOut` matrix levels further in.
+     * Unlike `zoomRequired`, false while the zoom limit is not known yet.
+     */
+    readonly tilesLoadable = output<boolean>();
+    /** Matrix levels before the zoom limit at which `tilesLoadable` is already true, for what is cheaper to load than the tiles. */
+    readonly tilesLoadableLevelsOut = input(0);
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream(), {requireSync: true});
@@ -680,6 +687,8 @@ export class OlOgcApiMapTileLayerComponent
             this._mapLayer.setVisible(this.isVisible());
             this.loader?.setEnabled(valid && this.isVisible() && !blocked);
             this.zoomRequired.emit(blocked);
+            // shortcut: assumes that the resolution halves per matrix level, as in our tile matrix sets; read the grid if one differs
+            this.tilesLoadable.emit(valid && this.viewport().resolution < maxResolution * 2 ** this.tilesLoadableLevelsOut());
         });
 
         effect(() => {

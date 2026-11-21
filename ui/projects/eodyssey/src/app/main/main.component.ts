@@ -6,7 +6,9 @@ import {
     afterNextRender,
     booleanAttribute,
     computed,
+    effect,
     inject,
+    Injector,
     input,
     signal,
     viewChild,
@@ -20,8 +22,17 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
-import {Layer, Time, UserService} from '@geoengine/common';
-import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, TMSId, WGS_84} from '@geoengine/core';
+import {Layer, LayersService, Time, UserService, UUID} from '@geoengine/common';
+import {
+    FootprintsService,
+    ProjectService,
+    MapService,
+    MapContainerComponent,
+    CoreModule,
+    SpatialReferenceService,
+    TMSId,
+    WGS_84,
+} from '@geoengine/core';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -53,11 +64,14 @@ import {EOdysseyLayerService} from '../layers/layers.service';
 })
 export class MainComponent {
     readonly config = inject(AppConfig);
+    private readonly injector = inject(Injector);
+    private readonly footprintsService = inject(FootprintsService);
     readonly projectService = inject(ProjectService);
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
     private readonly eodysseyLayerService = inject(EOdysseyLayerService);
+    private readonly layersService = inject(LayersService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -82,8 +96,50 @@ export class MainComponent {
     readonly tileMatrixSet = computed<TMSId>(() => (this.debug() && this.frontendReprojection() ? 'Custom' : 'CustomWebMercator'));
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
-    readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
+    /**
+     * The layer on the map, or the selected one hidden while nothing or the data availability is shown. A hidden layer loads no tiles, but tells
+     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out. The layer on the map is hidden too
+     * while its date certainly has no scenes in the view, whose tiles would all be empty.
+     */
+    readonly tileLayer = computed(() => {
+        const onMap = this.mapTileLayer();
+        if (onMap) {
+            return {
+                ...onMap,
+                minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(),
+                isVisible: !this.footprintsService.selectedDateEmpty(),
+            };
+        }
+        const preset = this.eodysseyLayerService.selectedPreset();
+        return (
+            preset && {
+                dataConnectorId: preset.connectorId,
+                layerId: preset.layerId,
+                minTileMatrixIndex: this.eodysseyLayerService.selectedMinTileMatrixIndex(),
+                isVisible: false,
+            }
+        );
+    });
     readonly zoomRequired = signal(false);
+    /**
+     * The data availability of a date is shown this many matrix levels before the tiles load.
+     * shortcut: estimated, not measured: one level out is about 16 to 77 catalog searches for a cold view, and the server refuses above its
+     * limit. Raise it only with a measurement of the searches per level.
+     */
+    readonly AVAILABILITY_LEVELS_OUT = 1;
+    /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
+    readonly tilesLoadable = signal(false);
+    /** One prompt on the map for the imagery and the data availability. */
+    readonly mapPrompt = computed<{icon: string; text: string} | undefined>(() => {
+        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
+        const footprints = this.footprintsService;
+        if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
+            return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
+        }
+        if (this.mapTileLayer() && footprints.selectedDateEmpty())
+            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
+        return undefined;
+    });
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
 
@@ -96,12 +152,43 @@ export class MainComponent {
 
     readonly mapImageLoading = signal(false);
 
-    readonly testIsVisible = signal(true);
-
     constructor() {
+        // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map.
+        effect(() => {
+            const preset = this.eodysseyLayerService.selectedPreset();
+            const layer = preset
+                ? {dataConnectorId: preset.connectorId, layerId: preset.layerId}
+                : this.eodysseyLayerService.mapTileLayer();
+            this.footprintsService.layer.set(
+                layer && {
+                    key: `${layer.dataConnectorId}/${layer.layerId}`,
+                    processingGraphId: (): Promise<UUID> =>
+                        this.layersService.registerAndGetLayerProcessingGraphId(layer.dataConnectorId, layer.layerId),
+                },
+            );
+        });
+        // without a limit, the coverage of a date zoomed out would search the catalog over a large area
+        effect(() => this.footprintsService.overlayBlocked.set(!this.tilesLoadable()));
+
+        // The step of the selected data source until it is applied, because the project keeps the step of the applied one.
+        effect(() => {
+            const source = this.eodysseyLayerService.selectedDataSource();
+            const isNewSource = source !== this.eodysseyLayerService.dataSourceOfTime();
+            this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
+        });
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
+
+                // the map component is only available after the first render
+                effect(
+                    () =>
+                        this.mapComponent().dataOverlayLayer.set(
+                            this.footprintsService.overlayVisible() ? this.footprintsService.overlayLayer : undefined,
+                        ),
+                    {injector: this.injector},
+                );
 
                 this.zoomToGermany();
 

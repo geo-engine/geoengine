@@ -1,12 +1,13 @@
 import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
 import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
-import {provideNativeDateAdapter} from '@angular/material/core';
+import {DateAdapter, provideNativeDateAdapter} from '@angular/material/core';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
 import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {CoreConfig, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
 import {AppConfig} from './app/app-config.service';
 import {AppRoutingModule} from './app/app-routing.module';
 import {AppComponent} from './app/app.component';
+import {MondayDateAdapter} from './app/monday-date-adapter';
 
 bootstrapApplication(AppComponent, {
     providers: [
@@ -33,6 +34,7 @@ bootstrapApplication(AppComponent, {
         SpatialReferenceService,
         UserService,
         provideNativeDateAdapter(),
+        {provide: DateAdapter, useClass: MondayDateAdapter},
         provideHttpClient(withInterceptorsFromDi()),
         // provideAnimations(), // TODO: remove because deprecated
     ],
