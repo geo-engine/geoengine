@@ -311,13 +311,15 @@ export class FootprintsService {
 
     constructor() {
         effect(() => this.updateOverlay());
-        // while the calendar is closed, the window follows the selected time; the calendar header moves it when open
+        // while the calendar is closed, the window follows the selected time and the layer with its time step, whose
+        // steps around the time differ; the calendar header moves it when open
         effect(() => {
             const time = this.time();
+            const timeStep = this.timeStep();
+            this.layer();
             if (!time || this.calendarOpen() || !this.datesNeeded()) return;
             untracked(() => {
                 // from a month start a few steps before the time, so dates before it are loaded too
-                const timeStep = this.timeStep();
                 const before = timeStep ? minusSteps(time.start.valueOf(), timeStep, STEPS_BEFORE_SELECTED) : time.start.valueOf();
                 const start = monthStartOfTime(before);
                 if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
