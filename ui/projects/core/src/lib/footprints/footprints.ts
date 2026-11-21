@@ -100,6 +100,11 @@ function stepLevel(unit: string | undefined): number {
     return -1;
 }
 
+/** Whether a month holds several time steps of this unit, e.g. days or hours, and not one step or a part of one. */
+export function isShorterThanMonth(unit: string | undefined): boolean {
+    return stepLevel(unit) < 1;
+}
+
 /**
  * What to tell the user in a view whose cells are more than one level coarser than the time step, e.g. years for daily
  * data: such a view has too many time steps to ask for, so it shows no dates with data. Undefined where it shows them.

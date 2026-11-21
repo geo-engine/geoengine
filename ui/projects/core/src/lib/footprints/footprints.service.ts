@@ -26,6 +26,7 @@ import {
     cellClasses,
     Footprints,
     footprintsOrTooLarge,
+    isShorterThanMonth,
     mergeFootprints,
     monthStartOfTime,
     stepAt,
@@ -147,10 +148,12 @@ export class FootprintsService {
                     ),
                 );
 
-            // the month of the start first, so the visible month shows soonest, then the server's cursor is followed
+            // the month of the start first, so the visible month shows soonest, then the server's cursor is followed;
+            // a month holds one step of a month or more, so then the window is asked at once
             const startDate = new Date(window.start);
             const monthEnd = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1);
-            let range = {start: window.start, end: Math.min(monthEnd, end)};
+            const firstEnd = isShorterThanMonth(timeStep.durationUnit) ? Math.min(monthEnd, end) : end;
+            let range = {start: window.start, end: firstEnd};
             let footprints: Footprints | undefined;
             for (let request = 0; request < MAX_WINDOW_REQUESTS; request++) {
                 const part = await get(range);

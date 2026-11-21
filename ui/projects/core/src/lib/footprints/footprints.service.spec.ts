@@ -294,6 +294,20 @@ describe('FootprintsService overlay', () => {
             expect(new Set(starts).size).toBe(starts.length);
         });
 
+        it('asks the month first for daily steps, but the whole window at once for steps of a month or more', async () => {
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            const end = (call: number): number => Date.parse((getFootprints.mock.calls[call][1].timeInterval ?? '').split('/')[1]);
+            expect(end(0)).toBe(Date.UTC(2026, 4, 1));
+
+            // a quarter fills the first month alone, which would show one long step in a strip of dates
+            getFootprints.mockClear();
+            service.timeStepOverride.set({durationAmount: 3, durationUnit: 'months'});
+            await settle();
+            expect(end(0)).toBeGreaterThan(Date.UTC(2026, 4, 1));
+        });
+
         it('stops following the cursor after eight requests', async () => {
             getFootprints.mockImplementation(answerDays(1));
             const service = createService();
