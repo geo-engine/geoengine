@@ -387,6 +387,10 @@ search_chunk_steps = 30
 # nothing where the map was loaded, and it is refused for a large area that nobody has looked at.
 # It also bounds the grid cells for which the days without items of an aggregation are stored in the cache.
 max_footprint_searches = 50
+# Number of aggregations kept for the calendars of providers with `datetimeFrequencyAggregation`, one per view
+# box and chunk of `search_chunk_steps` steps, for `ttl_secs`. A kept one answers a moved window of dates in the
+# same view without a request. An entry holds the steps with items of one chunk, a few hundred bytes.
+max_aggregations = 10000
 
 [provider_cache]
 # maximum number of provider instances in the provider registry

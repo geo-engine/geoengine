@@ -331,21 +331,7 @@ impl StacMultiBandMetaData {
         one_step_request: bool,
     ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
         let spatial_bounds = query.query_rectangle.spatial_bounds();
-
-        let base_url = Url::from_str(&self.api_url).map_err(|e| {
-            geoengine_operators::error::Error::InvalidDataProviderConfig {
-                reason: format!("invalid STAC API URL: {e}"),
-            }
-        })?;
-        let items_url = join_base_url_and_path(
-            &base_url,
-            &format!("collections/{}/items", self.collection_name),
-        )
-        .map_err(
-            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
-                reason: format!("could not construct STAC items URL: {e}"),
-            },
-        )?;
+        let items_url = self.items_url()?;
 
         let (grid, cells) = self.grid_cells(spatial_bounds)?;
         if cells.clone().next().is_none() {
@@ -446,6 +432,23 @@ impl StacMultiBandMetaData {
             tile_files,
             self.cache_ttl_secs,
         ))
+    }
+
+    fn items_url(&self) -> geoengine_operators::util::Result<Url> {
+        let base_url = Url::from_str(&self.api_url).map_err(|e| {
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("invalid STAC API URL: {e}"),
+            }
+        })?;
+        join_base_url_and_path(
+            &base_url,
+            &format!("collections/{}/items", self.collection_name),
+        )
+        .map_err(
+            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("could not construct STAC items URL: {e}"),
+            },
+        )
     }
 
     /// Sorts the found files, keeps one resolution per item and band for `resolution`, and

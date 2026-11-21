@@ -101,6 +101,13 @@ impl Key {
     }
 }
 
+fn aggregation_cache(entries: u64, ttl: Duration) -> Cache<AggregationKey, Arc<Vec<TimeInterval>>> {
+    Cache::builder()
+        .max_capacity(entries)
+        .time_to_live(ttl)
+        .build()
+}
+
 #[derive(Debug)]
 enum InitError {
     Fetch(Arc<Error>),
@@ -115,6 +122,10 @@ impl StacQueryCache {
         Self {
             search_chunk_steps: config.search_chunk_steps,
             max_footprint_searches: config.max_footprint_searches,
+            aggregations: aggregation_cache(
+                config.max_aggregations,
+                Duration::from_secs(config.ttl_secs),
+            ),
             ..Self::new(
                 config.size_in_mb * 1024 * 1024,
                 Duration::from_secs(config.ttl_secs),
@@ -153,10 +164,7 @@ impl StacQueryCache {
             ttl,
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
-            aggregations: Cache::builder()
-                .max_capacity(10_000)
-                .time_to_live(ttl)
-                .build(),
+            aggregations: aggregation_cache(1_000, ttl),
         }
     }
 
