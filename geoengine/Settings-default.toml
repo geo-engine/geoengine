@@ -387,10 +387,10 @@ search_chunk_steps = 30
 # nothing where the map was loaded, and it is refused for a large area that nobody has looked at.
 # It also bounds the grid cells for which the days without items of an aggregation are stored in the cache.
 max_footprint_searches = 50
-# A calendar request for at most this many grid cells searches the files (exact days, warms the map's cache);
-# for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates.
+# A calendar request for at most this many grid cells searches the files, which warms the map's cache but takes
+# a search per cell and 30 steps; for more cells one aggregation over the view counts its items. 0 always aggregates.
 # Aggregations are only asked from providers that are set up with `datetimeFrequencyAggregation`; all others search.
-availability_search_cells = 4
+availability_search_cells = 0
 
 [provider_cache]
 # maximum number of provider instances in the provider registry

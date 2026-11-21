@@ -362,16 +362,26 @@ impl StacMultiBandMetaData {
         let time_steps = regular_time_steps(self.time_dimension, time_interval)?
             .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
+        // the search box of the view itself, for the aggregation of the calendar
+        let view_bbox = grid.clip_cell_to_extent(spatial_bounds.as_bbox());
         let cell_bboxes = self.cell_bboxes(grid, cells)?;
 
-        // The calendar only needs to know which steps have items. One aggregation tells it, with
-        // no search and nothing written to the cache. It counts the items of all cells, also next
-        // to the view, so few cells are searched instead, which is exact and warms the cache of the
-        // map. Without aggregation the files are searched as well.
+        // The calendar only needs to know which steps have items. One aggregation over the view
+        // tells it, with no search. Up to `availability_search_cells` cells are searched instead,
+        // which warms the cache of the map. Without aggregation the files are searched as well.
         if query.detail == LoadingInfoDetail::Availability
             && cell_bboxes.len() > self.query_cache.availability_search_cells()
+            && let Some(view_bbox) = view_bbox
+            && let Some(view_bbox) = stac_query_bbox(view_bbox, self.dataset.projection)?
             && let Some(has_data) = self
-                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
+                .steps_with_items(
+                    &items_url,
+                    time_interval,
+                    &time_steps,
+                    &cell_bboxes,
+                    spatial_bounds,
+                    view_bbox,
+                )
                 .await
         {
             return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
@@ -568,12 +578,13 @@ impl StacMultiBandMetaData {
             .await
     }
 
-    /// For each step whether any cell has an item in it, from the cache alone: `None` unless every
-    /// cell and step is cached, e.g. because the map has loaded the view.
+    /// For each step whether an item of the view's cells lies in the view, from the cache alone:
+    /// `None` unless every cell and step is cached, e.g. because the map has loaded the view.
     async fn cached_steps_with_items(
         &self,
         time_steps: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        spatial_bounds: SpatialPartition2D,
     ) -> Option<Vec<bool>> {
         let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
         let mut has_data = Vec::with_capacity(time_steps.len());
@@ -582,36 +593,49 @@ impl StacMultiBandMetaData {
             for (cell, _) in cell_bboxes {
                 let files = self.query_cache.get(dataset_id, *cell, *step).await?;
                 // an item on the closed end of a search belongs to the next step
-                step_has_data |= files.iter().any(|file| file.file.time == *step);
+                step_has_data |= files.iter().any(|file| {
+                    file.file.time == *step && file.file.spatial_partition.intersects(&spatial_bounds)
+                });
             }
             has_data.push(step_has_data);
         }
         Some(has_data)
     }
 
-    /// For each step whether any cell has an item in it, from the cache or else from one
-    /// aggregation, if the server can tell. Nothing is searched. A step without items is empty for every cell, so it is stored
-    /// as such, unless the cells are so many that storing them would flood the cache.
+    /// For each step whether an item lies in the view, from the cache or else from one aggregation
+    /// over the view's search box `view_bbox`, if the server can tell. Nothing is searched. A step
+    /// without items is empty for every cell inside that box, so it is stored as such for them,
+    /// unless they are so many that storing them would flood the cache.
     async fn steps_with_items(
         &self,
         items_url: &Url,
         time_interval: TimeInterval,
         time_steps: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        spatial_bounds: SpatialPartition2D,
+        view_bbox: BoundingBox2D,
     ) -> Option<Vec<bool>> {
         // what is cached already needs no request at all, not even the aggregation
-        if let Some(has_data) = self.cached_steps_with_items(time_steps, cell_bboxes).await {
+        if let Some(has_data) = self
+            .cached_steps_with_items(time_steps, cell_bboxes, spatial_bounds)
+            .await
+        {
             return Some(has_data);
         }
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return None;
         };
         let with_items = self
-            .intervals_with_items(items_url, regular.step, time_interval, cell_bboxes)
+            .intervals_with_items(items_url, regular.step, time_interval, view_bbox)
             .await?;
-        if cell_bboxes.len() <= self.query_cache.max_footprint_searches() {
+        let inside: Vec<_> = cell_bboxes
+            .iter()
+            .filter(|(_, bbox)| view_bbox.contains_bbox(bbox))
+            .copied()
+            .collect();
+        if inside.len() <= self.query_cache.max_footprint_searches() {
             let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
-            self.store_empty_steps(dataset_id, time_steps, &with_items, cell_bboxes)
+            self.store_empty_steps(dataset_id, time_steps, &with_items, &inside)
                 .await;
         }
         Some(
@@ -622,23 +646,18 @@ impl StacMultiBandMetaData {
         )
     }
 
-    /// The intervals of `range` with at least one item in any of the cells, if the provider says
-    /// that its server can tell. The box is the union of the cells' search boxes, so that an interval
-    /// without items is empty for every cell.
+    /// The intervals of `range` with at least one item in the search box `bbox` (WGS84), if the
+    /// provider says that its server can tell.
     async fn intervals_with_items(
         &self,
         items_url: &Url,
         step: TimeStep,
         range: TimeInterval,
-        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        bbox: BoundingBox2D,
     ) -> Option<Vec<TimeInterval>> {
         if !self.datetime_frequency_aggregation {
             return None;
         }
-        let bbox = cell_bboxes
-            .iter()
-            .map(|(_, bbox)| *bbox)
-            .reduce(|union, bbox| union.union(&bbox))?;
         let aggregate_url = items_url.join("aggregate").ok()?;
 
         self.client
@@ -780,8 +799,13 @@ impl StacMultiBandMetaData {
         // More cells than the limit of searches are not planned: storing their empty steps would
         // flood the cache, as in `steps_with_items`, and the window is most likely refused below.
         if cell_bboxes.len() <= self.query_cache.max_footprint_searches()
+            // over the union of the cells, so that an interval without items is empty for every cell
+            && let Some(union) = cell_bboxes
+                .iter()
+                .map(|(_, bbox)| *bbox)
+                .reduce(|union, bbox| union.union(&bbox))
             && let Some(with_items) = self
-                .intervals_with_items(items_url, regular.step, chunk, cell_bboxes)
+                .intervals_with_items(items_url, regular.step, chunk, union)
                 .await
         {
             self.store_empty_steps(dataset_id, &steps, &with_items, cell_bboxes)
@@ -3365,8 +3389,18 @@ mod grid_request_tests {
         );
     }
 
-    /// The aggregation of the days with items: each given day has two items.
+    /// The aggregation of the days with items in the cell at 0°: each given day has two items.
     fn expect_aggregation(server: &Server, datetime: &str, days_with_items: &[&str]) {
+        expect_aggregation_in(
+            server,
+            "0.00000,0.00000,1.00000,1.00000",
+            datetime,
+            days_with_items,
+        );
+    }
+
+    /// The aggregation of the days with items in `bbox`: each given day has two items.
+    fn expect_aggregation_in(server: &Server, bbox: &str, datetime: &str, days_with_items: &[&str]) {
         // like CODE-DE: the buckets from the first to the last day with items, the others empty
         let day_of = |day: &str| chrono::DateTime::parse_from_rfc3339(day).unwrap();
         let mut buckets = Vec::new();
@@ -3387,10 +3421,7 @@ mod grid_request_tests {
             Expectation::matching(all_of![
                 request::method_path("GET", "/collections/test/aggregate"),
                 request::query(url_decoded(contains(("datetime", datetime.to_owned())))),
-                request::query(url_decoded(contains((
-                    "bbox",
-                    "0.00000,0.00000,1.00000,1.00000".to_owned()
-                )))),
+                request::query(url_decoded(contains(("bbox", bbox.to_owned())))),
                 request::query(url_decoded(contains((
                     "datetime_frequency_interval",
                     "day".to_owned()
@@ -3927,7 +3958,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_part(availability_query(bounds(0., 1.), window(3, 5)))
             .await
             .unwrap();
 
@@ -3937,7 +3968,7 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 0);
         assert_eq!(starts.lock().unwrap().len(), 0);
 
-        // the day without items is known to be empty
+        // the day without items is known to be empty in the cell, which lies in the view
         let info = meta
             .first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
@@ -3951,6 +3982,49 @@ mod grid_request_tests {
             .await
             .unwrap();
         assert_file(&info, 0., "found");
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn availability_of_a_view_inside_a_cell_aggregates_the_view_and_seeds_nothing() {
+        let server = Server::run();
+        let starts = new_starts();
+        // only the view is counted, not the cell around it
+        expect_aggregation_in(
+            &server,
+            "0.10000,0.00000,0.40000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            &["2026-01-03T00:00:00.000Z"],
+        );
+        // a day without items in the view may have items elsewhere in the cell: it is searched
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(info.has_data(0), Some(true));
+        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(starts.lock().unwrap().len(), 0);
+
+        meta.first_part(query(bounds(0.1, 0.4), interval(4)))
+            .await
+            .unwrap();
         assert_eq!(starts.lock().unwrap().len(), 1);
     }
 
