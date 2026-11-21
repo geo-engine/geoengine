@@ -108,12 +108,13 @@ export class DataSelectionService {
 
         return forkJoin([this.unsetVectorLayer(), this.unsetRasterLayer()]).pipe(
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => {
-                this._rasterLayer.next(layer);
+            tap((savedLayer) => {
+                this._rasterLayer.next(savedLayer);
                 this.timeSteps.next(timeSteps);
                 void this.projectService.setTime(timeSteps[0]);
                 this.dataRange.next(dataRange);
             }),
+            map(() => undefined),
         );
     }
 
@@ -138,11 +139,12 @@ export class DataSelectionService {
 
         return forkJoin([this.unsetVectorLayer(), this.unsetRasterLayer(), this.unsetPolygonLayer()]).pipe(
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => {
-                this._vectorLayer.next(layer);
+            tap((savedLayer) => {
+                this._vectorLayer.next(savedLayer);
                 this.timeSteps.next(timeSteps);
                 void this.projectService.setTime(timeSteps[0]);
             }),
+            map(() => undefined),
         );
     }
 
@@ -163,7 +165,8 @@ export class DataSelectionService {
     setPolygonLayer(layer: VectorLayer): Observable<void> {
         return this.unsetPolygonLayer().pipe(
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => this._polygonLayer.next(layer)),
+            tap((savedLayer) => this._polygonLayer.next(savedLayer)),
+            map(() => undefined),
         );
     }
 

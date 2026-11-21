@@ -11,7 +11,7 @@ Name | Type
 `name` | string
 `description` | string
 `layers` | [Array&lt;ProjectLayer&gt;](ProjectLayer.md)
-`plots` | [Array&lt;Plot&gt;](Plot.md)
+`plots` | [Array&lt;ProjectLayer&gt;](ProjectLayer.md)
 `bounds` | [STRectangle](STRectangle.md)
 `timeStep` | [TimeStep](TimeStep.md)
 

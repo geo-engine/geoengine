@@ -18,7 +18,6 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("models/RasterOperator.ts"), raster_operator_ts
     yield Path("models/VectorOperator.ts"), vector_operator_ts
     yield Path("models/LayerUpdate.ts"), layer_update_ts
-    yield Path("models/PlotUpdate.ts"), plot_update_ts
     yield Path("models/TypedOperator.ts"), typed_operator_ts
     yield Path("models/HistogramBounds.ts"), histogram_bounds_ts
     yield Path("models/AttributeSelectionNames.ts"), attribute_selection_names_ts
@@ -113,13 +112,7 @@ def runtime_ts(file_contents: list[str]) -> Generator[str, None, None]:
 # fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
 def layer_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
     """Modify the LayerUpdate.ts file."""
-    yield from vec_update_ts(file_contents, "instanceOfProjectLayer")
-
-
-# fixes due to https://github.com/OpenAPITools/openapi-generator/issues/14831
-def plot_update_ts(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the PlotUpdate.ts file."""
-    yield from vec_update_ts(file_contents, "instanceOfPlot")
+    yield from vec_update_ts(file_contents, "instanceOfProjectLayerUpdate")
 
 
 def vec_update_ts(

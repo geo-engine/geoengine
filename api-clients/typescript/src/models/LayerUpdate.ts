@@ -12,13 +12,13 @@
  */
 
 import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
-import type { ProjectLayer } from './ProjectLayer';
+import type { ProjectLayerUpdate } from './ProjectLayerUpdate';
 import {
-    instanceOfProjectLayer,
-    ProjectLayerFromJSON,
-    ProjectLayerFromJSONTyped,
-    ProjectLayerToJSON,
-} from './ProjectLayer';
+    instanceOfProjectLayerUpdate,
+    ProjectLayerUpdateFromJSON,
+    ProjectLayerUpdateFromJSONTyped,
+    ProjectLayerUpdateToJSON,
+} from './ProjectLayerUpdate';
 import type { ProjectUpdateToken } from './ProjectUpdateToken';
 import {
     instanceOfProjectUpdateToken,
@@ -32,7 +32,7 @@ import {
  * 
  * @export
  */
-export type LayerUpdate = ProjectLayer | ProjectUpdateToken;
+export type LayerUpdate = ProjectLayerUpdate | ProjectUpdateToken;
 
 export function LayerUpdateFromJSON(json: any): LayerUpdate {
     return LayerUpdateFromJSONTyped(json, false);
@@ -45,8 +45,8 @@ export function LayerUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfProjectLayer(json)) {
-        return ProjectLayerFromJSONTyped(json, true);
+    if (instanceOfProjectLayerUpdate(json)) {
+        return ProjectLayerUpdateFromJSONTyped(json, true);
     }
     if (instanceOfProjectUpdateToken(json)) {
         return ProjectUpdateTokenFromJSONTyped(json, true);
@@ -65,8 +65,8 @@ export function LayerUpdateToJSONTyped(value?: LayerUpdate | null, ignoreDiscrim
     if (typeof value !== 'object') {
         return value;
     }
-    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
-        return ProjectLayerToJSON(value as ProjectLayer);
+    if (typeof value === 'object' && instanceOfProjectLayerUpdate(value)) {
+        return ProjectLayerUpdateToJSON(value as ProjectLayerUpdate);
     }
     if (instanceOfProjectUpdateToken(value)) {
         return ProjectUpdateTokenToJSON(value as ProjectUpdateToken);

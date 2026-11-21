@@ -4,8 +4,93 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
+| [**getLayerPlotHandler**](PlotsApi.md#getlayerplothandler) | **GET** /plot/{provider}/{layer} | Generates the plot of a layer, e.g. of a plot in a project. |
 | [**getPlotHandler**](PlotsApi.md#getplothandler) | **GET** /plot/{id} | Generates a plot. |
 
+
+
+## getLayerPlotHandler
+
+> WrappedPlotOutput getLayerPlotHandler(bbox, time, provider, layer, crs, spatialResolution)
+
+Generates the plot of a layer, e.g. of a plot in a project.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  PlotsApi,
+} from '@geoengine/api-client';
+import type { GetLayerPlotHandlerRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new PlotsApi(config);
+
+  const body = {
+    // string
+    bbox: 0,-0.3,0.2,0,
+    // string
+    time: 2020-01-01T00:00:00.0Z,
+    // string | Data provider id
+    provider: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | Layer id
+    layer: layer_example,
+    // string (optional)
+    crs: EPSG:4326,
+    // string | Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution. (optional)
+    spatialResolution: 0.1,0.1,
+  } satisfies GetLayerPlotHandlerRequest;
+
+  try {
+    const data = await api.getLayerPlotHandler(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **bbox** | `string` |  | [Defaults to `undefined`] |
+| **time** | `string` |  | [Defaults to `undefined`] |
+| **provider** | `string` | Data provider id | [Defaults to `undefined`] |
+| **layer** | `string` | Layer id | [Defaults to `undefined`] |
+| **crs** | `string` |  | [Optional] [Defaults to `undefined`] |
+| **spatialResolution** | `string` | Optional resolution (in the units of &#x60;crs&#x60;) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution. | [Optional] [Defaults to `undefined`] |
+
+### Return type
+
+[**WrappedPlotOutput**](WrappedPlotOutput.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 
 ## getPlotHandler

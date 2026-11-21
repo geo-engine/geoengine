@@ -23,11 +23,6 @@ import {
     IdResponseToJSON,
 } from '../models/IdResponse';
 import {
-    type OrderBy,
-    OrderByFromJSON,
-    OrderByToJSON,
-} from '../models/OrderBy';
-import {
     type Project,
     ProjectFromJSON,
     ProjectToJSON,
@@ -37,6 +32,11 @@ import {
     ProjectListingFromJSON,
     ProjectListingToJSON,
 } from '../models/ProjectListing';
+import {
+    type ProjectOrderBy,
+    ProjectOrderByFromJSON,
+    ProjectOrderByToJSON,
+} from '../models/ProjectOrderBy';
 import {
     type ProjectVersion,
     ProjectVersionFromJSON,
@@ -66,7 +66,7 @@ export interface ListProjectsHandlerRequest {
     /**
      * 
      */
-    order: OrderBy;
+    order: ProjectOrderBy;
     /**
      * 
      */
@@ -252,6 +252,18 @@ export class ProjectsApi extends runtime.BaseAPI {
 
         const queryParameters: any = {};
 
+        if (requestParameters['order'] != null) {
+            queryParameters['order'] = requestParameters['order'];
+        }
+
+        if (requestParameters['offset'] != null) {
+            queryParameters['offset'] = requestParameters['offset'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
         const headerParameters: runtime.HTTPHeaders = {};
 
         if (this.configuration && this.configuration.accessToken) {
@@ -264,9 +276,6 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/projects`;
-        urlPath = urlPath.replace('{order}', encodeURIComponent(String(requestParameters['order'])));
-        urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
-        urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
 
         return {
             path: urlPath,
@@ -509,18 +518,19 @@ export class ProjectsApi extends runtime.BaseAPI {
     /**
      * Updates a project. This will create a new version.
      */
-    async updateProjectHandlerRaw(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+    async updateProjectHandlerRaw(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         const requestOptions = await this.updateProjectHandlerRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.VoidApiResponse(response);
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
     }
 
     /**
      * Updates a project. This will create a new version.
      */
-    async updateProjectHandler(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
-        await this.updateProjectHandlerRaw(requestParameters, initOverrides);
+    async updateProjectHandler(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.updateProjectHandlerRaw(requestParameters, initOverrides);
+        return await response.value();
     }
 
 }

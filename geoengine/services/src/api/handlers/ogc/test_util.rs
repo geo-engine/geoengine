@@ -41,6 +41,64 @@ pub async fn session_and_4326_layer_id(
     (session_id, data_connector_id.into(), layer_id.into())
 }
 
+/// Returns a session id, data connector id and layer id for a project layer that is a copy of the
+/// Modis NDVI layer in EPSG:4326 projection.
+#[allow(clippy::missing_panics_doc)]
+pub async fn session_and_4326_project_layer_id(
+    app_ctx: &PostgresContext<NoTls>,
+) -> (SessionId, DataProviderId, LayerId) {
+    use crate::processing_graphs::registry::ProcessingGraphRegistry;
+    use crate::projects::{LayerUpdate, ProjectDb, ProjectLayerUpdate, UpdateProject};
+    use crate::util::tests::create_project_helper;
+
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session.clone());
+    let db = ctx.db();
+
+    let (data_connector_id, catalog_layer_id) = add_ndvi_to_layers(app_ctx).await;
+    let catalog_layer = db.load_layer(&catalog_layer_id).await.unwrap();
+
+    let processing_graph = db
+        .register_processing_graph(catalog_layer.processing_graph)
+        .await
+        .unwrap();
+
+    let project = create_project_helper(&ctx).await;
+    let project = db
+        .update_project(UpdateProject {
+            id: project,
+            name: None,
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                id: None,
+                name: catalog_layer.name,
+                description: catalog_layer.description,
+                processing_graph,
+                symbology: catalog_layer.symbology,
+                properties: catalog_layer.properties,
+                metadata: catalog_layer.metadata,
+                visibility: Default::default(),
+                source: Some(crate::layers::layer::ProviderLayerId {
+                    provider_id: data_connector_id,
+                    layer_id: catalog_layer_id,
+                }),
+            })]),
+            plots: None,
+            bounds: None,
+            time_step: None,
+        })
+        .await
+        .unwrap();
+
+    let layer_id = project.layers[0].layer.id.clone();
+
+    (
+        ctx.session().id(),
+        layer_id.provider_id.into(),
+        layer_id.layer_id.into(),
+    )
+}
+
 /// Returns a session id, data connector id and layer id for the Modis NDVI dataset in reprojected EPSG:3857 projection.
 pub async fn session_and_3857_layer_id(
     app_ctx: &PostgresContext<NoTls>,

@@ -21,9 +21,9 @@ from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.create_project import CreateProject
 from geoengine_api_client.models.id_response import IdResponse
-from geoengine_api_client.models.order_by import OrderBy
 from geoengine_api_client.models.project import Project
 from geoengine_api_client.models.project_listing import ProjectListing
+from geoengine_api_client.models.project_order_by import ProjectOrderBy
 from geoengine_api_client.models.project_version import ProjectVersion
 from geoengine_api_client.models.update_project import UpdateProject
 
@@ -570,7 +570,7 @@ class ProjectsApi:
     @validate_call
     def list_projects_handler(
         self,
-        order: OrderBy,
+        order: ProjectOrderBy,
         offset: Annotated[int, Field(strict=True, ge=0)],
         limit: Annotated[int, Field(strict=True, ge=0)],
         _request_timeout: Union[
@@ -590,7 +590,7 @@ class ProjectsApi:
 
 
         :param order: (required)
-        :type order: OrderBy
+        :type order: ProjectOrderBy
         :param offset: (required)
         :type offset: int
         :param limit: (required)
@@ -644,7 +644,7 @@ class ProjectsApi:
     @validate_call
     def list_projects_handler_with_http_info(
         self,
-        order: OrderBy,
+        order: ProjectOrderBy,
         offset: Annotated[int, Field(strict=True, ge=0)],
         limit: Annotated[int, Field(strict=True, ge=0)],
         _request_timeout: Union[
@@ -664,7 +664,7 @@ class ProjectsApi:
 
 
         :param order: (required)
-        :type order: OrderBy
+        :type order: ProjectOrderBy
         :param offset: (required)
         :type offset: int
         :param limit: (required)
@@ -718,7 +718,7 @@ class ProjectsApi:
     @validate_call
     def list_projects_handler_without_preload_content(
         self,
-        order: OrderBy,
+        order: ProjectOrderBy,
         offset: Annotated[int, Field(strict=True, ge=0)],
         limit: Annotated[int, Field(strict=True, ge=0)],
         _request_timeout: Union[
@@ -738,7 +738,7 @@ class ProjectsApi:
 
 
         :param order: (required)
-        :type order: OrderBy
+        :type order: ProjectOrderBy
         :param offset: (required)
         :type offset: int
         :param limit: (required)
@@ -811,13 +811,19 @@ class ProjectsApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if order is not None:
-            _path_params['order'] = order.value
-        if offset is not None:
-            _path_params['offset'] = offset
-        if limit is not None:
-            _path_params['limit'] = limit
         # process the query parameters
+        if order is not None:
+            
+            _query_params.append(('order', order.value))
+            
+        if offset is not None:
+            
+            _query_params.append(('offset', offset))
+            
+        if limit is not None:
+            
+            _query_params.append(('limit', limit))
+            
         # process the header parameters
         # process the form parameters
         # process the body parameter
@@ -1661,7 +1667,7 @@ class ProjectsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> None:
+    ) -> Project:
         """Updates a project. This will create a new version.
 
 
@@ -1701,7 +1707,7 @@ class ProjectsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
+            '200': "Project",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1731,7 +1737,7 @@ class ProjectsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[None]:
+    ) -> ApiResponse[Project]:
         """Updates a project. This will create a new version.
 
 
@@ -1771,7 +1777,7 @@ class ProjectsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
+            '200': "Project",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1841,7 +1847,7 @@ class ProjectsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': None,
+            '200': "Project",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1885,6 +1891,13 @@ class ProjectsApi:
             _body_params = update_project
 
 
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
 
         # set the HTTP header `Content-Type`
         if _content_type:

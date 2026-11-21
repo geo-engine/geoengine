@@ -124,9 +124,10 @@ The request and response bodies are described in the OpenAPI specification and t
 
 ## Plots
 
-| Method | Path         | Session | Description       |
-| ------ | ------------ | ------- | ----------------- |
-| `GET`  | `/plot/{id}` | yes     | Generates a plot. |
+| Method | Path                       | Session | Description                                                 |
+| ------ | -------------------------- | ------- | ----------------------------------------------------------- |
+| `GET`  | `/plot/{id}`               | yes     | Generates a plot.                                           |
+| `GET`  | `/plot/{provider}/{layer}` | yes     | Generates the plot of a layer, e.g. of a plot in a project. |
 
 ## Processing Graphs
 

@@ -29,6 +29,74 @@ const WrappedPlotOutput_1 = require("../models/WrappedPlotOutput");
  */
 class PlotsApi extends runtime.BaseAPI {
     /**
+     * Creates request options for getLayerPlotHandler without sending the request
+     */
+    getLayerPlotHandlerRequestOpts(requestParameters) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (requestParameters['bbox'] == null) {
+                throw new runtime.RequiredError('bbox', 'Required parameter "bbox" was null or undefined when calling getLayerPlotHandler().');
+            }
+            if (requestParameters['time'] == null) {
+                throw new runtime.RequiredError('time', 'Required parameter "time" was null or undefined when calling getLayerPlotHandler().');
+            }
+            if (requestParameters['provider'] == null) {
+                throw new runtime.RequiredError('provider', 'Required parameter "provider" was null or undefined when calling getLayerPlotHandler().');
+            }
+            if (requestParameters['layer'] == null) {
+                throw new runtime.RequiredError('layer', 'Required parameter "layer" was null or undefined when calling getLayerPlotHandler().');
+            }
+            const queryParameters = {};
+            if (requestParameters['bbox'] != null) {
+                queryParameters['bbox'] = requestParameters['bbox'];
+            }
+            if (requestParameters['crs'] != null) {
+                queryParameters['crs'] = requestParameters['crs'];
+            }
+            if (requestParameters['time'] != null) {
+                queryParameters['time'] = requestParameters['time'];
+            }
+            if (requestParameters['spatialResolution'] != null) {
+                queryParameters['spatialResolution'] = requestParameters['spatialResolution'];
+            }
+            const headerParameters = {};
+            if (this.configuration && this.configuration.accessToken) {
+                const token = this.configuration.accessToken;
+                const tokenString = yield token("session_token", []);
+                if (tokenString) {
+                    headerParameters["Authorization"] = `Bearer ${tokenString}`;
+                }
+            }
+            let urlPath = `/plot/{provider}/{layer}`;
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
+            return {
+                path: urlPath,
+                method: 'GET',
+                headers: headerParameters,
+                query: queryParameters,
+            };
+        });
+    }
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    getLayerPlotHandlerRaw(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestOptions = yield this.getLayerPlotHandlerRequestOpts(requestParameters);
+            const response = yield this.request(requestOptions, initOverrides);
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, WrappedPlotOutput_1.WrappedPlotOutputFromJSON)(jsonValue));
+        });
+    }
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    getLayerPlotHandler(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield this.getLayerPlotHandlerRaw(requestParameters, initOverrides);
+            return yield response.value();
+        });
+    }
+    /**
      * Creates request options for getPlotHandler without sending the request
      */
     getPlotHandlerRequestOpts(requestParameters) {

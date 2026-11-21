@@ -11,7 +11,6 @@
  * Do not edit the class manually.
  */
 import { TimeStepFromJSON, TimeStepToJSON, } from './TimeStep';
-import { PlotFromJSON, PlotToJSON, } from './Plot';
 import { ProjectVersionFromJSON, ProjectVersionToJSON, } from './ProjectVersion';
 import { STRectangleFromJSON, STRectangleToJSON, } from './STRectangle';
 import { ProjectLayerFromJSON, ProjectLayerToJSON, } from './ProjectLayer';
@@ -50,7 +49,7 @@ export function ProjectFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'],
         'description': json['description'],
         'layers': (json['layers'].map(ProjectLayerFromJSON)),
-        'plots': (json['plots'].map(PlotFromJSON)),
+        'plots': (json['plots'].map(ProjectLayerFromJSON)),
         'bounds': STRectangleFromJSON(json['bounds']),
         'timeStep': TimeStepFromJSON(json['timeStep']),
     };
@@ -68,7 +67,7 @@ export function ProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'name': value['name'],
         'description': value['description'],
         'layers': (value['layers'].map(ProjectLayerToJSON)),
-        'plots': (value['plots'].map(PlotToJSON)),
+        'plots': (value['plots'].map(ProjectLayerToJSON)),
         'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };
