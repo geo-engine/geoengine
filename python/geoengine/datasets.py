@@ -4,11 +4,12 @@ Module for working with datasets and source definitions
 
 from __future__ import annotations
 
+import json
 import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal, NamedTuple
 from uuid import UUID
 
@@ -725,6 +726,48 @@ def add_dataset_tiles(dataset: DatasetName | str, tiles: list[MultiBandGdalFileS
             [tile.to_api_dict() for tile in tiles],
             _request_timeout=timeout,
         )
+
+
+DATASET_MANIFEST_FILE_NAME = "dataset.json"
+
+
+def import_dataset(folder: Path | str, volume: str, path_in_volume: str, timeout: int = 60) -> DatasetName:
+    """
+    Import a dataset that was created from a processing graph into a volume. Requires an admin session.
+
+    Export: copy the dataset's upload folder, which contains its files and a `dataset.json`, to a folder
+    inside the volume `volume` of the target Geo Engine, at the relative path `path_in_volume`.
+    Import: call this function with that folder. It reads `folder/dataset.json`, creates the dataset on the
+    volume and adds its files as tiles. The server checks every file.
+    """
+
+    manifest = json.loads((Path(folder) / DATASET_MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
+
+    tiles: list[geoengine_api_client.AddDatasetTile] = []
+    for tile_dict in manifest["tiles"]:
+        tile = geoengine_api_client.AddDatasetTile.from_dict(tile_dict)
+        if tile is None:
+            raise InputException(f"Invalid tile in {DATASET_MANIFEST_FILE_NAME}: {tile_dict}")
+        tile.params.file_path = str(PurePosixPath(path_in_volume) / tile.params.file_path)
+        tiles.append(tile)
+
+    definition = geoengine_api_client.DatasetDefinition.from_dict(manifest["definition"])
+    if definition is None:
+        raise InputException(f"Invalid definition in {DATASET_MANIFEST_FILE_NAME}")
+
+    create = geoengine_api_client.CreateDataset(
+        data_path=geoengine_api_client.DataPath(geoengine_api_client.DataPathVolume(volume=volume)),
+        definition=definition,
+    )
+
+    session = get_session()
+
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
+        dataset_name = DatasetName.from_response(datasets_api.create_dataset_handler(create, _request_timeout=timeout))
+        datasets_api.add_dataset_tiles_handler(str(dataset_name), tiles, _request_timeout=timeout)
+
+    return dataset_name
 
 
 def add_md_dataset_tiles(
