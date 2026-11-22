@@ -112,6 +112,7 @@ class GeoEngineBinaries:
                 cls._instance._build_type = build_type
 
                 cls._instance._build_geo_engine()
+                cls._instance._locate_binaries()
 
         return cls._instance
 
@@ -120,25 +121,29 @@ class GeoEngineBinaries:
 
         if os.environ.get(SKIP_BUILD_VAR, "false").lower() == "true":
             logging.info("Skipping the build of the Geo Engine binaries, since %s is set.", SKIP_BUILD_VAR)
-        else:
-            cargo_bin = shutil.which("cargo")
+            return
 
-            if cargo_bin is None:
-                raise RuntimeError("Cargo not found")
+        cargo_bin = shutil.which("cargo")
 
-            logging.info("Building Geo Engine binaries in %s mode… this may take a while.", self._build_type.value)
+        if cargo_bin is None:
+            raise RuntimeError("Cargo not found")
 
-            subprocess.run(
-                [
-                    cargo_bin,
-                    "build",
-                    "--locked",
-                    "--bins",
-                ]
-                + (["--release"] if self._build_type == BuildType.RELEASE else []),
-                check=True,
-                cwd=self._code_path,
-            )
+        logging.info("Building Geo Engine binaries in %s mode… this may take a while.", self._build_type.value)
+
+        subprocess.run(
+            [
+                cargo_bin,
+                "build",
+                "--locked",
+                "--bins",
+            ]
+            + (["--release"] if self._build_type == BuildType.RELEASE else []),
+            check=True,
+            cwd=self._code_path,
+        )
+
+    def _locate_binaries(self) -> None:
+        """Locate the Geo Engine binaries in the target directory and check that they exist."""
 
         self._server_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-server"
         self._cli_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-cli"
