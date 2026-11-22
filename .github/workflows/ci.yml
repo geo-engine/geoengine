@@ -61,6 +61,8 @@ jobs:
             backend:
               - "geoengine/**"
             python:
+              # the Python tests run against the backend
+              - "geoengine/**"
               - "python/**"
               - "api-clients/python/**"
               - "openapi.json"
@@ -88,8 +90,7 @@ jobs:
           any() { for v in "$@"; do if [ "$v" = true ]; then echo true; return; fi; done; echo false; }
           {
             echo "backend=$(any "$FULL" "$BACKEND")"
-            # the Python tests run against the backend
-            echo "python=$(any "$FULL" "$BACKEND" "$PYTHON")"
+            echo "python=$(any "$FULL" "$PYTHON")"
             echo "api-clients=$(any "$FULL" "$API_CLIENTS")"
             echo "ui=$(any "$FULL" "$UI")"
             echo "www=$(any "$FULL" "$WWW")"
