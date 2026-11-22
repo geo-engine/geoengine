@@ -128,6 +128,15 @@ pub struct MdGdalSourceParameters {
     /// Dataset name or identifier to be loaded.
     #[schema(value_type = String, examples("era5-timeseries"))]
     pub data: NamedData,
+
+    /// *Optional*: overview level to use, i.e., how many times coarser than the native resolution
+    /// the data is read. `1` is the native resolution.
+    ///
+    /// An MD array has no overviews: each pixel of a level is the pixel of the native resolution
+    /// under its center. If not provided, the native resolution is read.
+    #[schema(value_type = Option<u32>, minimum = 1, examples(2))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overview_level: Option<NonZeroU32>,
 }
 
 impl TryFrom<MdGdalSource> for OperatorsMdGdalSource {
@@ -139,6 +148,7 @@ impl TryFrom<MdGdalSource> for OperatorsMdGdalSource {
                 data: serde_json::from_str::<geoengine_datatypes::dataset::NamedData>(
                     &serde_json::to_string(&value.params.data)?,
                 )?,
+                overview_level: value.params.overview_level,
             },
         })
     }

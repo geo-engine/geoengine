@@ -16,6 +16,9 @@ pub struct MdGdalSourceParameters {
     /// Dataset name or identifier to be loaded.
     #[serde(rename = "data")]
     pub data: String,
+    /// *Optional*: overview level to use, i.e., how many times coarser than the native resolution the data is read. `1` is the native resolution.  An MD array has no overviews: each pixel of a level is the pixel of the native resolution under its center. If not provided, the native resolution is read.
+    #[serde(rename = "overviewLevel", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub overview_level: Option<Option<i32>>,
 }
 
 impl MdGdalSourceParameters {
@@ -23,6 +26,7 @@ impl MdGdalSourceParameters {
     pub fn new(data: String) -> MdGdalSourceParameters {
         MdGdalSourceParameters {
             data,
+            overview_level: None,
         }
     }
 }

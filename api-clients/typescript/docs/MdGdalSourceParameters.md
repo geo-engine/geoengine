@@ -8,6 +8,7 @@ Parameters for the [`MdGdalSource`] operator.
 Name | Type
 ------------ | -------------
 `data` | string
+`overviewLevel` | number
 
 ## Example
 
@@ -17,6 +18,7 @@ import type { MdGdalSourceParameters } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "data": null,
+  "overviewLevel": null,
 } satisfies MdGdalSourceParameters
 
 console.log(example)

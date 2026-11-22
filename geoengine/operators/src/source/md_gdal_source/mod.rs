@@ -1,5 +1,5 @@
 use crate::cache::new_raster_cache::SupportedRasterDataType;
-use crate::engine::SingleRasterSource;
+use crate::engine::SpatialGridDescriptor;
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, MetaData, OperatorData, OperatorName,
     ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
@@ -7,12 +7,12 @@ use crate::engine::{
     TypedRasterQueryProcessor,
 };
 use crate::error::Error;
+use crate::optimization::SourcesMustNotUseOverviews;
 use crate::optimization::{OptimizableOperator, OptimizationError};
-use crate::processing::{
-    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+use crate::source::gdal_read::{BlockIo, ensure_overview_level_exists, overview_source};
+use crate::source::gdal_worker_process::{
+    GdalReaderMode, ReaderState, TILE_READ_CONCURRENCY, overview_level_spatial_grid,
 };
-use crate::source::gdal_read::BlockIo;
-use crate::source::gdal_worker_process::{GdalReaderMode, ReaderState, TILE_READ_CONCURRENCY};
 use crate::source::md_gdal_source::reader::{MdTileRequest, load_md_tile_from_files_async};
 use crate::util::Result;
 use async_trait::async_trait;
@@ -29,7 +29,9 @@ use geoengine_datatypes::{
 };
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::marker::PhantomData;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
 
 mod db_types;
@@ -50,12 +52,20 @@ pub use presentation::MdPresentation;
 #[serde(rename_all = "camelCase")]
 pub struct MdGdalSourceParameters {
     pub data: NamedData,
+    /// How many times coarser than the native resolution the data is read, `None` or `1` for the
+    /// native resolution. An MD array has no overviews: each pixel of a level is the pixel of the
+    /// full resolution under its center.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overview_level: Option<NonZeroU32>,
 }
 
 impl MdGdalSourceParameters {
     #[must_use]
     pub fn new(data: NamedData) -> Self {
-        Self { data }
+        Self {
+            data,
+            overview_level: None,
+        }
     }
 }
 
@@ -80,6 +90,11 @@ where
     pub tiling_specification: TilingSpecification,
     pub meta_data: MdMetaData,
     pub default_cache_ttl: CacheTtlSeconds,
+    /// the grid of the full resolution if the source reads a coarser level, see
+    /// [`MdGdalSourceParameters::overview_level`]
+    pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    /// how many times coarser than the full resolution the tiles are, 1 at the full resolution
+    pub level_factor: NonZeroUsize,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -116,8 +131,14 @@ where
             .tiling_grid_definition(self.tiling_specification);
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
+        // A coarser level picks its pixels from the full resolution: files and reads are in the
+        // full resolution's grid, the tiles in the level's.
+        let dataset_spatial_grid = self
+            .original_resolution_spatial_grid
+            .unwrap_or(produced_source);
+        let level_factor = self.level_factor;
         let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
-            dataset_spatial_grid: produced_source,
+            dataset_spatial_grid,
         });
 
         // `query.spatial_bounds` are pixels of the tiling lattice, which is anchored at the
@@ -125,7 +146,7 @@ where
         // source grid's own pixel space. Translate the query into that space first, otherwise a
         // source grid that does not start at (0, 0) would filter out every stored tile.
         let query_in_source_grid = query.select_spatial_bounds(
-            produced_source
+            dataset_spatial_grid
                 .geo_transform()
                 .bounding_box_2d_to_intersecting_grid_bounds(
                     &SpatialGridDefinition::new(
@@ -217,6 +238,7 @@ where
                             &loading_info,
                             &reads,
                             reader_mode,
+                            level_factor,
                             tile_info,
                             &gdal_worker,
                             blocks.as_ref(),
@@ -357,17 +379,44 @@ impl RasterOperator for MdGdalSource {
         tracing::debug!("MdGdalSource path: {:?}", path);
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
+        let overview_level = self.params.overview_level.unwrap_or(NonZeroU32::MIN);
+        ensure_overview_level_exists(
+            &self.params.data,
+            overview_level,
+            meta_data_result_descriptor
+                .spatial_grid
+                .max_overview_level(),
+        )?;
 
         let op_name = CanonicOperatorName::from(&self);
+
+        // a coarser level has the grid of the level, and reads the full resolution's
+        let full_resolution_grid = meta_data_result_descriptor
+            .spatial_grid
+            .source_spatial_grid_definition()
+            .expect("the source grid definition should be present in a source...");
+        let (produced_result_descriptor, original_resolution_spatial_grid) =
+            match overview_level_spatial_grid(full_resolution_grid, overview_level) {
+                Some(level_grid) => (
+                    RasterResultDescriptor {
+                        spatial_grid: SpatialGridDescriptor::new_source(level_grid),
+                        ..meta_data_result_descriptor
+                    },
+                    Some(full_resolution_grid),
+                ),
+                None => (meta_data_result_descriptor, None),
+            };
 
         let op = InitializedMdGdalSourceOperator {
             name: op_name,
             path,
             data_name: self.params.data,
             meta_data,
-            produced_result_descriptor: meta_data_result_descriptor,
+            produced_result_descriptor,
             tiling_specification: context.tiling_specification(),
             default_cache_ttl: context.default_cache_ttl(),
+            overview_level,
+            original_resolution_spatial_grid,
         };
 
         Ok(op.boxed())
@@ -386,6 +435,10 @@ pub struct InitializedMdGdalSourceOperator {
     pub tiling_specification: TilingSpecification,
     /// Fallback TTL for tiles of a dataset that does not carry its own.
     pub default_cache_ttl: CacheTtlSeconds,
+    /// the level read, 1 for the full resolution, see [`MdGdalSourceParameters::overview_level`]
+    pub overview_level: NonZeroU32,
+    /// the grid of the full resolution if a coarser level is read
+    pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
 }
 
 impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
@@ -401,6 +454,9 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
                 tiling_specification: self.tiling_specification,
                 meta_data: self.meta_data.clone(),
                 default_cache_ttl: self.default_cache_ttl,
+                original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                level_factor: NonZeroUsize::new(self.overview_level.get() as usize)
+                    .unwrap_or(NonZeroUsize::MIN),
                 _phantom_data: PhantomData,
             }
             .boxed()
@@ -429,32 +485,34 @@ impl InitializedRasterOperator for InitializedMdGdalSourceOperator {
     ) -> crate::util::Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
-        let source = MdGdalSource {
-            params: MdGdalSourceParameters::new(self.data_name.clone()),
-        }
-        .into();
-
-        // GDAL cannot build or read overviews for a multidimensional array, so there is
-        // nothing to lower the resolution at the source. Downsample in front instead, the
-        // same way `MockRasterSource` does.
-        if target_resolution
-            > self
-                .produced_result_descriptor
-                .spatial_grid
-                .spatial_resolution()
-        {
-            return Ok(Downsampling {
-                params: DownsamplingParams {
-                    sampling_method: DownsamplingMethod::NearestNeighbor,
-                    output_resolution: DownsamplingResolution::Resolution(target_resolution),
-                    output_origin_reference: None,
-                },
-                sources: SingleRasterSource { raster: source },
+        ensure!(
+            self.overview_level.get() == 1,
+            SourcesMustNotUseOverviews {
+                data: self.data_name.to_string(),
+                oveview_level: self.overview_level.get()
             }
-            .typed());
-        }
+        );
 
-        Ok(source)
+        // An MD array has no overviews, but a coarser level picks the pixels of the full
+        // resolution as cheaply as a `Downsampling` would, without reading every tile of it.
+        Ok(overview_source(
+            self.produced_result_descriptor
+                .spatial_grid
+                .spatial_resolution(),
+            target_resolution,
+            self.produced_result_descriptor
+                .spatial_grid
+                .max_overview_level(),
+            |overview_level| {
+                MdGdalSource {
+                    params: MdGdalSourceParameters {
+                        data: self.data_name.clone(),
+                        overview_level: Some(overview_level),
+                    },
+                }
+                .typed()
+            },
+        ))
     }
 }
 
@@ -796,8 +854,32 @@ mod tests {
         time_interval: TimeInterval,
         attributes: BandSelection,
     ) -> Vec<RasterTile2D<f32>> {
+        query_md_level(
+            exe_ctx,
+            query_ctx,
+            name,
+            spatial_query,
+            time_interval,
+            attributes,
+            None,
+        )
+        .await
+    }
+
+    async fn query_md_level(
+        exe_ctx: &MockExecutionContext,
+        query_ctx: &MockQueryContext,
+        name: NamedData,
+        spatial_query: GridBoundingBox2D,
+        time_interval: TimeInterval,
+        attributes: BandSelection,
+        overview_level: Option<NonZeroU32>,
+    ) -> Vec<RasterTile2D<f32>> {
         let op: MdGdalSource = SourceOperator {
-            params: MdGdalSourceParameters::new(name.clone()),
+            params: MdGdalSourceParameters {
+                data: name.clone(),
+                overview_level,
+            },
         };
         let o = op
             .typed()
@@ -998,6 +1080,105 @@ mod tests {
 
             assert!(!tiles[0].is_empty(), "{name}");
             assert_eq!(tiles[0], tiles[1], "{name}");
+        }
+    }
+
+    /// The pixel at the global `(row, col)` of `tiles`, `None` if it is no data.
+    fn pixel_at(tiles: &[RasterTile2D<f32>], row: isize, col: isize) -> Option<f32> {
+        let tile = tiles
+            .iter()
+            .find(|t| {
+                let b = t.tile_information().global_pixel_bounds();
+                b.y_min() <= row && row <= b.y_max() && b.x_min() <= col && col <= b.x_max()
+            })
+            .unwrap_or_else(|| panic!("no tile covers ({row}, {col})"));
+        let GridOrEmpty::Grid(grid) = &tile.grid_array else {
+            return None;
+        };
+        let min = tile.tile_information().global_pixel_bounds().min_index();
+        let index = (row - min.y()) as usize * grid.inner_grid.shape.x() + (col - min.x()) as usize;
+        grid.validity_mask.data[index].then(|| grid.inner_grid.data[index])
+    }
+
+    /// A coarser level takes the pixel of the full resolution under the center of each of its
+    /// pixels, through blocks and without, also for a south-up array and for a wrapped one whose
+    /// tiles read two windows.
+    #[tokio::test]
+    async fn test_query_overview_level_picks_the_center_pixels() {
+        use crate::cache::new_raster_cache::{BlockReadMode, NewRasterCacheEnum};
+        const LEVEL: isize = 2;
+
+        let cases = [
+            (
+                "md_cf_minutes",
+                MdDataset::ascending_lat_minutes(),
+                ts_grid_bounds(),
+                TimeInterval::new_unchecked(-2_208_988_800_000, -2_208_988_800_000 + 60_000),
+            ),
+            (
+                "md_wrap_multitile",
+                MdDataset::wrapped(
+                    "md/wrap_0_360_multitile.nc",
+                    1440,
+                    4,
+                    (-0.125, 1.0, 0.25, -0.25),
+                    2,
+                ),
+                GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]),
+                TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY),
+            ),
+        ];
+
+        for (name, dataset, spatial, time) in cases {
+            let mut exe_ctx = MockExecutionContext::test_default();
+            let name = add_md_dataset(&mut exe_ctx, name, dataset);
+            let full = query_md_source(
+                &exe_ctx,
+                &exe_ctx.mock_query_context_test_default(),
+                name.clone(),
+                spatial,
+                time,
+                BandSelection::first(),
+            )
+            .await;
+            let level_spatial = GridBoundingBox2D::new_unchecked(
+                [
+                    spatial.y_min().div_euclid(LEVEL),
+                    spatial.x_min().div_euclid(LEVEL),
+                ],
+                [
+                    spatial.y_max().div_euclid(LEVEL),
+                    spatial.x_max().div_euclid(LEVEL),
+                ],
+            );
+
+            for mode in [BlockReadMode::Off, BlockReadMode::On] {
+                let mut query_ctx = exe_ctx.mock_query_context_test_default();
+                query_ctx.new_raster_cache = Some(Arc::new(
+                    NewRasterCacheEnum::new_lru(100_000_000).with_block_read_mode(mode),
+                ));
+                let level = query_md_level(
+                    &exe_ctx,
+                    &query_ctx,
+                    name.clone(),
+                    level_spatial,
+                    time,
+                    BandSelection::first(),
+                    NonZeroU32::new(LEVEL as u32),
+                )
+                .await;
+                assert!(!level.is_empty(), "{name} {mode:?}");
+
+                for row in level_spatial.y_min()..=level_spatial.y_max() {
+                    for col in level_spatial.x_min()..=level_spatial.x_max() {
+                        assert_eq!(
+                            pixel_at(&level, row, col),
+                            pixel_at(&full, LEVEL * row + LEVEL / 2, LEVEL * col + LEVEL / 2),
+                            "{name} {mode:?} at ({row}, {col})"
+                        );
+                    }
+                }
+            }
         }
     }
 

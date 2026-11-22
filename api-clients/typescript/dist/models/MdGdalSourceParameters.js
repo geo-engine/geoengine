@@ -34,6 +34,7 @@ function MdGdalSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'data': json['data'],
+        'overviewLevel': json['overviewLevel'] === undefined ? undefined : json['overviewLevel'] === null ? null : json['overviewLevel'],
     };
 }
 function MdGdalSourceParametersToJSON(json) {
@@ -45,5 +46,6 @@ function MdGdalSourceParametersToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'data': value['data'],
+        'overviewLevel': value['overviewLevel'],
     };
 }

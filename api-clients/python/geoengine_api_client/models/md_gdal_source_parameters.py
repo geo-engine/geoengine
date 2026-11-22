@@ -18,7 +18,8 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -28,7 +29,8 @@ class MdGdalSourceParameters(BaseModel):
     Parameters for the [`MdGdalSource`] operator.
     """ # noqa: E501
     data: StrictStr = Field(description="Dataset name or identifier to be loaded.")
-    __properties: ClassVar[List[str]] = ["data"]
+    overview_level: Optional[Annotated[int, Field(strict=True, ge=1)]] = Field(default=None, description="*Optional*: overview level to use, i.e., how many times coarser than the native resolution the data is read. `1` is the native resolution.  An MD array has no overviews: each pixel of a level is the pixel of the native resolution under its center. If not provided, the native resolution is read.", alias="overviewLevel")
+    __properties: ClassVar[List[str]] = ["data", "overviewLevel"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -69,6 +71,11 @@ class MdGdalSourceParameters(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if overview_level (nullable) is None
+        # and model_fields_set contains the field
+        if self.overview_level is None and "overview_level" in self.model_fields_set:
+            _dict['overviewLevel'] = None
+
         return _dict
 
     @classmethod
@@ -81,7 +88,8 @@ class MdGdalSourceParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "data": obj.get("data")
+            "data": obj.get("data"),
+            "overviewLevel": obj.get("overviewLevel")
         })
         return _obj
 

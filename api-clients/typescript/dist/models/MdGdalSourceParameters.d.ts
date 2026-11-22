@@ -18,6 +18,14 @@ export interface MdGdalSourceParameters {
      * Dataset name or identifier to be loaded.
      */
     data: string;
+    /**
+     * *Optional*: overview level to use, i.e., how many times coarser than the native resolution
+     * the data is read. `1` is the native resolution.
+     *
+     * An MD array has no overviews: each pixel of a level is the pixel of the native resolution
+     * under its center. If not provided, the native resolution is read.
+     */
+    overviewLevel?: number | null;
 }
 /**
  * Check if a given object implements the MdGdalSourceParameters interface.

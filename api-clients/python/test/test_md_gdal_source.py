@@ -37,13 +37,15 @@ class TestMdGdalSource(unittest.TestCase):
             return MdGdalSource(
                 type = 'MdGdalSource',
                 params = geoengine_api_client.models.md_gdal_source_parameters.MdGdalSourceParameters(
-                    data = '', )
+                    data = '', 
+                    overview_level = 1, )
             )
         else:
             return MdGdalSource(
                 type = 'MdGdalSource',
                 params = geoengine_api_client.models.md_gdal_source_parameters.MdGdalSourceParameters(
-                    data = '', ),
+                    data = '', 
+                    overview_level = 1, ),
         )
         """
 

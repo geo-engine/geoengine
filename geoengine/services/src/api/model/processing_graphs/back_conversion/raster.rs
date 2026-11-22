@@ -7,12 +7,11 @@ use crate::api::model::processing_graphs::{
     MdGdalSource, MdGdalSourceParameters, MultiBandGdalSource, NeighborhoodAggregate,
     NeighborhoodAggregateParameters, NeighborhoodKernel, Onnx, OnnxParameters,
     PolygonRasterization, PolygonRasterizationParameters, Radiance, RadianceParameters,
-    RasterOperator, RasterScaling, RasterScalingParameters, RasterStacker,
-    RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
-    Rasterization, RasterizationParameters, Reflectance, ReflectanceParameters, RenameBands,
-    Temperature, TemperatureParameters, TemporalRasterAggregation,
-    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters, Warp,
-    WarpDownsamplingMethod, WarpParameters, WarpUpsamplingMethod,
+    RasterOperator, RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
+    RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
+    Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
+    TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    Warp, WarpDownsamplingMethod, WarpParameters, WarpUpsamplingMethod,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -103,6 +102,7 @@ impl TryFrom<&OperatorsMdGdalSource> for MdGdalSource {
             r#type: Default::default(),
             params: MdGdalSourceParameters {
                 data: value.params.data.clone().into(),
+                overview_level: value.params.overview_level,
             },
         })
     }

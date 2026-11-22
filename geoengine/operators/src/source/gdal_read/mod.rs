@@ -5,6 +5,7 @@
 mod blocks;
 
 pub use blocks::{BlockIo, MdSlice};
+pub(crate) use blocks::{Picked, pick_from_window};
 pub use blocks::{UnitRead, UnitResult};
 
 use crate::cache::new_raster_cache::SupportedRasterDataType;

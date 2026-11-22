@@ -35,7 +35,8 @@ class TestMdGdalSourceParameters(unittest.TestCase):
         model = MdGdalSourceParameters()
         if include_optional:
             return MdGdalSourceParameters(
-                data = ''
+                data = '',
+                overview_level = 1
             )
         else:
             return MdGdalSourceParameters(
