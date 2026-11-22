@@ -145,7 +145,13 @@ export class MainComponent {
         return undefined;
     });
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
+    /** Also while the boxes of a date load, which can be before the tiles load and take a while for a view not seen before. */
+    readonly isLoading = computed(
+        () =>
+            this.eodysseyLayerService.catalogueLoading() ||
+            (this.tileLoading() && !this.zoomRequired()) ||
+            this.footprintsService.overlayLoading(),
+    );
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);
