@@ -63,6 +63,8 @@ pub struct StacMultiBandMetaData {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for.
     datetime_frequency_aggregation: bool,
+    /// The time of the datasets, shared with the provider, see `time_bounds`.
+    time_bounds: Arc<tokio::sync::OnceCell<Option<TimeInterval>>>,
     grid: StacGrid,
 }
 
@@ -225,7 +227,7 @@ impl
             data_type: self.dataset.data_type,
             spatial_reference: self.dataset.projection.into(),
             time: TimeDescriptor {
-                bounds: None,
+                bounds: self.time_bounds().await,
                 dimension: self.time_dimension,
             },
             spatial_grid: self.dataset.spatial_grid,
@@ -497,8 +499,23 @@ impl StacMultiBandMetaData {
             query_cache: provider.query_cache.clone(),
             max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
             datetime_frequency_aggregation: provider.datetime_frequency_aggregation,
+            time_bounds: provider.time_bounds.clone(),
             grid: provider.grid,
         }
+    }
+
+    /// The time of the datasets: from the provider definition, or else from the temporal extent of
+    /// the collection, asked once. A failed request is not kept, so a later call asks again.
+    async fn time_bounds(&self) -> Option<TimeInterval> {
+        let collection_url = Url::from_str(&self.api_url).ok().and_then(|base| {
+            join_base_url_and_path(&base, &format!("collections/{}", self.collection_name)).ok()
+        })?;
+        self.time_bounds
+            .get_or_try_init(|| self.client.collection_time_bounds(collection_url))
+            .await
+            .ok()
+            .copied()
+            .flatten()
     }
 
     /// Estimate the metadata cache weight of a complete query result, in bytes.
@@ -1663,6 +1680,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         }
     }
 
@@ -2038,6 +2056,7 @@ mod tests {
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
                 datetime_frequency_aggregation: false,
+                time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -2154,6 +2173,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             cache_ttl_secs: None,
             grid: StacGrid::default(),
         };
@@ -2227,6 +2247,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2316,6 +2337,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2421,6 +2443,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2783,6 +2806,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ndvi_stac_processing_graph(app_ctx: PostgresContext<NoTls>) {
         let server = Server::run();
+        // the time of the dataset; the collection does not know it, so it has none
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/sentinel-2-l2a"))
+                .times(1..)
+                .respond_with(responders::status_code(404)),
+        );
         server.expect(
             Expectation::matching(request::method_path(
                 "GET",
@@ -2914,6 +2943,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         };
 
         admin_ctx
@@ -3161,12 +3191,8 @@ mod grid_request_tests {
         )
     }
 
-    fn provider_with_registry(
-        server: &Server,
-        cache_bytes: usize,
-        grid: StacGrid,
-        request_registry: crate::datasets::external::stac::StacRequestRegistry,
-    ) -> StacDataProvider {
+    /// The definition of a provider of one daily dataset on `server`.
+    fn provider_definition(server: &Server, grid: StacGrid) -> StacDataProviderDefinition {
         let dataset = StacProviderDataset {
             name: "test".to_owned(),
             description: String::new(),
@@ -3182,31 +3208,41 @@ mod grid_request_tests {
                 band_name: None,
             })],
         };
+        StacDataProviderDefinition {
+            id: DataProviderId::new(),
+            name: "test".to_owned(),
+            description: String::new(),
+            api_url: server.url_str("/"),
+            collection_name: "test".to_owned(),
+            s3_config: None,
+            authentication: None,
+            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
+                TimeStep {
+                    granularity: TimeGranularity::Days,
+                    step: 1,
+                },
+            )),
+            datasets: vec![dataset],
+            priority: None,
+            page_limit: 100,
+            query_timeout_secs: 5,
+            cache_ttl_secs: None,
+            stac_grid: Some(grid),
+            max_concurrent_cell_searches: None,
+            // most tests are about a server that aggregates
+            datetime_frequency_aggregation: Some(true),
+            time_bounds: None,
+        }
+    }
+
+    fn provider_with_registry(
+        server: &Server,
+        cache_bytes: usize,
+        grid: StacGrid,
+        request_registry: crate::datasets::external::stac::StacRequestRegistry,
+    ) -> StacDataProvider {
         let mut provider = StacDataProvider::from_definition_with_request_registry(
-            StacDataProviderDefinition {
-                id: DataProviderId::new(),
-                name: "test".to_owned(),
-                description: String::new(),
-                api_url: server.url_str("/"),
-                collection_name: "test".to_owned(),
-                s3_config: None,
-                authentication: None,
-                time_dimension: TimeDimension::Regular(
-                    RegularTimeDimension::new_with_epoch_origin(TimeStep {
-                        granularity: TimeGranularity::Days,
-                        step: 1,
-                    }),
-                ),
-                datasets: vec![dataset],
-                priority: None,
-                page_limit: 100,
-                query_timeout_secs: 5,
-                cache_ttl_secs: None,
-                stac_grid: Some(grid),
-                max_concurrent_cell_searches: None,
-                // most tests are about a server that aggregates
-                datetime_frequency_aggregation: Some(true),
-            },
+            provider_definition(server, grid),
             request_registry,
         )
         .unwrap();
@@ -4364,6 +4400,71 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_time_of_the_datasets_comes_from_the_collection_once() {
+        let server = Server::run();
+        // a second request would be unexpected and fail
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test"))
+                .times(1)
+                .respond_with(responders::json_encoded(json!({
+                    "id": "test",
+                    "extent": {
+                        "spatial": {"bbox": [[-180, -90, 180, 90]]},
+                        "temporal": {"interval": [["2015-06-27T00:00:00Z", null]]},
+                    },
+                }))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        // 2015-06-27T00:00:00Z
+        let start =
+            geoengine_datatypes::primitives::TimeInstance::from_millis(1_435_363_200_000).unwrap();
+
+        for index in [0, 0] {
+            let descriptor = metadata(&provider, index)
+                .await
+                .result_descriptor()
+                .await
+                .unwrap();
+            assert_eq!(
+                descriptor.time.bounds,
+                Some(
+                    TimeInterval::new(start, geoengine_datatypes::primitives::TimeInstance::MAX)
+                        .unwrap()
+                )
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_time_of_the_datasets_in_the_provider_definition_overrides_the_collection() {
+        // no requests are expected
+        let server = Server::run();
+        let bounds = TimeInterval::new(0, 1_000).unwrap();
+        let mut definition = provider_definition(
+            &server,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        definition.time_bounds = Some(bounds);
+        let provider = StacDataProvider::from_definition(definition).unwrap();
+
+        let descriptor = metadata(&provider, 0)
+            .await
+            .result_descriptor()
+            .await
+            .unwrap();
+
+        assert_eq!(descriptor.time.bounds, Some(bounds));
     }
 
     #[tokio::test]

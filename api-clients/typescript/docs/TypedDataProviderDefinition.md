@@ -46,6 +46,7 @@ Name | Type
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
 `datetimeFrequencyAggregation` | boolean
+`timeBounds` | [TimeInterval](TimeInterval.md)
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -97,6 +98,7 @@ const example = {
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
   "datetimeFrequencyAggregation": null,
+  "timeBounds": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

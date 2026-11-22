@@ -20,6 +20,7 @@ exports.StacDataProviderDefinitionToJSON = StacDataProviderDefinitionToJSON;
 exports.StacDataProviderDefinitionToJSONTyped = StacDataProviderDefinitionToJSONTyped;
 const StacProviderS3Config_1 = require("./StacProviderS3Config");
 const StacProviderDataset_1 = require("./StacProviderDataset");
+const TimeInterval_1 = require("./TimeInterval");
 const StacGrid_1 = require("./StacGrid");
 const StacProviderAuthentication_1 = require("./StacProviderAuthentication");
 const TimeDimension_1 = require("./TimeDimension");
@@ -78,6 +79,7 @@ function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : (0, StacGrid_1.StacGridFromJSON)(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
+        'timeBounds': json['timeBounds'] === undefined ? undefined : json['timeBounds'] === null ? null : (0, TimeInterval_1.TimeIntervalFromJSON)(json['timeBounds']),
     };
 }
 function StacDataProviderDefinitionToJSON(json) {
@@ -105,5 +107,6 @@ function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fals
         'stacGrid': (0, StacGrid_1.StacGridToJSON)(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
+        'timeBounds': (0, TimeInterval_1.TimeIntervalToJSON)(value['timeBounds']),
     };
 }

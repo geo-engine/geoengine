@@ -23,6 +23,7 @@ Name | Type
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
 `datetimeFrequencyAggregation` | boolean
+`timeBounds` | [TimeInterval](TimeInterval.md)
 
 ## Example
 
@@ -48,6 +49,7 @@ const example = {
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
   "datetimeFrequencyAggregation": null,
+  "timeBounds": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

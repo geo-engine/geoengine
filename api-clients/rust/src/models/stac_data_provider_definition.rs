@@ -51,6 +51,9 @@ pub struct StacDataProviderDefinition {
     /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the Copernicus Data Space cannot).  If set, the availability of a calendar comes from one aggregation over the view per chunk of time steps, at any zoom, instead of one search per grid cell and page, which is much faster. Days without items are stored as empty for the grid cells inside the view, so their map tiles need no search. Map tiles and the boxes of a date on the map still search. Omitted values do not use it.
     #[serde(rename = "datetimeFrequencyAggregation", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub datetime_frequency_aggregation: Option<Option<bool>>,
+    /// The time of the datasets. Omitted values come from the temporal extent of the collection, so this is only needed where that is missing or wrong. Apps use it to ask no dates before the data starts.
+    #[serde(rename = "timeBounds", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub time_bounds: Option<Option<Box<models::TimeInterval>>>,
 }
 
 impl StacDataProviderDefinition {
@@ -73,6 +76,7 @@ impl StacDataProviderDefinition {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         }
     }
 }
