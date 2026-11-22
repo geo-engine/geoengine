@@ -107,7 +107,8 @@ struct WorkerJob {
 struct WorkerAffinity {
     dataset_hash: u64,
     band: usize,
-    /// `None` after a header read, which has no pixel window
+    /// in full-resolution pixels, so that reads of different levels compare; `None` after a header
+    /// read, which has no pixel window
     spatial_window: Option<GridBoundingBox2D>,
     timestamp: Instant,
 }
@@ -607,7 +608,7 @@ impl GdalProcessPool {
                     continue;
                 }
             };
-            let window = job.request.0.read_window_bounds();
+            let window = job.request.0.full_resolution_footprint();
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
 
@@ -1099,7 +1100,7 @@ impl BrokerState {
         req: &QueuedRequest,
         now: Instant,
     ) -> Option<(usize, WorkerRank)> {
-        let window = req.request.0.read_window_bounds();
+        let window = req.request.0.full_resolution_footprint();
         let band = req.request.0.dataset_params.rasterband_channel;
 
         let mut best: Option<(usize, WorkerRank)> = None;
@@ -1155,7 +1156,7 @@ impl BrokerState {
         let busy_affinity = WorkerAffinity {
             dataset_hash: req.dataset_hash,
             band: req.request.0.dataset_params.rasterband_channel,
-            spatial_window: req.request.0.read_window_bounds(),
+            spatial_window: req.request.0.full_resolution_footprint(),
             timestamp: now,
         };
 
@@ -1679,7 +1680,7 @@ mod tests {
         GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
-    use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
+    use geoengine_datatypes::raster::{GridShapeAccess, RasterDataType};
 
     fn read_job(command: WorkerCommand) -> WorkerJob {
         match command {
@@ -2216,10 +2217,7 @@ mod tests {
             read_id: None,
             request: GdalRequest::Read {
                 read_advise: GdalReadAdvise {
-                    gdal_read_widow: GdalReadWindow::new(
-                        GridIdx2D::new([0, 0]),
-                        GridShape2D::new([256, 256]),
-                    ),
+                    gdal_read_widow: GdalReadWindow::new(w.min_index(), w.grid_shape()),
                     read_window_bounds: w,
                     bounds_of_target: w,
                     flip_y: false,
@@ -2336,6 +2334,74 @@ mod tests {
                 .expect("worker 0 should have received the job (affinity match)"),
         );
         assert_eq!(job.dataset_hash, 100);
+    }
+
+    /// A read of `size` pixels at `[row, col]` of the level `factor` times coarser than the file.
+    fn make_level_request(
+        dataset_hash: u64,
+        factor: usize,
+        [row, col]: [isize; 2],
+        size: usize,
+    ) -> (Box<QueuedRequest>, oneshot::Receiver<ReadResult>) {
+        let (mut req, rx) = make_request(
+            dataset_hash,
+            1,
+            window(
+                [row, col],
+                [row + size as isize - 1, col + size as isize - 1],
+            ),
+        );
+        if let GdalRequest::Read { level_factor, .. } = &mut req.request.0.request {
+            *level_factor = std::num::NonZeroUsize::new(factor);
+        }
+        (req, rx)
+    }
+
+    #[test]
+    fn it_gives_the_footprint_of_a_read_in_full_resolution_pixels() {
+        // rows 64.., columns 128.. of the level 8 times coarser
+        let (level, _r) = make_level_request(100, 8, [64, 128], 512);
+        assert_eq!(
+            level.request.0.full_resolution_footprint(),
+            Some(window([512, 1024], [4607, 5119]))
+        );
+
+        // a resampled read takes its window from the full resolution
+        let w = window([10, 20], [265, 275]);
+        let (resampled, _r) = make_request(100, 1, w);
+        assert_eq!(resampled.request.0.full_resolution_footprint(), Some(w));
+
+        let (mut header, _r) = make_request(100, 1, w);
+        header.request.0.request = GdalRequest::Header;
+        assert_eq!(header.request.0.full_resolution_footprint(), None);
+    }
+
+    /// Windows of different levels are compared in full-resolution pixels: a coarser read of the
+    /// same area is nearer than a full-resolution read with similar level coordinates elsewhere.
+    #[test]
+    fn affinity_compares_windows_of_different_levels_in_full_resolution_pixels() {
+        let footprint = |req: Box<QueuedRequest>| {
+            req.request
+                .0
+                .full_resolution_footprint()
+                .expect("a read has a footprint")
+        };
+        // full-resolution pixels 4096.. and 1024.., as the companions record them
+        let (same_area, _r0) = make_level_request(100, 8, [512, 512], 512);
+        let (elsewhere, _r1) = make_level_request(100, 1, [1024, 1024], 512);
+        let (mut w0, mut rx0) = dummy_worker(0);
+        let (mut w1, mut rx1) = dummy_worker(1);
+        w0.affinity = Some(make_affinity(100, 1, footprint(elsewhere)));
+        w1.affinity = Some(make_affinity(100, 1, footprint(same_area)));
+        let mut state = BrokerState::new(vec![w0, w1], 2, 4, SchedulingStrategy::GlobalMatrix);
+
+        // full-resolution pixels 4096.. again, at level coordinates equal to worker 0's read
+        let (req, _r) = make_level_request(100, 4, [1024, 1024], 512);
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        assert!(rx1.try_recv().is_ok(), "the worker that read the same area");
+        assert!(rx0.try_recv().is_err());
     }
 
     #[test]
