@@ -333,7 +333,7 @@ jobs:
       - run: just common wait-for-port $PROXY_PORT
         env:
           PROXY_PORT: 8123
-      - name: Validate service (map tiles)
+      - name: Validate service (map + coverage tiles)
         uses: geo-engine/ogc-validator@v3
         with:
           teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
@@ -342,25 +342,9 @@ jobs:
           ogc-api-tiles: true
           service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
           ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
-          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
-          ogc-api-tiles-tilematrix: "1"
-          ogc-api-tiles-mintilerow: "0"
-          ogc-api-tiles-maxtilerow: "1"
-          ogc-api-tiles-mintilecol: "0"
-          ogc-api-tiles-maxtilecol: "1"
-          ogc-api-tiles-ignore: ""
-        env:
-          PROXY_URL: "http://127.0.0.1:8123"
-      - name: Validate service (coverage tiles)
-        uses: geo-engine/ogc-validator@v3
-        with:
-          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
-          ogc-api-processes: false
-          ogc-api-features: false
-          ogc-api-tiles: true
-          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
-          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
-          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-urltemplatefortiles: |
+            ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z
+            ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z
           ogc-api-tiles-tilematrix: "1"
           ogc-api-tiles-mintilerow: "0"
           ogc-api-tiles-maxtilerow: "1"
