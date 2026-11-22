@@ -273,6 +273,11 @@ endpoint = "http://127.0.0.1:4317"
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
 CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
+# With the patched OpenJPEG (see `environment` below), use 64 KB: it then fetches only the packets
+# a resolution needs, which 1 MB chunks would round up to whole tile-parts again. 256 KB was not
+# faster and downloaded about 45% more (Sentinel-2 bench). Stock OpenJPEG reads whole tile-parts,
+# so keep 1 MB with it.
+# CPL_VSIL_CURL_CHUNK_SIZE = "65536"
 VSI_CACHE = "TRUE"
 VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open
 # block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process. With
@@ -300,12 +305,19 @@ GDAL_NUM_THREADS = "4"
 # server. For what GDAL reads as a config option, use `gdal_config_options` above instead; this is
 # for the dynamic loader and for libraries that read variables themselves, e.g. a different
 # OpenJPEG and its options:
-# LD_LIBRARY_PATH = "/opt/openjpeg/lib"
+# LD_LIBRARY_PATH = "/opt/openjpeg-plt/lib"
 #
 # No speculative tile search in the patched OpenJPEG of geoengine-container: for files without a
 # TLM index it would guess where a tile starts and scan for its marker, which a crafted file can
 # fool into decoding other data. Set "YES" only for trusted files. Stock OpenJPEG ignores it.
 OPJ_TILE_SEARCH = "NO"
+# For trusted files (e.g. Sentinel-2 from CODE-DE or CREODIAS) without a TLM index, "YES" finds a
+# tile without reading every tile header before it. Use it with the 64 KB chunks above.
+# OPJ_TILE_SEARCH = "YES"
+# Searches in the same part of a file wait for each other (default). "NO" lets them read in
+# parallel: faster on files with many nearly empty tiles (sea, no-data), but about 20% more
+# downloads, so keep the default.
+# OPJ_TILE_SEARCH_WAIT = "NO"
 #
 # One thread for the OpenBLAS and OpenMP pools: GDAL links them via Armadillo, and a threaded
 # OpenBLAS starts one idle thread per core in every worker as soon as it is loaded, before any GDAL
