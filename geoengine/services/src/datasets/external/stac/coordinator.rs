@@ -23,6 +23,7 @@
 use super::{StacProviderAuthentication, auth::StacAuthentication};
 
 mod aggregation;
+mod collection;
 use crate::util::retry::{RetryAction, RetryPolicy, retry_http_with_action};
 pub(crate) use aggregation::step_has_items;
 use chrono::{DateTime, Utc};

@@ -26,6 +26,13 @@ import {
     StacProviderDatasetToJSON,
     StacProviderDatasetToJSONTyped,
 } from './StacProviderDataset';
+import type { TimeInterval } from './TimeInterval';
+import {
+    TimeIntervalFromJSON,
+    TimeIntervalFromJSONTyped,
+    TimeIntervalToJSON,
+    TimeIntervalToJSONTyped,
+} from './TimeInterval';
 import type { StacGrid } from './StacGrid';
 import {
     StacGridFromJSON,
@@ -130,6 +137,12 @@ export interface StacDataProviderDefinition {
      * Omitted values do not use it.
      */
     datetimeFrequencyAggregation?: boolean | null;
+    /**
+     * The time of the datasets. Omitted values come from the temporal extent of the collection,
+     * so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+     * the data starts.
+     */
+    timeBounds?: TimeInterval | null;
 }
 
 
@@ -186,6 +199,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
+        'timeBounds': json['timeBounds'] === undefined ? undefined : json['timeBounds'] === null ? null : TimeIntervalFromJSON(json['timeBounds']),
     };
 }
 
@@ -217,6 +231,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
+        'timeBounds': TimeIntervalToJSON(value['timeBounds']),
     };
 }
 

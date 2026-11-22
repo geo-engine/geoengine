@@ -4,7 +4,9 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, SpatialResolution, TimeDimension, TimeInterval,
+};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
@@ -140,6 +142,11 @@ pub struct StacDataProviderDefinition {
     /// tiles and the boxes of a date on the map still search. Omitted values do not use it.
     #[serde(default)]
     pub datetime_frequency_aggregation: Option<bool>,
+    /// The time of the datasets. Omitted values come from the temporal extent of the collection,
+    /// so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+    /// the data starts.
+    #[serde(default)]
+    pub time_bounds: Option<TimeInterval>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -457,6 +464,8 @@ pub struct StacDataProvider {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for
     datetime_frequency_aggregation: bool,
+    /// The time of the datasets, from the definition or else from the collection, asked once
+    time_bounds: Arc<tokio::sync::OnceCell<Option<TimeInterval>>>,
     grid: StacGrid,
 }
 
@@ -508,6 +517,12 @@ impl StacDataProvider {
             datetime_frequency_aggregation: definition
                 .datetime_frequency_aggregation
                 .unwrap_or(false),
+            time_bounds: Arc::new(
+                definition
+                    .time_bounds
+                    .map(|bounds| tokio::sync::OnceCell::new_with(Some(Some(bounds))))
+                    .unwrap_or_default(),
+            ),
             grid,
         })
     }

@@ -3,7 +3,7 @@ use crate::{
         datatypes::{
             CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, LayerId,
             MlModelName, RasterDataType, RasterToDatasetQueryRectangle, SpatialReference,
-            SpatialResolution, TimeGranularity,
+            SpatialResolution, TimeGranularity, TimeInterval,
         },
         operators::{
             GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -1178,6 +1178,11 @@ pub struct StacDataProviderDefinition {
     /// Omitted values do not use it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datetime_frequency_aggregation: Option<bool>,
+    /// The time of the datasets. Omitted values come from the temporal extent of the collection,
+    /// so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+    /// the data starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_bounds: Option<TimeInterval>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1218,6 +1223,7 @@ impl From<StacDataProviderDefinition>
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
             datetime_frequency_aggregation: value.datetime_frequency_aggregation,
+            time_bounds: value.time_bounds.map(Into::into),
         }
     }
 }
@@ -1244,6 +1250,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
             datetime_frequency_aggregation: value.datetime_frequency_aggregation,
+            time_bounds: value.time_bounds.map(Into::into),
         }
     }
 }

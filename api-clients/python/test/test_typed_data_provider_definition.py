@@ -159,6 +159,9 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     target_number_of_cells = 1, ),
                 max_concurrent_cell_searches = 56,
                 datetime_frequency_aggregation = True,
+                time_bounds = geoengine_api_client.models.time_interval.TimeInterval(
+                    start = 56, 
+                    end = 56, ),
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')

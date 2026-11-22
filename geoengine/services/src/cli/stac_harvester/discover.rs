@@ -215,6 +215,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         stac_grid: None,
         max_concurrent_cell_searches: None,
         datetime_frequency_aggregation: params.datetime_frequency_aggregation.then_some(true),
+        time_bounds: None,
     };
 
     write_discovered_mapping(provider_def, params.output.as_ref())?;

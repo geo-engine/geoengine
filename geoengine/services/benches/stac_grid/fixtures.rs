@@ -445,6 +445,7 @@ pub(super) fn provider(
         stac_grid: Some(grid),
         max_concurrent_cell_searches: None,
         datetime_frequency_aggregation: None,
+        time_bounds: None,
     })
     .expect("benchmark provider config is valid");
     // Fresh, local cache for every scenario; cache=0 keeps in-flight coalescing.
