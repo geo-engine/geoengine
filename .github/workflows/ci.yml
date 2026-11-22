@@ -536,30 +536,33 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      # the latest release of each version prefix is tested, i.e., 22.12.x, 24.x and 26.x
+      NODE_VERSIONS: "22.12 24 26"
+
     steps:
       - uses: actions/checkout@v7
-      - name: Use Node.js 22.12.x
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22.12.x
-      - name: Install and build (Node.js 22.12.x)
-        run: just api-clients test-typescript
-      - name: Use Node.js 24.x
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24.x
-      - name: Install and build (Node.js 24.x)
+      # `setup-node` only installs one version per step, so the versions are downloaded from nodejs.org
+      - name: Test with all Node.js versions
+        shell: bash
         run: |
-          rm -rf api-clients/typescript/node_modules
-          just api-clients test-typescript
-      - name: Use Node.js 26.x
-        uses: actions/setup-node@v7
-        with:
-          node-version: 26.x
-      - name: Install and build (Node.js 26.x)
-        run: |
-          rm -rf api-clients/typescript/node_modules
-          just api-clients test-typescript
+          set -euo pipefail
+          releases=$(curl -fsSL --retry 5 https://nodejs.org/dist/index.json)
+          for prefix in $NODE_VERSIONS; do
+            version=$(jq -r --arg prefix "v$prefix." '[.[] | select(.version | startswith($prefix))][0].version' <<< "$releases")
+            if [ "$version" = "null" ]; then
+              echo "::error::No Node.js release found for $prefix"
+              exit 1
+            fi
+            echo "::group::Node.js $version"
+            node_dir="$RUNNER_TEMP/node-$version"
+            mkdir -p "$node_dir"
+            curl -fsSL --retry 5 "https://nodejs.org/dist/$version/node-$version-linux-x64.tar.gz" \
+              | tar -xz -C "$node_dir" --strip-components=1
+            rm -rf api-clients/typescript/node_modules
+            PATH="$node_dir/bin:$PATH" just api-clients test-typescript
+            echo "::endgroup::"
+          done
 
   api-client-rust:
     name: "api-client / rust"
