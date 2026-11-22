@@ -69,6 +69,11 @@ function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin
 }
 
 /** The time `count` steps before `timeMs`. */
+/** Which layer and time step dates belong to. */
+function datesKeyOf(layer: FootprintLayer | undefined, timeStep: TimeStepDuration | undefined): string {
+    return `${layer?.key}/${timeStep?.durationAmount} ${timeStep?.durationUnit}`;
+}
+
 function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
     return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
 }
@@ -138,8 +143,10 @@ export class FootprintsService {
     private readonly window = signal<TimeInterval | undefined>(undefined, {
         equal: (a, b) => a?.start === b?.start && a?.end === b?.end,
     });
-    /** The loaded part of a window while the rest of it loads. */
-    private readonly partialFootprints = signal<Footprints | undefined>(undefined);
+    /** The layer and time step whose dates are shown. Dates of another key are never shown for this one. */
+    private readonly datesKey = computed(() => datesKeyOf(this.layer(), this.timeStep()));
+    /** The loaded part of a window while the rest of it loads, with the key of its layer and time step. */
+    private readonly partialFootprints = signal<{key: string; footprints: Footprints} | undefined>(undefined);
 
     private readonly footprintsResource = resource({
         params: () => {
@@ -195,7 +202,7 @@ export class FootprintsService {
                 // a step that crosses the end of the range is answered whole, so the rest starts after it
                 const next = part.next?.start ?? Math.max(range.end, part.steps.at(-1)?.time.end ?? range.end);
                 if (part.tooLarge || next >= end) break;
-                this.partialFootprints.set(footprints);
+                this.partialFootprints.set({key: datesKeyOf(layer, timeStep), footprints});
                 range = {start: next, end};
             }
             // the answer is complete; a partial one left behind would be taken for the next layer's until its load starts
@@ -239,16 +246,19 @@ export class FootprintsService {
     );
 
     /** The dates of the current request, or the loaded part of them. */
-    private readonly currentFootprints = computed(() =>
-        this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
-    );
+    private readonly currentFootprints = computed(() => {
+        if (this.footprintsResource.hasValue()) return this.footprintsResource.value();
+        // until the load of another layer starts and clears it, the partial answer is still that of the old layer
+        const partial = this.partialFootprints();
+        return partial?.key === this.datesKey() ? partial.footprints : undefined;
+    });
     /**
      * The dates to show. While those of a moved view load, the ones of the same layer and time step stay, like map
      * tiles, so a strip of dates does not blink; `datesStale` tells. Another layer or time step clears them at once.
      */
     private readonly footprints = linkedSignal<{key: string; current?: Footprints; isLoading: boolean}, Footprints | undefined>({
         source: () => ({
-            key: `${this.layer()?.key}/${this.timeStep()?.durationAmount} ${this.timeStep()?.durationUnit}`,
+            key: this.datesKey(),
             current: this.currentFootprints(),
             isLoading: this.footprintsResource.isLoading(),
         }),

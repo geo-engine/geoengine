@@ -497,6 +497,26 @@ describe('FootprintsService overlay', () => {
             expect(service.datesStale()).toBe(false);
         });
 
+        it('never takes the partial dates of the previous layer for those of the next one', async () => {
+            // daily steps: the month first, then the rest, which does not arrive, so the month is a partial answer
+            let isFirst = true;
+            getFootprints.mockImplementation(() => {
+                const answer = isFirst ? Promise.resolve({...FOOTPRINTS, steps}) : new Promise<RasterFootprints>(() => undefined);
+                isFirst = false;
+                return answer;
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.steps()).toHaveLength(steps.length);
+
+            service.layer.set({key: 'provider/other', processingGraphId: () => registerLayer('provider', 'other')});
+            expect(service.steps()).toEqual([]);
+            await settle();
+            expect(service.steps()).toEqual([]);
+        });
+
         it('says that the selected date has no data only from the dates of this view', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Empty), day(2, TimeStepFootprintStatus.Data)]);
             const service = createService();
