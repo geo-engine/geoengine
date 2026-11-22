@@ -518,7 +518,7 @@ jobs:
           set -euo pipefail
           for version in $(jq -r '.[]' <<< "$PYTHON_VERSIONS"); do
             echo "::group::Python $version"
-            just api-clients test-python "python$version"
+            just api-clients test-python --fresh "python$version"
             echo "::endgroup::"
           done
 
