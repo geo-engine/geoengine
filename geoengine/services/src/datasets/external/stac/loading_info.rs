@@ -375,7 +375,9 @@ impl StacMultiBandMetaData {
         let mut known = KnownSteps::new();
         if query.detail.is_for_footprints() {
             if one_step_request {
-                self.reject_too_many_searches(self.missing_searches(&time_steps, &cell_bboxes))?;
+                // the hits counted here are the ones used, even if the cache drops them meanwhile
+                known = self.cached_steps(&time_steps, &cell_bboxes).await;
+                self.reject_too_many_searches(time_steps.len() * cell_bboxes.len() - known.len())?;
             } else {
                 known = self
                     .prepare_window_search(
@@ -561,7 +563,7 @@ impl StacMultiBandMetaData {
     ///
     /// Not called for a request of one time step. That has no window to prepare: it runs the
     /// searches the map tiles of that step run, with the same cache entries. It is only limited
-    /// by the searches it still needs, see `missing_searches`.
+    /// by the searches it still needs, see `cached_steps`.
     async fn prepare_window_search(
         &self,
         items_url: &Url,
@@ -742,21 +744,23 @@ impl StacMultiBandMetaData {
         ))
     }
 
-    /// The searches that the steps of a part still need: one per cell and step that is not cached.
-    /// A request of one time step counts them, so the coverage of a date costs nothing where its
+    /// What the cache holds for each cell and step. Every other cell and step needs a search. A
+    /// request of one time step counts these, so the coverage of a date costs nothing where its
     /// map tiles were loaded, and a view that nobody has looked at cannot use up the rate limit of
     /// the STAC server with one request.
-    fn missing_searches(
+    async fn cached_steps(
         &self,
         time_steps: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-    ) -> usize {
+    ) -> KnownSteps {
         let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
-        time_steps
-            .iter()
-            .cartesian_product(cell_bboxes)
-            .filter(|(step, (cell, _))| !self.query_cache.contains(dataset_id, *cell, **step))
-            .count()
+        let mut known = KnownSteps::new();
+        for (step, (cell, _)) in time_steps.iter().cartesian_product(cell_bboxes) {
+            if let Some(files) = self.query_cache.get(dataset_id, *cell, *step).await {
+                known.insert((*cell, *step), files);
+            }
+        }
+        known
     }
 
     /// The limit counts the searches of one part (one chunk of `search_chunk_steps` steps), not of
@@ -801,11 +805,7 @@ impl StacMultiBandMetaData {
         let steps = regular_time_steps(self.time_dimension, chunk)?
             .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
-        for (step, (cell, _)) in steps.iter().cartesian_product(cell_bboxes) {
-            if let Some(files) = self.query_cache.get(dataset_id, *cell, *step).await {
-                known.insert((*cell, *step), files);
-            }
-        }
+        known.extend(self.cached_steps(&steps, cell_bboxes).await);
         // A warm view needs no request at all, not even the one that plans the searches.
         if known.len() == steps.len() * cell_bboxes.len() {
             return Ok(known);
@@ -4364,6 +4364,54 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn one_step_runs_only_the_counted_searches_when_a_cached_step_expires() {
+        let server = Server::run();
+        let starts = new_starts();
+        let day = "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z";
+        // the cell east of 1° is cached by the map tiles; a second search of it would be unexpected and fail
+        expect_search_at(
+            &server,
+            "1.00000,0.00000,2.00000,1.00000",
+            day,
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        // the cell west of it is searched by the request and takes longer than the cached entry lives
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            day,
+            vec![],
+            Duration::from_millis(1_500),
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.query_cache = Arc::new(
+            StacQueryCache::new(1024 * 1024, Duration::from_secs(1)).with_max_footprint_searches(1),
+        );
+        // the cells one after the other, so the cached cell is read after the slow search
+        provider.max_concurrent_cell_searches = 1;
+        let meta = metadata(&provider, 0).await;
+        meta.first_part(query(bounds(1.1, 1.4), interval(3)))
+            .await
+            .unwrap();
+
+        // one of the two cells is cached, so one search is counted, within the limit
+        meta.first_part(coverage_query(bounds(0.5, 1.5), interval(3)))
+            .await
+            .unwrap();
+
+        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]
