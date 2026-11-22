@@ -727,6 +727,8 @@ export class LayersComponent {
     /** How much of the view the selected date covers, or why that is not known. */
     readonly status = computed<{kind: 'full' | 'part' | 'none' | 'unknown'; text: string} | undefined>(() => {
         const footprints = this.footprintsService;
+        // the dates of this view already tell, so zooming in would show nothing
+        if (footprints.selectedDateEmpty()) return {kind: 'none', text: 'No scenes in this view on this date'};
         if (footprints.overlayBlocked() || footprints.overlayTooLarge())
             return {kind: 'unknown', text: 'Zoom in to see where the scenes of this date are.'};
         if (footprints.hasError()) return {kind: 'unknown', text: 'Could not load the data availability.'};

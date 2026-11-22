@@ -222,5 +222,10 @@ describe('EOdyssey debug reprojection', () => {
         fixture.detectChanges();
 
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+
+        // the dates of the view say that the date has no scenes, so zooming in is no use
+        (footprints.selectedDateEmpty as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
     });
 });

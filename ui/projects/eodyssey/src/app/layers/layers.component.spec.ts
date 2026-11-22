@@ -166,6 +166,7 @@ describe('LayersComponent', () => {
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
+                        selectedDateEmpty: signal(false),
                         viewCoverage: signal(undefined),
                         showDate: vi.fn(),
                     },
@@ -353,6 +354,7 @@ describe('LayersComponent', () => {
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
+            selectedDateEmpty: WritableSignal<boolean>;
             viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
@@ -391,6 +393,11 @@ describe('LayersComponent', () => {
             footprints().overlayBlocked.set(true);
             fixture.detectChanges();
             expect(statusLine()).toBe('Zoom in to see where the scenes of this date are.');
+
+            // the dates of the view say that the date has no scenes, so zooming in is no use
+            footprints().selectedDateEmpty.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('No scenes in this view on this date');
         });
 
         it('shows the dates around the selected one as bars that select their date', async () => {

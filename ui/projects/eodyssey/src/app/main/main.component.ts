@@ -134,13 +134,14 @@ export class MainComponent {
     readonly tilesLoadable = signal(false);
     /** One prompt on the map for the imagery and the data availability. */
     readonly mapPrompt = computed<{icon: string; text: string} | undefined>(() => {
-        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         const footprints = this.footprintsService;
+        // the dates of this view already tell, so zooming in would show nothing
+        if ((this.mapTileLayer() || footprints.overlayVisible()) && footprints.selectedDateEmpty())
+            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
+        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
             return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
         }
-        if (this.mapTileLayer() && footprints.selectedDateEmpty())
-            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
         return undefined;
     });
     readonly tileLoading = signal(false);
