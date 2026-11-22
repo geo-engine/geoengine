@@ -601,6 +601,16 @@ jobs:
 
     env:
       CI: true
+      UI_APPS: >-
+        gis
+        eodyssey
+        manager
+        dashboards/gfbio
+        dashboards/data-atlas
+        dashboards/nfdi-portal-demo
+        dashboards/ebv-analyzer
+        dashboards/ecometrics
+        dashboards/esg-indicator-service
 
     steps:
       - name: Checkout
@@ -614,17 +624,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for app in \
-            gis \
-            eodyssey \
-            manager \
-            dashboards/gfbio \
-            dashboards/data-atlas \
-            dashboards/nfdi-portal-demo \
-            dashboards/ebv-analyzer \
-            dashboards/ecometrics \
-            dashboards/esg-indicator-service
-          do
+          for app in $UI_APPS; do
             echo "::group::Build $app"
             just ui build "$app"
             echo "::endgroup::"
