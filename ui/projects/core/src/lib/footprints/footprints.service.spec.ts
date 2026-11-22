@@ -21,14 +21,22 @@ describe('FootprintsService overlay', () => {
         >();
 
     let viewport: BehaviorSubject<unknown>;
+    /** The time of the layer's data in its metadata. */
+    let dataTime: Time | undefined;
 
     beforeEach(() => {
+        // a fixed now, after the dates of the tests, which never load dates after now
+        vi.useFakeTimers({toFake: ['Date'], shouldAdvanceTime: true});
+        vi.setSystemTime(Date.UTC(2027, 0, 1));
+        dataTime = undefined;
         viewport = new BehaviorSubject<unknown>({extent: [0, 0, 1, 1], resolution: 1});
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
         registerLayer.mockReset().mockResolvedValue('graph');
-        const metadata = Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
-            spatialReference: {srsString: 'EPSG:4326'},
-        }) as RasterLayerMetadata;
+        const metadata = (): RasterLayerMetadata =>
+            Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
+                spatialReference: {srsString: 'EPSG:4326'},
+                time: dataTime,
+            }) as RasterLayerMetadata;
 
         TestBed.configureTestingModule({
             providers: [
@@ -36,7 +44,7 @@ describe('FootprintsService overlay', () => {
                     provide: LayersService,
                     useValue: {
                         registerAndGetLayerProcessingGraphId: registerLayer,
-                        getProcessingGraphIdMetadata: vi.fn().mockResolvedValue(metadata),
+                        getProcessingGraphIdMetadata: vi.fn(() => Promise.resolve(metadata())),
                     },
                 },
                 {provide: ProcessingGraphsService, useValue: {getFootprints}},
@@ -66,7 +74,10 @@ describe('FootprintsService overlay', () => {
         });
     });
 
-    afterEach(() => TestBed.resetTestingModule());
+    afterEach(() => {
+        TestBed.resetTestingModule();
+        vi.useRealTimers();
+    });
 
     /** The service as an app sets it up: with the layer to show. */
     function createService(connector = 'provider', layer = 'layer'): FootprintsService {
@@ -348,6 +359,44 @@ describe('FootprintsService overlay', () => {
             expect(end(0)).toBeGreaterThan(Date.UTC(2026, 4, 1));
         });
 
+        it('asks for no dates before the data starts or after now', async () => {
+            // daily data from 20 March 2026, and now is 10 April 2026
+            dataTime = new Time(Date.UTC(2026, 2, 20), Date.UTC(2030, 0, 1));
+            vi.setSystemTime(Date.UTC(2026, 3, 10));
+            getFootprints.mockImplementation(answerDays(100));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+
+            const intervals = getFootprints.mock.calls.map(([, query]) => (query.timeInterval ?? '').split('/').map(Date.parse));
+            expect(Math.min(...intervals.map(([start]) => start))).toBe(Date.UTC(2026, 2, 20));
+            // now runs on from 10 April during the test
+            const end = Math.max(...intervals.map(([, intervalEnd]) => intervalEnd));
+            expect(end).toBeGreaterThanOrEqual(Date.UTC(2026, 3, 10));
+            expect(end).toBeLessThan(Date.UTC(2026, 3, 10, 0, 1));
+            // the loaded dates reach both ends, so there are no dates to look for beyond them
+            expect(service.datesReachTimeRange(1)).toBe(true);
+            expect(service.datesReachTimeRange(-1)).toBe(true);
+            expect(service.dateBeyondLoaded(1)).toBeUndefined();
+            expect(service.dateFilter(new Date(2026, 2, 19))).toBe(false);
+            expect(service.dateFilter(new Date(2026, 2, 20))).toBe(true);
+            expect(service.dateFilter(new Date(2026, 3, 11))).toBe(false);
+        });
+
+        it('asks for a window of 36 months of monthly data, not 100 steps', async () => {
+            // now far after the window, so it does not end the window
+            vi.setSystemTime(Date.UTC(2035, 0, 1));
+            const service = createService();
+            service.timeStepOverride.set({durationAmount: 1, durationUnit: 'months'});
+            service.datesNeeded.set(true);
+            await settle();
+
+            const [start, end] = (getFootprints.mock.calls[0][1].timeInterval ?? '').split('/');
+            // seven months before the selected 1 April 2026, and 36 months from there
+            expect(start).toBe('2025-09-01T00:00:00.000Z');
+            expect(end).toBe('2028-09-01T00:00:00.000Z');
+        });
+
         it('stops following the cursor after eight requests', async () => {
             getFootprints.mockImplementation(answerDays(1));
             const service = createService();
@@ -495,6 +544,26 @@ describe('FootprintsService overlay', () => {
             await settle();
             expect(service.steps()).toEqual([]);
             expect(service.datesStale()).toBe(false);
+        });
+
+        it('never takes the partial dates of the previous layer for those of the next one', async () => {
+            // daily steps: the month first, then the rest, which does not arrive, so the month is a partial answer
+            let isFirst = true;
+            getFootprints.mockImplementation(() => {
+                const answer = isFirst ? Promise.resolve({...FOOTPRINTS, steps}) : new Promise<RasterFootprints>(() => undefined);
+                isFirst = false;
+                return answer;
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.steps()).toHaveLength(steps.length);
+
+            service.layer.set({key: 'provider/other', processingGraphId: () => registerLayer('provider', 'other')});
+            expect(service.steps()).toEqual([]);
+            await settle();
+            expect(service.steps()).toEqual([]);
         });
 
         it('says that the selected date has no data only from the dates of this view', async () => {

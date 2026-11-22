@@ -21,6 +21,7 @@ import {
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle, viewCoverage, ViewCoverage} from './footprint-overlay';
 import {
+    calendarCellRange,
     calendarHint,
     calendarStartView,
     canPickDate,
@@ -33,13 +34,14 @@ import {
     stepAt,
     stepsAround,
     visiblePeriod,
+    windowSteps,
 } from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
-/** One request covers at most this many time steps of the dataset. */
-const WINDOW_TIME_STEPS = 100;
+/** One request covers at most this many time steps of the dataset; a window has fewer of long steps, see `windowSteps`. */
+const MAX_REQUEST_TIME_STEPS = 100;
 /**
  * The most requests for one window. A month of hourly data needs 8, a year of daily data 5.
  * shortcut: a month of data with steps below an hour is cut off after 800 steps, it would need a window per day
@@ -69,6 +71,11 @@ function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin
 }
 
 /** The time `count` steps before `timeMs`. */
+/** Which layer and time step dates belong to. */
+function datesKeyOf(layer: FootprintLayer | undefined, timeStep: TimeStepDuration | undefined): string {
+    return `${layer?.key}/${timeStep?.durationAmount} ${timeStep?.durationUnit}`;
+}
+
 function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
     return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
 }
@@ -134,12 +141,32 @@ export class FootprintsService {
     private readonly datesWanted = computed(() => this.calendarOpen() || this.datesNeeded());
     /** The map does not load the tiles of the layer at this zoom, so the overlay asks for nothing either. Set by the app. */
     readonly overlayBlocked = signal(false);
-    /** What the calendar shows. At least `WINDOW_TIME_STEPS` steps from its start are loaded. */
+    /** What the calendar shows. At least `windowSteps` steps from its start are loaded, within `timeRange`. */
     private readonly window = signal<TimeInterval | undefined>(undefined, {
         equal: (a, b) => a?.start === b?.start && a?.end === b?.end,
     });
-    /** The loaded part of a window while the rest of it loads. */
-    private readonly partialFootprints = signal<Footprints | undefined>(undefined);
+    /** The layer and time step whose dates are shown. Dates of another key are never shown for this one. */
+    private readonly datesKey = computed(() => datesKeyOf(this.layer(), this.timeStep()));
+    /** The time of the layer's data, from its metadata. */
+    private readonly dataTimeResource = resource({
+        params: () => this.layer(),
+        // open where the layer does not tell; never undefined, which a resource takes for no value
+        loader: async ({params: layer}): Promise<TimeInterval> => {
+            const time = (await this.graphOf(layer)).metadata?.time;
+            return {start: time?.start.valueOf() ?? -Infinity, end: time?.end.valueOf() ?? Infinity};
+        },
+    });
+    /**
+     * The time with dates that can have data: that of the layer's data, up to now. Undefined until the layer's metadata is known.
+     * shortcut: now is read when the layer changes; a page left open for days does not ask for the dates of those days until then
+     */
+    readonly timeRange = computed<TimeInterval | undefined>(() => {
+        if (!this.dataTimeResource.hasValue()) return undefined;
+        const time = this.dataTimeResource.value();
+        return {start: time.start, end: Math.min(time.end, Date.now())};
+    });
+    /** The loaded part of a window while the rest of it loads, with the key of its layer and time step. */
+    private readonly partialFootprints = signal<{key: string; footprints: Footprints} | undefined>(undefined);
 
     private readonly footprintsResource = resource({
         params: () => {
@@ -148,21 +175,28 @@ export class FootprintsService {
             const timeStep = this.timeStep();
             const viewport = this.datesViewport();
             const window = this.window();
-            if (!this.datesWanted() || !layer || !mapSpatialReference || !timeStep || !viewport || !window) {
+            const timeRange = this.timeRange();
+            if (!this.datesWanted() || !layer || !mapSpatialReference || !timeStep || !viewport || !window || !timeRange) {
                 return undefined;
             }
-            return {layer, mapSpatialReference, timeStep, viewport, window};
+            return {layer, mapSpatialReference, timeStep, viewport, window, timeRange};
         },
         loader: async ({
-            params: {layer, mapSpatialReference, timeStep, viewport, window},
+            params: {layer, mapSpatialReference, timeStep, viewport, window: requested, timeRange},
             abortSignal,
         }): Promise<Footprints | undefined> => {
             this.partialFootprints.set(undefined);
+            // no dates before the data starts or after now, where there cannot be any
+            const minimalEnd = new Time(new Date(requested.start)).add(
+                timeStep.durationAmount * windowSteps(timeStep.durationUnit, timeStep.durationAmount),
+                timeStep.durationUnit,
+            );
+            const window = {start: Math.max(requested.start, timeRange.start), end: requested.end};
+            const end = Math.min(Math.max(requested.end, minimalEnd.start.valueOf()), timeRange.end);
+            if (window.start >= end) return undefined;
             const query = await this.queryOf(layer, mapSpatialReference, viewport);
             if (!query) return undefined;
 
-            const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
-            const end = Math.max(window.end, minimalEnd.start.valueOf());
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -172,7 +206,7 @@ export class FootprintsService {
                             spatialBounds: query.spatialBounds,
                             timeInterval: new Time(new Date(range.start), new Date(range.end)).asRequestString(),
                             attributes: '0',
-                            limit: WINDOW_TIME_STEPS,
+                            limit: MAX_REQUEST_TIME_STEPS,
                             // the calendar only needs to know which days have data
                             precision: RasterFootprintsPrecision.Availability,
                         },
@@ -195,7 +229,7 @@ export class FootprintsService {
                 // a step that crosses the end of the range is answered whole, so the rest starts after it
                 const next = part.next?.start ?? Math.max(range.end, part.steps.at(-1)?.time.end ?? range.end);
                 if (part.tooLarge || next >= end) break;
-                this.partialFootprints.set(footprints);
+                this.partialFootprints.set({key: datesKeyOf(layer, timeStep), footprints});
                 range = {start: next, end};
             }
             // the answer is complete; a partial one left behind would be taken for the next layer's until its load starts
@@ -239,16 +273,19 @@ export class FootprintsService {
     );
 
     /** The dates of the current request, or the loaded part of them. */
-    private readonly currentFootprints = computed(() =>
-        this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
-    );
+    private readonly currentFootprints = computed(() => {
+        if (this.footprintsResource.hasValue()) return this.footprintsResource.value();
+        // until the load of another layer starts and clears it, the partial answer is still that of the old layer
+        const partial = this.partialFootprints();
+        return partial?.key === this.datesKey() ? partial.footprints : undefined;
+    });
     /**
      * The dates to show. While those of a moved view load, the ones of the same layer and time step stay, like map
      * tiles, so a strip of dates does not blink; `datesStale` tells. Another layer or time step clears them at once.
      */
     private readonly footprints = linkedSignal<{key: string; current?: Footprints; isLoading: boolean}, Footprints | undefined>({
         source: () => ({
-            key: `${this.layer()?.key}/${this.timeStep()?.durationAmount} ${this.timeStep()?.durationUnit}`,
+            key: this.datesKey(),
             current: this.currentFootprints(),
             isLoading: this.footprintsResource.isLoading(),
         }),
@@ -375,9 +412,18 @@ export class FootprintsService {
         const steps = this.steps();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
+        if (this.datesReachTimeRange(direction)) return undefined;
         return direction === 1
             ? new Time(new Date(steps[steps.length - 1].time.end))
             : new Time(new Date(steps[0].time.start)).subtract(timeStep.durationAmount, timeStep.durationUnit);
+    }
+
+    /** The loaded dates reach the start of the data (-1) or now (1), so there are no others in that direction, see `timeRange`. */
+    datesReachTimeRange(direction: 1 | -1): boolean {
+        const steps = this.steps();
+        const timeRange = this.timeRange();
+        if (!timeRange || !steps.length) return false;
+        return direction === 1 ? steps[steps.length - 1].time.end >= timeRange.end : steps[0].time.start <= timeRange.start;
     }
 
     /** At most `count` loaded time steps around the selected time, e.g. for a strip of dates. */
@@ -429,8 +475,14 @@ export class FootprintsService {
     readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) =>
         this.calendarHint(view) ? [] : cellClasses(this.steps(), date, view);
 
-    /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
-    readonly dateFilter = (date: Date | null): boolean => !date || canPickDate(this.steps(), date);
+    /** Only dates with data can be picked; dates whose data is unknown or not loaded can too, but none outside `timeRange`. */
+    readonly dateFilter = (date: Date | null): boolean => {
+        if (!date) return true;
+        const day = calendarCellRange(date, 'month');
+        const timeRange = this.timeRange();
+        const inRange = !timeRange || (day.end > timeRange.start && day.start < timeRange.end);
+        return inRange && canPickDate(this.steps(), date);
+    };
 
     /** The hint of a view that is too coarse for the time step to show the dates with data, see `calendarHint`. */
     calendarHint(view: MatCalendarView): string | undefined {

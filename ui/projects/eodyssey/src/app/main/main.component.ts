@@ -134,17 +134,24 @@ export class MainComponent {
     readonly tilesLoadable = signal(false);
     /** One prompt on the map for the imagery and the data availability. */
     readonly mapPrompt = computed<{icon: string; text: string} | undefined>(() => {
-        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         const footprints = this.footprintsService;
+        // the dates of this view already tell, so zooming in would show nothing
+        if ((this.mapTileLayer() || footprints.overlayVisible()) && footprints.selectedDateEmpty())
+            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
+        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
             return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
         }
-        if (this.mapTileLayer() && footprints.selectedDateEmpty())
-            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
         return undefined;
     });
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
+    /** Also while the boxes of a date load, which can be before the tiles load and take a while for a view not seen before. */
+    readonly isLoading = computed(
+        () =>
+            this.eodysseyLayerService.catalogueLoading() ||
+            (this.tileLoading() && !this.zoomRequired()) ||
+            this.footprintsService.overlayLoading(),
+    );
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);

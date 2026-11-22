@@ -540,6 +540,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         })
         .unwrap()
     }
@@ -616,6 +617,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         })
         .unwrap()
     }

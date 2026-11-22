@@ -10,6 +10,7 @@
  */
 import type { StacProviderS3Config } from './StacProviderS3Config';
 import type { StacProviderDataset } from './StacProviderDataset';
+import type { TimeInterval } from './TimeInterval';
 import type { StacGrid } from './StacGrid';
 import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
@@ -95,6 +96,12 @@ export interface StacDataProviderDefinition {
      * Omitted values do not use it.
      */
     datetimeFrequencyAggregation?: boolean | null;
+    /**
+     * The time of the datasets. Omitted values come from the temporal extent of the collection,
+     * so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+     * the data starts.
+     */
+    timeBounds?: TimeInterval | null;
 }
 /**
  * @export

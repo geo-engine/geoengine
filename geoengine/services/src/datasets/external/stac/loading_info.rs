@@ -63,6 +63,8 @@ pub struct StacMultiBandMetaData {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for.
     datetime_frequency_aggregation: bool,
+    /// The time of the datasets, shared with the provider, see `time_bounds`.
+    time_bounds: Arc<tokio::sync::OnceCell<Option<TimeInterval>>>,
     grid: StacGrid,
 }
 
@@ -226,7 +228,7 @@ impl
             data_type: self.dataset.data_type,
             spatial_reference: self.dataset.projection.into(),
             time: TimeDescriptor {
-                bounds: None,
+                bounds: self.time_bounds().await,
                 dimension: self.time_dimension,
             },
             spatial_grid: self.dataset.spatial_grid,
@@ -376,8 +378,10 @@ impl StacMultiBandMetaData {
         let mut known = KnownSteps::new();
         if query.detail.is_for_footprints() {
             if one_step_request {
+                // the hits counted here are the ones used, even if the cache drops them meanwhile
+                known = self.cached_steps(&time_steps, &cell_bboxes).await;
                 self.reject_too_many_searches(
-                    self.missing_searches(&time_steps, &cell_bboxes),
+                    time_steps.len() * cell_bboxes.len() - known.len(),
                     query.for_display,
                 )?;
             } else {
@@ -500,8 +504,23 @@ impl StacMultiBandMetaData {
             query_cache: provider.query_cache.clone(),
             max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
             datetime_frequency_aggregation: provider.datetime_frequency_aggregation,
+            time_bounds: provider.time_bounds.clone(),
             grid: provider.grid,
         }
+    }
+
+    /// The time of the datasets: from the provider definition, or else from the temporal extent of
+    /// the collection, asked once. A failed request is not kept, so a later call asks again.
+    async fn time_bounds(&self) -> Option<TimeInterval> {
+        let collection_url = Url::from_str(&self.api_url).ok().and_then(|base| {
+            join_base_url_and_path(&base, &format!("collections/{}", self.collection_name)).ok()
+        })?;
+        self.time_bounds
+            .get_or_try_init(|| self.client.collection_time_bounds(collection_url))
+            .await
+            .ok()
+            .copied()
+            .flatten()
     }
 
     /// Estimate the metadata cache weight of a complete query result, in bytes.
@@ -566,7 +585,7 @@ impl StacMultiBandMetaData {
     ///
     /// Not called for a request of one time step. That has no window to prepare: it runs the
     /// searches the map tiles of that step run, with the same cache entries. It is only limited
-    /// by the searches it still needs, see `missing_searches`.
+    /// by the searches it still needs, see `cached_steps`.
     async fn prepare_window_search(
         &self,
         items_url: &Url,
@@ -748,21 +767,23 @@ impl StacMultiBandMetaData {
         ))
     }
 
-    /// The searches that the steps of a part still need: one per cell and step that is not cached.
-    /// A request of one time step counts them, so the coverage of a date costs nothing where its
+    /// What the cache holds for each cell and step. Every other cell and step needs a search. A
+    /// request of one time step counts these, so the coverage of a date costs nothing where its
     /// map tiles were loaded, and a view that nobody has looked at cannot use up the rate limit of
     /// the STAC server with one request.
-    fn missing_searches(
+    async fn cached_steps(
         &self,
         time_steps: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-    ) -> usize {
+    ) -> KnownSteps {
         let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
-        time_steps
-            .iter()
-            .cartesian_product(cell_bboxes)
-            .filter(|(step, (cell, _))| !self.query_cache.contains(dataset_id, *cell, **step))
-            .count()
+        let mut known = KnownSteps::new();
+        for (step, (cell, _)) in time_steps.iter().cartesian_product(cell_bboxes) {
+            if let Some(files) = self.query_cache.get(dataset_id, *cell, *step).await {
+                known.insert((*cell, *step), files);
+            }
+        }
+        known
     }
 
     /// The limit counts the searches of one part (one chunk of `search_chunk_steps` steps), not of
@@ -815,11 +836,7 @@ impl StacMultiBandMetaData {
         let steps = regular_time_steps(self.time_dimension, chunk)?
             .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
-        for (step, (cell, _)) in steps.iter().cartesian_product(cell_bboxes) {
-            if let Some(files) = self.query_cache.get(dataset_id, *cell, *step).await {
-                known.insert((*cell, *step), files);
-            }
-        }
+        known.extend(self.cached_steps(&steps, cell_bboxes).await);
         // A warm view needs no request at all, not even the one that plans the searches.
         if known.len() == steps.len() * cell_bboxes.len() {
             return Ok(known);
@@ -1677,6 +1694,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         }
     }
 
@@ -2052,6 +2070,7 @@ mod tests {
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
                 datetime_frequency_aggregation: false,
+                time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -2168,6 +2187,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             cache_ttl_secs: None,
             grid: StacGrid::default(),
         };
@@ -2241,6 +2261,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2330,6 +2351,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2435,6 +2457,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
+            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2797,6 +2820,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ndvi_stac_processing_graph(app_ctx: PostgresContext<NoTls>) {
         let server = Server::run();
+        // the time of the dataset; the collection does not know it, so it has none
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/sentinel-2-l2a"))
+                .times(1..)
+                .respond_with(responders::status_code(404)),
+        );
         server.expect(
             Expectation::matching(request::method_path(
                 "GET",
@@ -2928,6 +2957,7 @@ mod tests {
             stac_grid: None,
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
+            time_bounds: None,
         };
 
         admin_ctx
@@ -3175,12 +3205,8 @@ mod grid_request_tests {
         )
     }
 
-    fn provider_with_registry(
-        server: &Server,
-        cache_bytes: usize,
-        grid: StacGrid,
-        request_registry: crate::datasets::external::stac::StacRequestRegistry,
-    ) -> StacDataProvider {
+    /// The definition of a provider of one daily dataset on `server`.
+    fn provider_definition(server: &Server, grid: StacGrid) -> StacDataProviderDefinition {
         let dataset = StacProviderDataset {
             name: "test".to_owned(),
             description: String::new(),
@@ -3196,31 +3222,41 @@ mod grid_request_tests {
                 band_name: None,
             })],
         };
+        StacDataProviderDefinition {
+            id: DataProviderId::new(),
+            name: "test".to_owned(),
+            description: String::new(),
+            api_url: server.url_str("/"),
+            collection_name: "test".to_owned(),
+            s3_config: None,
+            authentication: None,
+            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
+                TimeStep {
+                    granularity: TimeGranularity::Days,
+                    step: 1,
+                },
+            )),
+            datasets: vec![dataset],
+            priority: None,
+            page_limit: 100,
+            query_timeout_secs: 5,
+            cache_ttl_secs: None,
+            stac_grid: Some(grid),
+            max_concurrent_cell_searches: None,
+            // most tests are about a server that aggregates
+            datetime_frequency_aggregation: Some(true),
+            time_bounds: None,
+        }
+    }
+
+    fn provider_with_registry(
+        server: &Server,
+        cache_bytes: usize,
+        grid: StacGrid,
+        request_registry: crate::datasets::external::stac::StacRequestRegistry,
+    ) -> StacDataProvider {
         let mut provider = StacDataProvider::from_definition_with_request_registry(
-            StacDataProviderDefinition {
-                id: DataProviderId::new(),
-                name: "test".to_owned(),
-                description: String::new(),
-                api_url: server.url_str("/"),
-                collection_name: "test".to_owned(),
-                s3_config: None,
-                authentication: None,
-                time_dimension: TimeDimension::Regular(
-                    RegularTimeDimension::new_with_epoch_origin(TimeStep {
-                        granularity: TimeGranularity::Days,
-                        step: 1,
-                    }),
-                ),
-                datasets: vec![dataset],
-                priority: None,
-                page_limit: 100,
-                query_timeout_secs: 5,
-                cache_ttl_secs: None,
-                stac_grid: Some(grid),
-                max_concurrent_cell_searches: None,
-                // most tests are about a server that aggregates
-                datetime_frequency_aggregation: Some(true),
-            },
+            provider_definition(server, grid),
             request_registry,
         )
         .unwrap();
@@ -4380,6 +4416,119 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_time_of_the_datasets_comes_from_the_collection_once() {
+        let server = Server::run();
+        // a second request would be unexpected and fail
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test"))
+                .times(1)
+                .respond_with(responders::json_encoded(json!({
+                    "id": "test",
+                    "extent": {
+                        "spatial": {"bbox": [[-180, -90, 180, 90]]},
+                        "temporal": {"interval": [["2015-06-27T00:00:00Z", null]]},
+                    },
+                }))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        // 2015-06-27T00:00:00Z
+        let start =
+            geoengine_datatypes::primitives::TimeInstance::from_millis(1_435_363_200_000).unwrap();
+
+        for index in [0, 0] {
+            let descriptor = metadata(&provider, index)
+                .await
+                .result_descriptor()
+                .await
+                .unwrap();
+            assert_eq!(
+                descriptor.time.bounds,
+                Some(
+                    TimeInterval::new(start, geoengine_datatypes::primitives::TimeInstance::MAX)
+                        .unwrap()
+                )
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_time_of_the_datasets_in_the_provider_definition_overrides_the_collection() {
+        // no requests are expected
+        let server = Server::run();
+        let bounds = TimeInterval::new(0, 1_000).unwrap();
+        let mut definition = provider_definition(
+            &server,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        definition.time_bounds = Some(bounds);
+        let provider = StacDataProvider::from_definition(definition).unwrap();
+
+        let descriptor = metadata(&provider, 0)
+            .await
+            .result_descriptor()
+            .await
+            .unwrap();
+
+        assert_eq!(descriptor.time.bounds, Some(bounds));
+    }
+
+    #[tokio::test]
+    async fn one_step_runs_only_the_counted_searches_when_a_cached_step_expires() {
+        let server = Server::run();
+        let starts = new_starts();
+        let day = "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z";
+        // the cell east of 1° is cached by the map tiles; a second search of it would be unexpected and fail
+        expect_search_at(
+            &server,
+            "1.00000,0.00000,2.00000,1.00000",
+            day,
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        // the cell west of it is searched by the request and takes longer than the cached entry lives
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            day,
+            vec![],
+            Duration::from_millis(1_500),
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.query_cache = Arc::new(
+            StacQueryCache::new(1024 * 1024, Duration::from_secs(1)).with_max_footprint_searches(1),
+        );
+        // the cells one after the other, so the cached cell is read after the slow search
+        provider.max_concurrent_cell_searches = 1;
+        let meta = metadata(&provider, 0).await;
+        meta.first_part(query(bounds(1.1, 1.4), interval(3)))
+            .await
+            .unwrap();
+
+        // one of the two cells is cached, so one search is counted, within the limit
+        meta.first_part(coverage_query(bounds(0.5, 1.5), interval(3)).for_display())
+            .await
+            .unwrap();
+
+        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

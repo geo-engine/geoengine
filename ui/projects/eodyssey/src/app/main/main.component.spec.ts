@@ -71,6 +71,7 @@ describe('EOdyssey debug reprojection', () => {
                         overlayVisible: signal(false),
                         overlayTooLarge: signal(false),
                         selectedDateEmpty: signal(false),
+                        overlayLoading: signal(false),
                     },
                 },
                 {
@@ -210,6 +211,17 @@ describe('EOdyssey debug reprojection', () => {
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
     });
 
+    it('shows that it loads while the boxes of the date load, also before the tiles of the layer load', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        expect(element.querySelector('.loading-indicator')).toBeNull();
+
+        (TestBed.inject(FootprintsService).overlayLoading as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+
+        expect(element.querySelector('.loading-indicator')).not.toBeNull();
+    });
+
     it('asks to zoom in on the map when the availability is shown where the tiles of the layer do not load', () => {
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
@@ -222,5 +234,10 @@ describe('EOdyssey debug reprojection', () => {
         fixture.detectChanges();
 
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+
+        // the dates of the view say that the date has no scenes, so zooming in is no use
+        (footprints.selectedDateEmpty as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
     });
 });

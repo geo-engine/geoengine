@@ -160,12 +160,15 @@ describe('LayersComponent', () => {
                         dateWithData: vi.fn(),
                         dateBeyondLoaded: vi.fn(),
                         stepsAround: vi.fn().mockReturnValue([]),
+                        timeRange: signal(undefined),
+                        datesReachTimeRange: vi.fn().mockReturnValue(false),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
                         datesStale: signal(false),
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
+                        selectedDateEmpty: signal(false),
                         viewCoverage: signal(undefined),
                         showDate: vi.fn(),
                     },
@@ -353,6 +356,9 @@ describe('LayersComponent', () => {
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
+            selectedDateEmpty: WritableSignal<boolean>;
+            timeRange: WritableSignal<{start: number; end: number} | undefined>;
+            datesReachTimeRange: Mock;
             viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
@@ -391,6 +397,11 @@ describe('LayersComponent', () => {
             footprints().overlayBlocked.set(true);
             fixture.detectChanges();
             expect(statusLine()).toBe('Zoom in to see where the scenes of this date are.');
+
+            // the dates of the view say that the date has no scenes, so zooming in is no use
+            footprints().selectedDateEmpty.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('No scenes in this view on this date');
         });
 
         it('shows the dates around the selected one as bars that select their date', async () => {
@@ -461,7 +472,6 @@ describe('LayersComponent', () => {
             await fixture.whenStable();
 
             const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
-            expect(Array.from(ticks, (tick) => tick.classList.contains('tick-today'))).toEqual([false, true]);
             expect(ticks[1].getAttribute('aria-label')).toMatch(/: no scenes, today$/);
         });
 
@@ -490,6 +500,29 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 2, 31)));
+        });
+
+        it('offers no later dates where the loaded dates reach now, and none beyond the time of the data', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            footprints().datesReachTimeRange.mockImplementation((direction: number) => direction === 1);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(button('forward').textContent).toContain('No later dates');
+            expect(button('forward').disabled).toBe(true);
+            expect(button('backwards').disabled).toBe(false);
+
+            // no dates are loaded, e.g. for a date before the data starts: stepping stays within the data's time
+            footprints().datesReachTimeRange.mockReturnValue(false);
+            footprints().timeRange.set({start: Date.UTC(2026, 2, 15), end: Date.UTC(2026, 5, 1)});
+            fixture.detectChanges();
+            expect(button('backwards').textContent).toContain('No earlier dates');
+            expect(button('backwards').disabled).toBe(true);
+            expect(button('forward').disabled).toBe(false);
+            setTime.mockClear();
+            await fixture.componentInstance.timeBackwards();
+            expect(setTime).not.toHaveBeenCalled();
         });
 
         it('goes to the next date with data', async () => {

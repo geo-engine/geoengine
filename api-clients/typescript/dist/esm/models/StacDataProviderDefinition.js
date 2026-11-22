@@ -12,6 +12,7 @@
  */
 import { StacProviderS3ConfigFromJSON, StacProviderS3ConfigToJSON, } from './StacProviderS3Config';
 import { StacProviderDatasetFromJSON, StacProviderDatasetToJSON, } from './StacProviderDataset';
+import { TimeIntervalFromJSON, TimeIntervalToJSON, } from './TimeInterval';
 import { StacGridFromJSON, StacGridToJSON, } from './StacGrid';
 import { StacProviderAuthenticationFromJSON, StacProviderAuthenticationToJSON, } from './StacProviderAuthentication';
 import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
@@ -70,6 +71,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
+        'timeBounds': json['timeBounds'] === undefined ? undefined : json['timeBounds'] === null ? null : TimeIntervalFromJSON(json['timeBounds']),
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -97,5 +99,6 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
+        'timeBounds': TimeIntervalToJSON(value['timeBounds']),
     };
 }
