@@ -747,6 +747,8 @@ jobs:
     # run even if a dependency failed, otherwise this job is skipped and counts as passed
     if: always()
     needs:
+      # If one of these two fails, all jobs that depend on it are skipped, and skipped jobs count as passed.
+      # Listing them here makes such a failure fail this job.
       - changes
       - light-gate
       - geoengine-test
