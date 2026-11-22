@@ -147,7 +147,7 @@ function formatDate(timeMs: number): string {
                         }
                     </div>
                     @if (eodysseyLayerService.selectedPreset(); as preset) {
-                        <p class="catalogue-message dates-of">Dates with scenes for {{ preset.displayName }}</p>
+                        <p class="catalogue-message dates-of">Dates with scenes in this view for {{ preset.displayName }}</p>
                     }
                 }
             }
