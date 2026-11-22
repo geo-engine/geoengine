@@ -11,6 +11,8 @@ use geoengine_operators::{
     source::{
         AttributeFilter as OperatorsAttributeFilter, GdalSource as OperatorsGdalSource,
         GdalSourceParameters as OperatorsGdalSourceParameters,
+        MdGdalSource as OperatorsMdGdalSource,
+        MdGdalSourceParameters as OperatorsMdGdalSourceParameters,
         MultiBandGdalSource as OperatorsMultiBandGdalSource,
         MultiBandGdalSourceParameters as OperatorsMultiBandGdalSourceParameters,
         OgrSource as OperatorsOgrSource,
@@ -92,6 +94,60 @@ impl TryFrom<MultiBandGdalSource> for OperatorsMultiBandGdalSource {
         Ok(OperatorsMultiBandGdalSource {
             params: OperatorsMultiBandGdalSourceParameters {
                 data: value.params.data.into(),
+                overview_level: value.params.overview_level,
+            },
+        })
+    }
+}
+
+/// The [`MdGdalSource`] is a source operator that reads multidimensional (netCDF/Zarr) arrays
+/// through GDAL, emitting one 2D raster tile per z slice.
+///
+/// ## Errors
+///
+/// If the given dataset does not exist, is not readable, or the requested bands are not
+/// part of the dataset, an error is thrown.
+///
+#[api_operator(
+    title = "Multidimensional GDAL Source",
+    examples(json!({
+        "type": "MdGdalSource",
+        "params": {
+            "data": "era5-timeseries"
+        }
+    }))
+)]
+pub struct MdGdalSource {
+    pub params: MdGdalSourceParameters,
+}
+
+/// Parameters for the [`MdGdalSource`] operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MdGdalSourceParameters {
+    /// Dataset name or identifier to be loaded.
+    #[schema(value_type = String, examples("era5-timeseries"))]
+    pub data: NamedData,
+
+    /// *Optional*: overview level to use, i.e., how many times coarser than the native resolution
+    /// the data is read. `1` is the native resolution.
+    ///
+    /// An MD array has no overviews: each pixel of a level is the pixel of the native resolution
+    /// under its center. If not provided, the native resolution is read.
+    #[schema(value_type = Option<u32>, minimum = 1, examples(2))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overview_level: Option<NonZeroU32>,
+}
+
+impl TryFrom<MdGdalSource> for OperatorsMdGdalSource {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MdGdalSource) -> Result<Self, Self::Error> {
+        Ok(OperatorsMdGdalSource {
+            params: OperatorsMdGdalSourceParameters {
+                data: serde_json::from_str::<geoengine_datatypes::dataset::NamedData>(
+                    &serde_json::to_string(&value.params.data)?,
+                )?,
                 overview_level: value.params.overview_level,
             },
         })

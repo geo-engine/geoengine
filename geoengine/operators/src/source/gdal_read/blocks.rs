@@ -18,6 +18,10 @@
 //! pool joins concurrent requests for the file headers that give the levels and block sizes, and
 //! reuses them.
 //!
+//! A z-slice of an MD array is read the same way, as a level of factor 1 whose size comes from
+//! the file's parameters: its units are the whole slice if it is small enough, else virtual
+//! units, since the array's chunks are not known. No header is read for it.
+//!
 //! Blocks and headers live as long as the dataset's cache hint says, and at least for the cache's
 //! minimum block TTL. A dataset with a TTL of 0 still has its tiles computed anew, but they share
 //! the blocks and headers of its files.
@@ -28,7 +32,7 @@ use crate::cache::new_raster_cache::{
 };
 use crate::engine::QueryContext;
 use crate::source::gdal_worker_process::process_common::{
-    GdalReadAdvise, GdalReadWindow, IpcProcessError,
+    GdalReadAdvise, GdalReadWindow, IpcProcessError, MdAxisMapping,
 };
 use crate::source::gdal_worker_process::reader::{GdalPoolReader, flip_grid_y_if_needed};
 use crate::source::gdal_worker_process::{
@@ -41,9 +45,9 @@ use futures::stream::FuturesUnordered;
 use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridBounds,
-    GridIdx2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel,
-    RasterTile2D,
+    BoundedGrid, ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
+    GridBounds, GridIdx2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel,
+    RasterProperties, RasterTile2D,
 };
 use num::FromPrimitive;
 use std::num::NonZeroUsize;
@@ -106,6 +110,25 @@ pub enum UnitRead {
     U64(UnitResult<u64>),
     F32(UnitResult<f32>),
     F64(UnitResult<f64>),
+}
+
+/// One z-slice of an MD array, the 2D raster an MD read reads from.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MdSlice {
+    /// the MD group of the array, `None` for the root group
+    pub group: Option<String>,
+    pub array_name: String,
+    /// file-local
+    pub z_index: usize,
+    /// role of each array dimension, in source order
+    pub axis_mapping: Vec<MdAxisMapping>,
+}
+
+/// What a unit is read from: a level of a raster band or a z-slice of an MD array.
+#[derive(Clone)]
+enum UnitSource {
+    Level,
+    Md(Arc<MdSlice>),
 }
 
 impl BlockIo {
@@ -272,16 +295,114 @@ impl BlockIo {
                     &picked,
                     read_advise,
                     cache_hint,
+                    &UnitSource::Level,
                 )
                 .await;
         }
 
-        let blocks = try_join_all(
-            level_window
-                .pieces_in(level_window.window)
-                .map(|piece| self.piece::<T>(params, &file, &level_window, piece, cache_hint)),
+        self.read_window(
+            params,
+            &file,
+            level_window,
+            read_advise,
+            cache_hint,
+            &UnitSource::Level,
         )
-        .await?;
+        .await
+    }
+
+    /// Reads `read_advise` of the z-slice `slice` of an MD file from whole units of the slice.
+    /// `None` if the read is not one the blocks can serve: it resamples or reaches beyond the
+    /// file, so the caller reads it directly.
+    ///
+    /// # Errors
+    /// Returns an error if a unit read fails.
+    ///
+    /// # Panics
+    /// Never: an MD slice serializes to JSON.
+    pub async fn read_md<T>(
+        &self,
+        params: &GdalDatasetParameters,
+        slice: &MdSlice,
+        read_advise: GdalReadAdvise,
+        cache_hint: CacheHint,
+    ) -> Result<Option<GdalProcessReadResult<T>>, GdalProcessPoolError>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
+        let Some(level_window) = md_level_window(params, read_advise) else {
+            return Ok(None);
+        };
+        let file = md_file_id(params, slice);
+        self.read_window(
+            params,
+            &file,
+            level_window,
+            read_advise,
+            cache_hint,
+            &UnitSource::Md(Arc::new(slice.clone())),
+        )
+        .await
+        .map(Some)
+    }
+
+    /// Reads the `picked` pixels of the z-slice `slice` of an MD file from whole units of the
+    /// slice, the pixels of a coarser read (see [`pick_from_window`] for one without blocks).
+    /// `window` is the read at the full resolution that holds them, in the pixels of the slice;
+    /// `read_advise` places the picked pixels. `None` if the blocks cannot serve `window`, see
+    /// [`BlockIo::read_md`].
+    ///
+    /// # Errors
+    /// Returns an error if a unit read fails.
+    ///
+    /// # Panics
+    /// Never: an MD slice serializes to JSON.
+    pub(crate) async fn read_md_picked<T>(
+        &self,
+        params: &GdalDatasetParameters,
+        slice: &MdSlice,
+        window: GdalReadAdvise,
+        picked: &Picked,
+        read_advise: GdalReadAdvise,
+        cache_hint: CacheHint,
+    ) -> Result<Option<GdalProcessReadResult<T>>, GdalProcessPoolError>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
+        let Some(level_window) = md_level_window(params, window) else {
+            return Ok(None);
+        };
+        self.read_picked(
+            params,
+            &md_file_id(params, slice),
+            &level_window,
+            picked,
+            read_advise,
+            cache_hint,
+            &UnitSource::Md(Arc::new(slice.clone())),
+        )
+        .await
+        .map(Some)
+    }
+
+    /// Composes `level_window` from its pieces, reading the units of the pieces not cached.
+    async fn read_window<T>(
+        &self,
+        params: &GdalDatasetParameters,
+        file: &Arc<str>,
+        level_window: LevelWindow,
+        read_advise: GdalReadAdvise,
+        cache_hint: CacheHint,
+        source: &UnitSource,
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
+        let blocks =
+            try_join_all(level_window.pieces_in(level_window.window).map(|piece| {
+                self.piece::<T>(params, file, &level_window, piece, cache_hint, source)
+            }))
+            .await?;
         let Some(pieces) = blocks.into_iter().collect::<Option<Vec<_>>>() else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
@@ -322,6 +443,7 @@ impl BlockIo {
     /// picked pixels are written into the output, and it is dropped; the cache keeps its pieces
     /// within its size limit. The read thus holds the output and the units in flight, which the
     /// worker pool bounds.
+    #[allow(clippy::too_many_arguments)]
     async fn read_picked<T>(
         &self,
         params: &GdalDatasetParameters,
@@ -330,6 +452,7 @@ impl BlockIo {
         picked: &Picked,
         read_advise: GdalReadAdvise,
         cache_hint: CacheHint,
+        source: &UnitSource,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
@@ -340,7 +463,7 @@ impl BlockIo {
             .filter(|&(_, piece)| picked.has_pixels_in(level_window.piece_bounds(piece)))
             .map(|(index, piece)| async move {
                 let unit = self
-                    .piece::<T>(params, file, level_window, piece, cache_hint)
+                    .piece::<T>(params, file, level_window, piece, cache_hint, source)
                     .await;
                 (index, piece, unit)
             })
@@ -369,33 +492,16 @@ impl BlockIo {
             }
         }
 
-        let bounds = GridBoundingBox2D::new_min_max(
-            0,
-            picked.rows.len() as isize - 1,
-            0,
-            picked.columns.len() as isize - 1,
+        let properties = properties.map(|(_, properties)| properties);
+        picked_grid(
+            params,
+            picked,
+            data,
+            valid,
+            any_valid,
+            properties.unwrap_or_default(),
+            read_advise,
         )
-        .map_err(|source| grid_error(params, source))?;
-        // as for window reads, a read without valid pixels is empty
-        let grid: GridOrEmpty<GridBoundingBox2D, T> = if any_valid {
-            Grid::new(bounds, data)
-                .and_then(|data| MaskedGrid::new(data, Grid::new(bounds, valid)?))
-                .map_err(|source| grid_error(params, source))?
-                .into()
-        } else {
-            EmptyGrid::new(bounds).into()
-        };
-        // the pixels are in the file's row order, south-up files are flipped afterwards
-        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
-            .set_grid_bounds(read_advise.read_window_bounds)
-            .map_err(|source| grid_error(params, source))?;
-
-        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
-            grid,
-            properties: properties
-                .map(|(_, properties)| properties)
-                .unwrap_or_default(),
-        })))
     }
 
     /// One piece from the cache, or else the whole unit it is in. `None` if the file is missing
@@ -407,6 +513,7 @@ impl BlockIo {
         level_window: &LevelWindow,
         piece: [usize; 2],
         cache_hint: CacheHint,
+        source: &UnitSource,
     ) -> UnitResult<T>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
@@ -432,14 +539,15 @@ impl BlockIo {
         }
 
         let this = self.clone();
-        let (params, file_id, level_window) = (params.clone(), file.clone(), *level_window);
+        let (params, file_id, level_window, source) =
+            (params.clone(), file.clone(), *level_window, source.clone());
         let unit_key = block_key::<T>(file, &level_window, level_window.unit_of(piece));
         let unit = self
             .cache
             .block_reads()
             .read(unit_key, async move {
                 T::map_unit_to_enum(
-                    this.read_unit::<T>(params, file_id, level_window, piece, cache_hint)
+                    this.read_unit::<T>(params, file_id, level_window, piece, cache_hint, source)
                         .await,
                 )
             })
@@ -460,6 +568,7 @@ impl BlockIo {
         level_window: LevelWindow,
         piece: [usize; 2],
         cache_hint: CacheHint,
+        source: UnitSource,
     ) -> UnitResult<T>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
@@ -471,11 +580,26 @@ impl BlockIo {
             bounds_of_target: unit_bounds,
             flip_y: false,
         };
-        let data = match self
-            .reader
-            .read_level_data::<T>(params, level_window.factor, read_advise)
-            .await?
-        {
+        let read = match source {
+            UnitSource::Level => {
+                self.reader
+                    .read_level_data::<T>(params, level_window.factor, read_advise)
+                    .await?
+            }
+            UnitSource::Md(slice) => {
+                self.reader
+                    .read_md_slice_data::<T>(
+                        params,
+                        read_advise,
+                        slice.group.as_deref(),
+                        &slice.array_name,
+                        slice.z_index,
+                        &slice.axis_mapping,
+                    )
+                    .await?
+            }
+        };
+        let data = match read {
             GdalProcessReadResult::Grid(data) => *data,
             GdalProcessReadResult::FileNotFoundAsNoData => return Ok(None),
         };
@@ -503,6 +627,77 @@ impl BlockIo {
 
         Ok(Some(unit))
     }
+}
+
+/// The read of the `picked` pixels, given their values and validity in row order: empty if none
+/// is valid, flipped for a south-up file and placed at the bounds of `read_advise`.
+fn picked_grid<T: Pixel>(
+    params: &GdalDatasetParameters,
+    picked: &Picked,
+    data: Vec<T>,
+    valid: Vec<bool>,
+    any_valid: bool,
+    properties: RasterProperties,
+    read_advise: GdalReadAdvise,
+) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
+    let bounds = GridBoundingBox2D::new_min_max(
+        0,
+        picked.rows.len() as isize - 1,
+        0,
+        picked.columns.len() as isize - 1,
+    )
+    .map_err(|source| grid_error(params, source))?;
+    // as for window reads, a read without valid pixels is empty
+    let grid: GridOrEmpty<GridBoundingBox2D, T> = if any_valid {
+        Grid::new(bounds, data)
+            .and_then(|data| MaskedGrid::new(data, Grid::new(bounds, valid)?))
+            .map_err(|source| grid_error(params, source))?
+            .into()
+    } else {
+        EmptyGrid::new(bounds).into()
+    };
+    // the pixels are in the file's row order, south-up files are flipped afterwards
+    let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
+        .set_grid_bounds(read_advise.read_window_bounds)
+        .map_err(|source| grid_error(params, source))?;
+
+    Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
+        grid,
+        properties,
+    })))
+}
+
+/// The `picked` pixels of `window`, a read of an MD slice at its full resolution whose bounds are
+/// the pixels of the slice, placed by `read_advise`: the coarser read of an MD slice without
+/// blocks, which picks the same pixels as [`BlockIo::read_md_picked`].
+///
+/// # Errors
+/// Returns an error if the picked pixels do not make a grid.
+pub(crate) fn pick_from_window<T: Pixel>(
+    params: &GdalDatasetParameters,
+    window: GdalProcessReadResult<T>,
+    picked: &Picked,
+    read_advise: GdalReadAdvise,
+) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
+    let block = match window {
+        GdalProcessReadResult::Grid(block) => *block,
+        GdalProcessReadResult::FileNotFoundAsNoData => {
+            return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
+        }
+    };
+    let pixels = picked.rows.len() * picked.columns.len();
+    let mut data = vec![T::zero(); pixels];
+    let mut valid = vec![false; pixels];
+    let any_valid = picked.blit_from(&block, block.grid.bounding_box(), &mut data, &mut valid);
+    picked_grid(
+        params,
+        picked,
+        data,
+        valid,
+        any_valid,
+        block.properties,
+        read_advise,
+    )
 }
 
 impl LevelWindow {
@@ -588,9 +783,9 @@ struct LevelRead {
 
 /// Pixels of a level that a read takes, per axis, counted in the level from 0 and ascending. The
 /// output pixel (i, j) is the level pixel (`rows[i]`, `columns[j]`).
-struct Picked {
-    rows: Vec<usize>,
-    columns: Vec<usize>,
+pub(crate) struct Picked {
+    pub(crate) rows: Vec<usize>,
+    pub(crate) columns: Vec<usize>,
 }
 
 impl Picked {
@@ -744,6 +939,16 @@ fn grid_error(
 }
 
 /// Identifies a file and everything that changes how its pixels and properties are read.
+/// The id of an MD slice in the cache: its file and the slice.
+fn md_file_id(params: &GdalDatasetParameters, slice: &MdSlice) -> Arc<str> {
+    format!(
+        "{}{}",
+        file_id(params),
+        serde_json::to_string(slice).expect("an MD slice serializes to JSON")
+    )
+    .into()
+}
+
 fn file_id(params: &GdalDatasetParameters) -> Arc<str> {
     serde_json::to_string(params)
         .expect("dataset parameters serialize to JSON")
@@ -808,13 +1013,62 @@ fn level_window(
         .ok()?,
         level_size: [level_layout.size_y, level_layout.size_x],
         block_size,
-        piece_size: block_size.map(|size| {
-            if size.is_multiple_of(PIECE_SIZE) {
-                PIECE_SIZE
-            } else {
-                size
-            }
-        }),
+        piece_size: piece_size(block_size),
+    })
+}
+
+/// The window of an MD read in its z-slice, which is `params.width` x `params.height`, as a level
+/// of factor 1. `None` if the read resamples or reaches beyond the slice.
+fn md_level_window(
+    params: &GdalDatasetParameters,
+    read_advise: GdalReadAdvise,
+) -> Option<LevelWindow> {
+    let window = read_advise.gdal_read_widow;
+    let (x_min, y_min) = window.gdal_window_start();
+    let (size_x, size_y) = window.gdal_window_size();
+    let (x_min, y_min) = (usize::try_from(x_min).ok()?, usize::try_from(y_min).ok()?);
+    let read_shape = read_advise.read_window_bounds.grid_shape();
+    if size_x == 0
+        || size_y == 0
+        || [size_y, size_x] != [read_shape.axis_size_y(), read_shape.axis_size_x()]
+    {
+        return None;
+    }
+    let (x_max, y_max) = (x_min + size_x - 1, y_min + size_y - 1);
+    if x_max >= params.width || y_max >= params.height {
+        return None;
+    }
+
+    // the array's chunks are not known: read the whole slice if it is small enough
+    let block_size = if params.width * params.height <= MAX_BLOCK_PIXELS {
+        [params.height, params.width]
+    } else {
+        [VIRTUAL_UNIT_SIZE, VIRTUAL_UNIT_SIZE]
+    };
+
+    Some(LevelWindow {
+        factor: NonZeroUsize::MIN,
+        window: GridBoundingBox2D::new_min_max(
+            y_min as isize,
+            y_max as isize,
+            x_min as isize,
+            x_max as isize,
+        )
+        .ok()?,
+        level_size: [params.height, params.width],
+        block_size,
+        piece_size: piece_size(block_size),
+    })
+}
+
+/// Units that divide into pieces of `PIECE_SIZE` are cached in those, others whole.
+fn piece_size(block_size: [usize; 2]) -> [usize; 2] {
+    block_size.map(|size| {
+        if size.is_multiple_of(PIECE_SIZE) {
+            PIECE_SIZE
+        } else {
+            size
+        }
     })
 }
 

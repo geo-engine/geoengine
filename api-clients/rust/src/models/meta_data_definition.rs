@@ -27,6 +27,8 @@ pub enum MetaDataDefinition {
     GdalMetaDataList(Box<models::GdalMetaDataList>),
     #[serde(rename="GdalMultiBand")]
     GdalMultiBand(Box<models::GdalMultiBand>),
+    #[serde(rename="GdalMdMetaData")]
+    GdalMdMetaData(Box<models::GdalMdMetaData>),
 }
 
 impl Default for MetaDataDefinition {

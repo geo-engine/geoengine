@@ -9,6 +9,7 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
+import { type AddDatasetMdTile } from '../models/AddDatasetMdTile';
 import { type AddDatasetTile } from '../models/AddDatasetTile';
 import { type AutoCreateDataset } from '../models/AutoCreateDataset';
 import { type CreateDataset } from '../models/CreateDataset';
@@ -33,6 +34,16 @@ export interface AddDatasetTilesHandlerRequest {
      *
      */
     addDatasetTile: Array<AddDatasetTile>;
+}
+export interface AddMdDatasetTilesHandlerRequest {
+    /**
+     * Dataset Name
+     */
+    dataset: string;
+    /**
+     *
+     */
+    addDatasetMdTile: Array<AddDatasetMdTile>;
 }
 export interface AutoCreateDatasetHandlerRequest {
     /**
@@ -158,6 +169,20 @@ export declare class DatasetsApi extends runtime.BaseAPI {
      * Add a tile to a gdal dataset.
      */
     addDatasetTilesHandler(requestParameters: AddDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
+    /**
+     * Creates request options for addMdDatasetTilesHandler without sending the request
+     */
+    addMdDatasetTilesHandlerRequestOpts(requestParameters: AddMdDatasetTilesHandlerRequest): Promise<runtime.RequestOpts>;
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandlerRaw(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>>;
+    /**
+     * One row per file, covering all of that file\'s z slices. The per-slice times live in `timeDescriptor` plus `timeSteps`, and the file\'s overall bounds are derived from them when the row is stored, so a request cannot describe a row as covering a window it does not.
+     * Adds MD array files to an `MdGdalSource` dataset.
+     */
+    addMdDatasetTilesHandler(requestParameters: AddMdDatasetTilesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
     /**
      * Creates request options for autoCreateDatasetHandler without sending the request
      */

@@ -4,14 +4,14 @@ use crate::api::model::processing_graphs::{
     BandwiseExpressionParameters, Downsampling, DownsamplingMethod, DownsamplingParameters,
     DownsamplingResolution, Expression, ExpressionParameters, GdalSource, GdalSourceParameters,
     Interpolation, InterpolationMethod, InterpolationParameters, InterpolationResolution,
-    MultiBandGdalSource, NeighborhoodAggregate, NeighborhoodAggregateParameters,
-    NeighborhoodKernel, Onnx, OnnxParameters, PolygonRasterization, PolygonRasterizationParameters,
-    Radiance, RadianceParameters, RasterOperator, RasterScaling, RasterScalingParameters,
-    RasterStacker, RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
-    Rasterization, RasterizationParameters, Reflectance, ReflectanceParameters, RenameBands,
-    Temperature, TemperatureParameters, TemporalRasterAggregation,
-    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters, Warp,
-    WarpDownsamplingMethod, WarpParameters, WarpUpsamplingMethod,
+    MdGdalSource, MdGdalSourceParameters, MultiBandGdalSource, NeighborhoodAggregate,
+    NeighborhoodAggregateParameters, NeighborhoodKernel, Onnx, OnnxParameters,
+    PolygonRasterization, PolygonRasterizationParameters, Radiance, RadianceParameters,
+    RasterOperator, RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
+    RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
+    Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
+    TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    Warp, WarpDownsamplingMethod, WarpParameters, WarpUpsamplingMethod,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -54,7 +54,8 @@ use geoengine_operators::{
         WarpUpsampling as OperatorsWarpUpsampling,
     },
     source::{
-        GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
+        GdalSource as OperatorsGdalSource, MdGdalSource as OperatorsMdGdalSource,
+        MultiBandGdalSource as OperatorsMultiBandGdalSource,
     },
 };
 
@@ -86,6 +87,20 @@ impl TryFrom<&OperatorsMultiBandGdalSource> for MultiBandGdalSource {
         Ok(Self {
             r#type: Default::default(),
             params: GdalSourceParameters {
+                data: value.params.data.clone().into(),
+                overview_level: value.params.overview_level,
+            },
+        })
+    }
+}
+
+impl TryFrom<&OperatorsMdGdalSource> for MdGdalSource {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsMdGdalSource) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: MdGdalSourceParameters {
                 data: value.params.data.clone().into(),
                 overview_level: value.params.overview_level,
             },

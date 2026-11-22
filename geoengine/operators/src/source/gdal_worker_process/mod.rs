@@ -16,7 +16,10 @@ pub use gdal_dataset_params::{
     GdalRetryOptions, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use grid_and_properties::GridAndProperties;
-pub use process_common::{RasterInfo, RasterLevelLayout};
+pub use process_common::{
+    MdArrayInfo, MdAxisMapping, RasterInfo, RasterLevelLayout, validate_md_axis_mapping,
+    validate_md_axis_roles,
+};
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{
     DEFAULT_HEADER_CACHE_ENTRIES, GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError,
@@ -24,6 +27,13 @@ pub use process_pool::{
 };
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
+
+/// How many tile reads an `MdGdalSource` keeps in flight against the worker pool.
+///
+/// Deliberately conservative: an `MdGdalSource` read returns one 2D slice per tile (a single
+/// 1440x600 float32 slice is already 3.4 MB), so the same bound as `MultiBandGdalSource`'s
+/// read-ahead represents far more bytes here than for a plain 2D tile.
+pub const TILE_READ_CONCURRENCY: usize = 16;
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
