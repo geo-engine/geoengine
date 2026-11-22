@@ -100,6 +100,17 @@ function stepLevel(unit: string | undefined): number {
     return -1;
 }
 
+/**
+ * The time steps of one window of dates: about three months of days or hours, three years of months, thirty years of
+ * years. A user steps into a date anyway, so more would only load dates nobody looks at.
+ */
+export function windowSteps(unit: string | undefined, amount: number): number {
+    const level = stepLevel(unit);
+    if (level === 2) return Math.max(1, Math.floor(30 / amount));
+    if (level === 1) return Math.max(1, Math.floor(36 / amount));
+    return 100;
+}
+
 /** Whether a month holds several time steps of this unit, e.g. days or hours, and not one step or a part of one. */
 export function isShorterThanMonth(unit: string | undefined): boolean {
     return stepLevel(unit) < 1;

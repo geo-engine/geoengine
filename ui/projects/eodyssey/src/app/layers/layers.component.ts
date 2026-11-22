@@ -135,7 +135,6 @@ function formatDate(timeMs: number): string {
                                 [class.tick-data]="tick.status === 'data'"
                                 [class.tick-unknown]="tick.status === 'unknown'"
                                 [class.tick-selected]="tick.isSelected"
-                                [class.tick-today]="tick.isToday"
                                 [attr.aria-label]="tick.label"
                                 [attr.aria-current]="tick.isSelected ? 'date' : null"
                                 [matTooltip]="tick.label"
@@ -152,11 +151,11 @@ function formatDate(timeMs: number): string {
                 }
             }
             <div class="time-jumps">
-                <button mat-stroked-button type="button" class="time-backwards" (click)="timeBackwards()">
+                <button mat-stroked-button type="button" class="time-backwards" [disabled]="!backwards()?.time" (click)="timeBackwards()">
                     <mat-icon>navigate_before</mat-icon>
                     {{ backwards()?.label }}
                 </button>
-                <button mat-stroked-button type="button" class="time-forward" (click)="timeForward()">
+                <button mat-stroked-button type="button" class="time-forward" [disabled]="!forward()?.time" (click)="timeForward()">
                     {{ forward()?.label }}
                     <mat-icon iconPositionEnd>navigate_next</mat-icon>
                 </button>
@@ -443,18 +442,6 @@ function formatDate(timeMs: number): string {
                     outline: 2px solid var(--geoengine-foreground-text-color);
                     outline-offset: 2px;
                     box-shadow: 0 0 0 2px var(--geoengine-card-background-color);
-                }
-
-                // a stop line after the date of today, in the gap to the next: later dates cannot have scenes yet
-                &.tick-today::before {
-                    content: '';
-                    position: absolute;
-                    top: -0.375rem;
-                    bottom: -0.375rem;
-                    right: calc(-0.1875rem - 1px);
-                    width: 2px;
-                    border-radius: 1px;
-                    background: var(--geoengine-accent-color);
                 }
             }
 
@@ -864,7 +851,7 @@ export class LayersComponent {
      * The nearest date with scenes. Without one in the loaded dates, the first date beyond them, whose dates load then.
      * One time step where the data source cannot tell its dates.
      */
-    private jump(direction: 1 | -1): {time: Time; label: string} | undefined {
+    private jump(direction: 1 | -1): {time?: Time; label: string} | undefined {
         const time = this.currentTime();
         const timeStep = this.footprintsService.timeStep();
         if (!time || !timeStep) return undefined;
@@ -875,15 +862,24 @@ export class LayersComponent {
         // the direction, since the date beyond the loaded ones is not known to have scenes
         if (beyond) return {time: beyond, label: direction === 1 ? 'Later' : 'Earlier'};
 
+        const stepped =
+            direction === 1
+                ? time.add(timeStep.durationAmount, timeStep.durationUnit)
+                : time.subtract(timeStep.durationAmount, timeStep.durationUnit);
+        // the data has no dates before its start or after now
+        const timeRange = this.footprintsService.timeRange();
+        const outside =
+            timeRange && (direction === 1 ? stepped.start.valueOf() >= timeRange.end : stepped.start.valueOf() < timeRange.start);
+        if (this.footprintsService.datesReachTimeRange(direction) || outside) {
+            return {label: direction === 1 ? 'No later dates' : 'No earlier dates'};
+        }
         const amount = `${timeStep.durationAmount} ${timeStep.durationUnit}`;
-        return direction === 1
-            ? {time: time.add(timeStep.durationAmount, timeStep.durationUnit), label: `${amount} on`}
-            : {time: time.subtract(timeStep.durationAmount, timeStep.durationUnit), label: `${amount} back`};
+        return {time: stepped, label: direction === 1 ? `${amount} on` : `${amount} back`};
     }
 
     private async stepTime(direction: 1 | -1): Promise<void> {
         const jump = this.jump(direction);
-        if (jump) await this.projectService.setTime(jump.time);
+        if (jump?.time) await this.projectService.setTime(jump.time);
     }
 
     async selectTime(start: number): Promise<void> {

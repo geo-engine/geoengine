@@ -10,6 +10,7 @@ import {
     stepAt,
     stepsAround,
     visiblePeriod,
+    windowSteps,
 } from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
@@ -151,5 +152,16 @@ describe('footprints', () => {
         await expect(footprintsOrTooLarge(failed('Operator'))).rejects.toBeInstanceOf(ResponseError);
         const answer = await footprintsOrTooLarge(Promise.resolve({spatialReference: 'EPSG:4326', steps: [], next: null}));
         expect(answer.tooLarge).toBe(false);
+    });
+});
+
+describe('windowSteps', () => {
+    it('spans about three months of days, three years of months and thirty years of years', () => {
+        expect(windowSteps('days', 1)).toBe(100);
+        expect(windowSteps('hours', 6)).toBe(100);
+        expect(windowSteps('months', 1)).toBe(36);
+        expect(windowSteps('months', 3)).toBe(12);
+        expect(windowSteps('years', 1)).toBe(30);
+        expect(windowSteps('years', 50)).toBe(1);
     });
 });
