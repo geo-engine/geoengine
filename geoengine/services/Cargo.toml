@@ -115,7 +115,7 @@ wkt = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.31", features = ["socket"] }
+nix = { version = "0.32", features = ["socket"] }
 
 [dev-dependencies]
 criterion = { workspace = true }
