@@ -1,0 +1,31 @@
+name: "Rust Setup"
+description: >
+  Install the Rust toolchain of `geoengine/rust-toolchain.toml` and restore the Rust cache with the settings that all
+  jobs share. The cache is only saved on `main`.
+inputs:
+  shared-key:
+    description: "The key of the cache, e.g., the name of the job. Jobs with the same key share a cache."
+    required: true
+  cache-targets:
+    description: >
+      Whether to cache the build targets. Set to `false` to only cache the binaries that `cargo install` installs
+      (`~/.cargo/bin`), e.g., for `just backend install`.
+    required: false
+    default: "true"
+runs:
+  using: "composite"
+  steps:
+    - name: Init rustup toolchain
+      # initialize based on the toolchain file
+      shell: bash
+      run: rustup toolchain install
+    - name: Setup Rust Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: "cache-rust"
+        shared-key: ${{ inputs.shared-key }}
+        add-job-id-key: false
+        env-vars: ""
+        workspaces: "geoengine"
+        cache-targets: ${{ inputs.cache-targets }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

@@ -130,18 +130,10 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "test"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Testsuite
         uses: ./.github/actions/test
       - id: upload-coverage-artifact
@@ -167,18 +159,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "lint"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Prefetch build downloads
         uses: ./.github/actions/prefetch-build-downloads
       - name: Rustfmt
@@ -205,18 +189,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "build"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Prefetch build downloads
         uses: ./.github/actions/prefetch-build-downloads
       - name: Build
@@ -251,18 +227,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "build--release"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Prefetch build downloads
         uses: ./.github/actions/prefetch-build-downloads
       - name: Build
@@ -289,11 +257,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Tools Cache
-        uses: ./.github/actions/rust-tools-cache
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          # only the tools of `just backend install`, since the binaries come from the `geoengine / build` job
+          shared-key: "tools"
+          cache-targets: false
       - name: Download binaries
         uses: ./.github/actions/download-geoengine-binaries
       - name: Install dependencies for OGC validation
@@ -707,11 +676,12 @@ jobs:
           mkdir -p /usr/share/man/man1
           apt-get -o Acquire::Retries=5 update
           apt-get -o Acquire::Retries=5 install -y openjdk-21-jre-headless
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Tools Cache
-        uses: ./.github/actions/rust-tools-cache
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          # only the tools of `just backend install`, since the binaries come from the `geoengine / build` job
+          shared-key: "tools"
+          cache-targets: false
       - name: Download Geo Engine binaries
         uses: ./.github/actions/download-geoengine-binaries
       - name: Prefetch OpenAPI Generator
