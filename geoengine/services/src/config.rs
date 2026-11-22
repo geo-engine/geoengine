@@ -629,6 +629,26 @@ pub struct GdalProcessPoolWorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    #[serde(default)]
+    pub byte_cache: ByteCacheSettings,
+}
+
+/// A cache of remote file bytes that all GDAL workers of the server share.
+#[derive(Debug, Deserialize)]
+pub struct ByteCacheSettings {
+    /// 0 to read remote files without the cache
+    pub size_in_mb: u64,
+    /// in memory if on `/dev/shm`; created readable only by the server's user
+    pub directory: std::path::PathBuf,
+}
+
+impl Default for ByteCacheSettings {
+    fn default() -> Self {
+        Self {
+            size_in_mb: 0,
+            directory: "/dev/shm/geoengine-gdal-byte-cache".into(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -707,6 +727,12 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
+            byte_cache: (config.byte_cache.size_in_mb > 0).then(|| {
+                geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
+                    directory: config.byte_cache.directory,
+                    size_bytes: config.byte_cache.size_in_mb * 1024 * 1024,
+                }
+            }),
         }
     }
 }
@@ -1128,6 +1154,24 @@ mod tests {
             .into_iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
             .collect()
+    }
+
+    #[test]
+    fn it_gives_the_workers_a_byte_cache_only_with_a_size() {
+        let byte_cache =
+            |local: Option<&str>| worker_config(local, "BYTE_CACHE__SIZE_IN_MB", None).byte_cache;
+        assert_eq!(byte_cache(None), None);
+        assert_eq!(
+            byte_cache(Some(
+                "[gdal_process_pool.worker.byte_cache]\nsize_in_mb = 2\n"
+            )),
+            Some(
+                geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
+                    directory: "/dev/shm/geoengine-gdal-byte-cache".into(),
+                    size_bytes: 2 * 1024 * 1024,
+                }
+            )
+        );
     }
 
     #[test]

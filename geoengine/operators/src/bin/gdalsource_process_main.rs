@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{GridBounds, Pixel};
 use geoengine_operators::source::gdal_worker_process::{
-    GdalDatasetParameters, OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
+    GdalDatasetParameters, OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig, byte_cache,
     process_common::{
         GdalIpcBytePayload, GdalReadAdvise, GdalRequest, IpcChannelMessagePayload,
         IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
@@ -243,7 +243,14 @@ fn main() {
         set_gdal_process_global_options(opts);
     }
     reroute_gdal_logging();
-    run(token);
+    let byte_cache = worker_config.byte_cache.as_ref().and_then(|config| {
+        byte_cache::install(&config.directory)
+            .inspect_err(|err| {
+                tracing::error!("GDAL byte cache not installed, reading without it: {err}");
+            })
+            .ok()
+    });
+    run(token, byte_cache);
 
     drop(runtime_guard);
     if let Some(provider) = provider
@@ -319,13 +326,17 @@ fn raster_type_dispatch(
     }
 }
 
-fn run(token: Token) {
+fn run(token: Token, byte_cache: Option<&'static byte_cache::ByteCache>) {
     let (sender, receiver) = match setup_client::<WorkerRequest, WorkerResponse>(token) {
         Ok(pair) => pair,
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache = GdalDatasetHolder::new();
+    let mut dataset_cache = if byte_cache.is_some() {
+        GdalDatasetHolder::with_byte_cache()
+    } else {
+        GdalDatasetHolder::new()
+    };
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
@@ -349,7 +360,7 @@ fn run(token: Token) {
         .entered();
 
         let stats = tracing::enabled!(target: "gdal_worker_read", tracing::Level::DEBUG)
-            .then(|| ReadStats::start(&payload, &dataset_cache));
+            .then(|| ReadStats::start(&payload, &dataset_cache, byte_cache));
 
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = handle_request(payload, &mut dataset_cache, &sender) {
@@ -357,7 +368,7 @@ fn run(token: Token) {
             break;
         }
         if let Some(stats) = stats {
-            stats.log();
+            stats.log(byte_cache);
         }
     }
 }
@@ -379,9 +390,16 @@ struct ReadStats {
 }
 
 impl ReadStats {
-    fn start(payload: &IpcChannelMessagePayload, dataset_cache: &GdalDatasetHolder) -> Self {
+    fn start(
+        payload: &IpcChannelMessagePayload,
+        dataset_cache: &GdalDatasetHolder,
+        byte_cache: Option<&byte_cache::ByteCache>,
+    ) -> Self {
         // SAFETY: this worker runs one request at a time, so no other read is counted
         unsafe { gdal_sys::VSINetworkStatsReset() };
+        if let Some(cache) = byte_cache {
+            cache.take_counts();
+        }
         let level_factor = match &payload.request {
             GdalRequest::Read { level_factor, .. } => level_factor.map_or(0, NonZeroUsize::get),
             GdalRequest::Header => 0,
@@ -403,9 +421,13 @@ impl ReadStats {
         }
     }
 
-    fn log(self) {
+    /// With the byte cache, requests and bytes are those it downloaded; `chunk_hits` and
+    /// `chunk_misses` count its chunks.
+    fn log(self, byte_cache: Option<&byte_cache::ByteCache>) {
         let ms = self.start.elapsed().as_secs_f64() * 1000.;
         let (requests, bytes) = network_stats();
+        let (chunk_hits, chunk_misses) =
+            byte_cache.map_or((0, 0), byte_cache::ByteCache::take_counts);
         tracing::debug!(
             target: "gdal_worker_read",
             read_id = self.read_id,
@@ -416,6 +438,8 @@ impl ReadStats {
             opened = self.opened,
             requests,
             bytes,
+            chunk_hits,
+            chunk_misses,
             ms,
             "GDAL read"
         );

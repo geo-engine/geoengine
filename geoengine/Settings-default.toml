@@ -322,6 +322,14 @@ filename_prefix = "geo_engine_worker"
 enabled = false
 endpoint = "http://127.0.0.1:4317"
 
+[gdal_process_pool.worker.byte_cache]
+# A cache of remote file bytes that all GDAL workers share, in chunks of 64 KB. Without it, each
+# worker downloads what another worker already has, e.g. the blocks of a finer level after
+# zooming in. The size counts towards the server's memory if the directory is on `/dev/shm`; the
+# server deletes the oldest chunks above it every few seconds. 0 reads without the cache.
+size_in_mb = 0
+directory = "/dev/shm/geoengine-gdal-byte-cache"
+
 [data]
 volumes = { test_data = "test_data/" }
 

@@ -124,6 +124,10 @@ pub struct WorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    /// A cache of remote file bytes that all workers share, see [`super::byte_cache`]; `None` to
+    /// read remote files without it.
+    #[serde(default)]
+    pub byte_cache: Option<super::byte_cache::ByteCacheConfig>,
 }
 
 impl Default for WorkerConfig {
@@ -138,6 +142,7 @@ impl Default for WorkerConfig {
             ],
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
+            byte_cache: None,
         }
     }
 }
@@ -257,6 +262,8 @@ pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
+    /// open remote files through `/vsigecache/`, which the worker installed
+    byte_cache: bool,
 }
 
 struct PrevDatasetOpt {
@@ -269,10 +276,33 @@ impl GdalDatasetHolder {
             params: None,
             dataset: None,
             thread_local: None,
+            byte_cache: false,
         }
     }
 
+    /// Opens remote files through the byte cache; [`super::byte_cache::install`] must have
+    /// installed it in this process.
+    pub fn with_byte_cache() -> Self {
+        Self {
+            byte_cache: true,
+            ..Self::new()
+        }
+    }
+
+    /// The path GDAL opens: remote files through the byte cache if it is on, keyed by the
+    /// parameters that decide which bytes the dataset may read.
+    fn path_for_open(&self, dataset_params: &GdalDatasetParameters) -> std::path::PathBuf {
+        let path = dataset_params.file_path_for_open();
+        if !self.byte_cache {
+            return path;
+        }
+        let mut hasher = rustc_hash::FxHasher::default();
+        dataset_params.partial_hash(&mut hasher);
+        super::byte_cache::wrap(&path, std::hash::Hasher::finish(&hasher)).unwrap_or(path)
+    }
+
     fn open_ex(
+        &self,
         dataset_params: &GdalDatasetParameters,
     ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
         let options = dataset_params
@@ -289,7 +319,7 @@ impl GdalDatasetHolder {
             .expect("GdalConfigOptions must not fail");
 
         let ds = gdal_open_ex_gdal_error(
-            &dataset_params.file_path_for_open(),
+            &self.path_for_open(dataset_params),
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_RASTER,
                 open_options: options.as_deref(),
@@ -338,7 +368,7 @@ impl GdalDatasetHolder {
             )
             .entered();
 
-            let (ds, tlo) = Self::open_ex(params)?;
+            let (ds, tlo) = self.open_ex(params)?;
 
             self.params = Some(params.clone());
             self.dataset = Some(ds);
