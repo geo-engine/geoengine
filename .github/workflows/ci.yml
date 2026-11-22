@@ -28,6 +28,8 @@ env:
   npm_config_fetch_retries: 5
   npm_config_fetch_retry_mintimeout: 20000
   npm_config_fetch_retry_maxtimeout: 120000
+  # all supported versions from https://devguide.python.org/versions/, the first one is the minimum version
+  PYTHON_VERSIONS: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
 
 jobs:
   # Decides which projects a pull request touches. Everything else (merge queue, `main`, manual runs,
@@ -46,6 +48,8 @@ jobs:
       api-clients: ${{ steps.result.outputs.api-clients }}
       ui: ${{ steps.result.outputs.ui }}
       www: ${{ steps.result.outputs.www }}
+      # passed on as an output, since `strategy.matrix` cannot access `env`
+      python-versions: ${{ env.PYTHON_VERSIONS }}
 
     steps:
       - name: Detect changed paths
@@ -384,13 +388,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # use all supported versions from https://devguide.python.org/versions/
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ fromJSON(needs.changes.outputs.python-versions) }}
         uv: [false]
         module-resolution: [""]
         coverage: [false]
         include:
-          - python-version: "3.10" # always test the minimum version
+          - python-version: ${{ fromJSON(needs.changes.outputs.python-versions)[0] }} # always test the minimum version
             uv: true
             module-resolution: "--resolution=lowest-direct"
             coverage: true
@@ -495,20 +498,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+      - name: List Python versions
+        id: python-versions
+        # `setup-python` expects one version per line
+        run: |
+          {
+            echo "list<<EOF"
+            jq -r '.[]' <<< "$PYTHON_VERSIONS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: |
-            3.10
-            3.11
-            3.12
-            3.13
-            3.14
+          python-version: ${{ steps.python-versions.outputs.list }}
       - name: Test with all Python versions
         shell: bash
         run: |
           set -euo pipefail
-          for version in 3.10 3.11 3.12 3.13 3.14; do
+          for version in $(jq -r '.[]' <<< "$PYTHON_VERSIONS"); do
             echo "::group::Python $version"
             just api-clients test-python "python$version"
             echo "::endgroup::"
