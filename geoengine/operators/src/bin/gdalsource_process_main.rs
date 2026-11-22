@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::num::NonZeroUsize;
 
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::Pixel;
+use geoengine_datatypes::raster::{GridBounds, Pixel};
 use geoengine_operators::source::gdal_worker_process::{
     GdalDatasetParameters, OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
@@ -348,12 +348,105 @@ fn run(token: Token) {
         )
         .entered();
 
+        let stats = tracing::enabled!(target: "gdal_worker_read", tracing::Level::DEBUG)
+            .then(|| ReadStats::start(&payload, &dataset_cache));
+
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = handle_request(payload, &mut dataset_cache, &sender) {
             tracing::error!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
             break;
         }
+        if let Some(stats) = stats {
+            stats.log();
+        }
     }
+}
+
+/// What a read cost, logged as one event per read for the benches (target `gdal_worker_read`).
+/// Requests and bytes come from GDAL's network statistics, which count only with
+/// `CPL_VSIL_NETWORK_STATS_ENABLED=YES` and are reset before each read, so that they neither
+/// mix reads nor grow with every file a long-lived worker has read.
+struct ReadStats {
+    read_id: String,
+    file: String,
+    band: usize,
+    /// 0 for a resampled read of the full resolution
+    level_factor: usize,
+    /// in full-resolution pixels, as the broker ranks workers by it
+    footprint: String,
+    opened: bool,
+    start: std::time::Instant,
+}
+
+impl ReadStats {
+    fn start(payload: &IpcChannelMessagePayload, dataset_cache: &GdalDatasetHolder) -> Self {
+        // SAFETY: this worker runs one request at a time, so no other read is counted
+        unsafe { gdal_sys::VSINetworkStatsReset() };
+        let level_factor = match &payload.request {
+            GdalRequest::Read { level_factor, .. } => level_factor.map_or(0, NonZeroUsize::get),
+            GdalRequest::Header => 0,
+        };
+        Self {
+            read_id: payload.read_id.clone().unwrap_or_default(),
+            file: payload.dataset_params.file_path.display().to_string(),
+            band: payload.dataset_params.rasterband_channel,
+            level_factor,
+            footprint: payload
+                .full_resolution_footprint()
+                .map(|b| {
+                    let (min, max) = (b.min_index(), b.max_index());
+                    format!("{},{},{},{}", min.x(), min.y(), max.x(), max.y())
+                })
+                .unwrap_or_default(),
+            opened: !dataset_cache.contains(&payload.dataset_params),
+            start: std::time::Instant::now(),
+        }
+    }
+
+    fn log(self) {
+        let ms = self.start.elapsed().as_secs_f64() * 1000.;
+        let (requests, bytes) = network_stats();
+        tracing::debug!(
+            target: "gdal_worker_read",
+            read_id = self.read_id,
+            file = self.file,
+            band = self.band,
+            level_factor = self.level_factor,
+            footprint = self.footprint,
+            opened = self.opened,
+            requests,
+            bytes,
+            ms,
+            "GDAL read"
+        );
+    }
+}
+
+/// Requests and downloaded bytes since the last reset of GDAL's network statistics.
+fn network_stats() -> (u64, u64) {
+    // SAFETY: GDAL returns a string allocated with `VSIMalloc`, or null, and we free it below
+    let json = unsafe {
+        let ptr = gdal_sys::VSINetworkStatsGetAsSerializedJSON(std::ptr::null_mut());
+        if ptr.is_null() {
+            return (0, 0);
+        }
+        let json = std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned();
+        gdal_sys::VSIFree(ptr.cast());
+        json
+    };
+    let methods = serde_json::from_str::<serde_json::Value>(&json)
+        .ok()
+        .and_then(|stats| stats.get("methods").and_then(|m| m.as_object()).cloned())
+        .unwrap_or_default();
+    methods.values().fold((0, 0), |(requests, bytes), method| {
+        let field = |name| {
+            method
+                .get(name)
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0)
+        };
+        (requests + field("count"), bytes + field("downloaded_bytes"))
+    })
 }
 
 fn read_and_send<T: GdalType + Pixel + FromPrimitive>(

@@ -210,6 +210,9 @@ struct BrokerStats {
     evictions: u64,
     cancelled_dropped: u64,
     max_dataset_queue_len: usize,
+    /// time dispatched requests waited for a worker, from sending them to the broker
+    wait_sum: Duration,
+    wait_max: Duration,
 }
 
 struct DatasetSlot {
@@ -263,6 +266,8 @@ struct QueuedRequest {
     /// Closed once the leader task drops its receiver because all callers gave up (see
     /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
+    /// when the request was sent to the broker, to measure how long it waited for a worker
+    enqueued: Instant,
 }
 
 /// Result of a read operation, carrying the IPC payload and the companion
@@ -898,6 +903,8 @@ impl BrokerState {
             evictions = stats.evictions,
             cancelled_dropped = stats.cancelled_dropped,
             max_dataset_queue_len = stats.max_dataset_queue_len,
+            wait_ms_sum = stats.wait_sum.as_secs_f64() * 1000.,
+            wait_ms_max = stats.wait_max.as_secs_f64() * 1000.,
             "GDAL process pool statistics"
         );
     }
@@ -1149,6 +1156,18 @@ impl BrokerState {
         };
         self.stats.dispatched += 1;
         self.global_active_count += 1;
+        let wait = now.saturating_duration_since(req.enqueued);
+        self.stats.wait_sum += wait;
+        self.stats.wait_max = self.stats.wait_max.max(wait);
+        // one event per dispatch for the benches, joined with the worker's `gdal_worker_read` by `read_id`
+        tracing::debug!(
+            target: "gdal_pool_dispatch",
+            worker_id,
+            affinity,
+            wait_ms = wait.as_secs_f64() * 1000.,
+            read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+            "GDAL read dispatched"
+        );
 
         // The worker holds the requested dataset once the read starts, not its previous one.
         // Recorded now, so that a busy worker switching datasets does not count as a holder of
@@ -1415,6 +1434,7 @@ impl GdalPoolDispatcher {
                             dataset_hash: routing_hash,
                             request: request_clone,
                             respond_to: oneshot_tx,
+                            enqueued: Instant::now(),
                         })))
                         .await;
 
@@ -1953,6 +1973,7 @@ mod tests {
                     dataset_hash: 0,
                     request: request.request.clone(),
                     respond_to: tx,
+                    enqueued: Instant::now(),
                 })))
                 .await
                 .unwrap();
@@ -2230,6 +2251,7 @@ mod tests {
             dataset_hash,
             request: msg,
             respond_to: tx,
+            enqueued: Instant::now(),
         });
         (req, rx)
     }
@@ -2431,6 +2453,25 @@ mod tests {
         assert_eq!(state.stats.fresh, 1);
         assert_eq!(state.stats.evictions, 1);
         assert_eq!(state.stats.cancelled_dropped, 1);
+    }
+
+    #[test]
+    fn it_counts_how_long_dispatched_requests_waited() {
+        let (w0, _rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (mut waited, _r1) = make_request(100, 1, w);
+        waited.enqueued = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
+        let (queued, _r2) = make_request(100, 1, w);
+
+        state.enqueue_request(waited);
+        state.enqueue_request(queued);
+        state.try_dispatch();
+
+        // the second request still waits for the only worker, so only the first counts
+        assert_eq!(state.stats.dispatched, 1);
+        assert!(state.stats.wait_max >= Duration::from_secs(2));
+        assert_eq!(state.stats.wait_sum, state.stats.wait_max);
     }
 
     fn affinity_idle_for(dataset_hash: u64, idle_secs: u64) -> WorkerAffinity {
