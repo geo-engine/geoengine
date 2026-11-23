@@ -16,6 +16,7 @@ use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, Coordinate2D};
 use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::NonZeroFiniteF64;
+use geoengine_operators::source::gdal_read::file_id;
 use geoengine_operators::source::gdal_worker_process::{
     GdalPoolDispatcher, GdalPoolReader, GdalProcessPool, GdalProcessPoolError, RasterInfo,
 };
@@ -111,29 +112,62 @@ impl AssetProber {
         cache_ttl: Option<CacheTtlSeconds>,
     ) -> Result<AssetProbe, AssetProbeError> {
         let params = header_params(file_path.clone(), s3_config);
-        let reader = GdalPoolReader::from(GdalPoolDispatcher::new(self.pool.clone()));
+        let reader = self.reader();
         // the placeholder grid is the same for every probe of the file, so the parameters
         // identify the file and its options
-        let cache_key: Option<Arc<str>> = serde_json::to_string(&params).ok().map(Into::into);
+        let cache_key = file_id(&params);
 
-        let remembered = cache_key
-            .as_deref()
-            .and_then(|key| reader.cached_header(key));
-        let info = match remembered {
+        let info = match reader.cached_header(&cache_key) {
             Some(info) => info,
             None => {
                 let info = reader
                     .read_raster_info(params)
                     .await
                     .context(error::Read { path: &file_path })?;
-                if let (Some(key), Some(ttl)) = (cache_key, cache_ttl) {
-                    reader.cache_header(key, info.clone(), CacheHint::seconds(ttl.seconds()));
+                if let Some(ttl) = cache_ttl {
+                    reader.cache_header(cache_key, info.clone(), CacheHint::seconds(ttl.seconds()));
                 }
                 info
             }
         };
 
         asset_probe_from_raster_info(&info, file_path)
+    }
+
+    /// Caches the probed header of the file that `tile_params` read also under the key of
+    /// `tile_params`, which the block reader looks it up by, so the first tile of the file does
+    /// not read its header again.
+    ///
+    /// Only if the header is cached for `cache_ttl` and describes what `tile_params` read: band
+    /// 1 of the file, opened with the same options as the probe.
+    pub fn cache_header_for_tile(
+        &self,
+        tile_params: &GdalDatasetParameters,
+        s3_config: Option<&StacProviderS3Config>,
+        cache_ttl: Option<CacheTtlSeconds>,
+    ) {
+        let Some(ttl) = cache_ttl else {
+            return;
+        };
+        let probe_params = header_params(tile_params.file_path.clone(), s3_config);
+        if tile_params.rasterband_channel != probe_params.rasterband_channel
+            || tile_params.gdal_open_options != probe_params.gdal_open_options
+            || tile_params.gdal_config_options != probe_params.gdal_config_options
+        {
+            return;
+        }
+        let reader = self.reader();
+        if let Some(info) = reader.cached_header(&file_id(&probe_params)) {
+            reader.cache_header(
+                file_id(tile_params),
+                info,
+                CacheHint::seconds(ttl.seconds()),
+            );
+        }
+    }
+
+    fn reader(&self) -> GdalPoolReader {
+        GdalPoolReader::from(GdalPoolDispatcher::new(self.pool.clone()))
     }
 }
 

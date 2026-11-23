@@ -849,6 +849,13 @@ impl StacMultiBandMetaData {
             .map_err(|error| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(error),
             })?;
+            for (_, file) in &asset_files {
+                self.asset_prober.cache_header_for_tile(
+                    &file.params,
+                    self.s3_config.as_ref(),
+                    self.cache_ttl_secs,
+                );
+            }
             files.extend(asset_files.into_iter().map(|(factor, file)| StacTileFile {
                 item_id: unprobed.item_id.clone(),
                 factor,
@@ -2380,11 +2387,10 @@ mod tests {
         );
         // no expectation for `/data/saa.nc`: the server fails the test on any request to it
 
-        let meta = netcdf_meta(
-            &server,
-            StacItemTime::Datetime,
-            crate::util::tests::gdal_process_pool_with_workers(1),
-        );
+        let gdal_process_pool = crate::util::tests::gdal_process_pool_with_workers(1);
+        let mut meta = netcdf_meta(&server, StacItemTime::Datetime, gdal_process_pool.clone());
+        // the probed header stays cached only with a cache TTL
+        meta.cache_ttl_secs = Some(CacheTtlSeconds::new(60));
         let items_url = Url::parse(&server.url_str("/collections/sentinel-2-l2a/items")).unwrap();
         let bbox = BoundingBox2D::new((-11.0, 74.9).into(), (-10.8, 75.0).into()).unwrap();
         let files = match meta.search_bbox(items_url, bbox, day(1)).await {
@@ -2431,6 +2437,16 @@ mod tests {
                     ".tif,.tiff,.jp2,.nc".to_owned()
                 ))
         );
+
+        // the block reader finds the probed header under the parameters of the tile
+        let header = geoengine_operators::source::gdal_worker_process::GdalPoolDispatcher::new(
+            gdal_process_pool,
+        )
+        .cached_header(&geoengine_operators::source::gdal_read::file_id(
+            &file.params,
+        ))
+        .expect("the probed header is cached for the tile");
+        assert_eq!((header.levels[0].size_x, header.levels[0].size_y), (16, 8));
     }
 
     #[test]
