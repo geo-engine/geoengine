@@ -424,7 +424,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
-    it('applies the preset viewport budget only on Apply and clears it for a legacy preset', async () => {
+    it('uses the viewport budget as authoritative on Apply and restores the legacy cutoff for an older preset', async () => {
         const budget = {
             version: 1,
             tileMatrixSet: 'CustomWebMercator',
@@ -442,6 +442,7 @@ describe('LayersComponent', () => {
                                   ...preset,
                                   properties: [
                                       ...(preset.properties ?? []),
+                                      ['edv:minTileMatrixIndex', String(index === 0 ? 9 : 6)],
                                       ...(index === 0 ? [['edv:viewportPixelBudget', JSON.stringify(budget)]] : []),
                                   ],
                               };
@@ -455,10 +456,13 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
         eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
         eodysseyLayerService.setSelectedPreset('Alternate');
         expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
         eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(6);
     });
 
     it('reports invalid viewport metadata instead of silently removing the viewport guard', async () => {

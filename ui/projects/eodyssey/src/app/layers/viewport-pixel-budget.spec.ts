@@ -37,6 +37,14 @@ describe('viewport pixel budget', () => {
         expect(viewportMaxResolution(small, [1000, 1000])).toBe(Infinity);
     });
 
+    it('uses the same budget for expensive and cheap datasets and permits cheaper larger views', () => {
+        const cheap = {...budget, matrices: [{...budget.matrices[0], sourcePixels: 80_000}]};
+        const europeResolution = 2000;
+        expect(cheap.maxSourcePixels).toBe(budget.maxSourcePixels);
+        expect(viewportMaxResolution(budget, [1000, 1000])).toBeLessThan(europeResolution);
+        expect(viewportMaxResolution(cheap, [1000, 1000])).toBeGreaterThan(europeResolution);
+    });
+
     it('does not reopen zoomed-out views after a cheaper coarser-asset transition', () => {
         const nonMonotonic: ViewportPixelBudget = {
             ...budget,

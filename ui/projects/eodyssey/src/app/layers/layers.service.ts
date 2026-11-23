@@ -77,6 +77,9 @@ export class EOdysseyLayerService {
     readonly appliedViewportPixelBudget = computed(() => this.appliedVisualization()?.preset.viewportPixelBudget);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
+        // A viewport budget already bounds every requested tile. The legacy matrix
+        // cutoff is only a fallback for catalogues without a viewport cost model.
+        if (applied?.preset.viewportPixelBudget) return 0;
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
     });
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
