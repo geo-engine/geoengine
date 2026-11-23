@@ -244,7 +244,7 @@ fn main() {
     }
     reroute_gdal_logging();
     let byte_cache = worker_config.byte_cache.as_ref().and_then(|config| {
-        byte_cache::install(&config.directory)
+        byte_cache::install(config)
             .inspect_err(|err| {
                 tracing::error!("GDAL byte cache not installed, reading without it: {err}");
             })
@@ -421,13 +421,15 @@ impl ReadStats {
         }
     }
 
-    /// With the byte cache, requests and bytes are those it downloaded; `chunk_hits` and
-    /// `chunk_misses` count its chunks.
+    /// With the byte cache, requests and bytes are those it downloaded; the `chunk_*` fields count
+    /// its chunks: served, downloaded, downloaded by another worker while this one waited, and
+    /// not stored (e.g. a full directory).
     fn log(self, byte_cache: Option<&byte_cache::ByteCache>) {
         let ms = self.start.elapsed().as_secs_f64() * 1000.;
         let (requests, bytes) = network_stats();
-        let (chunk_hits, chunk_misses) =
-            byte_cache.map_or((0, 0), byte_cache::ByteCache::take_counts);
+        let counts = byte_cache
+            .map(byte_cache::ByteCache::take_counts)
+            .unwrap_or_default();
         tracing::debug!(
             target: "gdal_worker_read",
             read_id = self.read_id,
@@ -438,8 +440,10 @@ impl ReadStats {
             opened = self.opened,
             requests,
             bytes,
-            chunk_hits,
-            chunk_misses,
+            chunk_hits = counts.hits,
+            chunk_misses = counts.misses,
+            chunk_waits = counts.waited,
+            chunk_write_failures = counts.write_failures,
             ms,
             "GDAL read"
         );

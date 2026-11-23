@@ -27,6 +27,7 @@ dashmap = { workspace = true }
 float-cmp = { workspace = true }
 futures = { workspace = true }
 gdal = { workspace = true }
+gdal-byte-cache = { path = "../gdal-byte-cache" }
 gdal-sys = { workspace = true }
 geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }

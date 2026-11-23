@@ -635,10 +635,13 @@ pub struct GdalProcessPoolWorkerConfig {
 
 /// A cache of remote file bytes that all GDAL workers of the server share.
 #[derive(Debug, Deserialize)]
+#[serde(default)]
 pub struct ByteCacheSettings {
     /// 0 to read remote files without the cache
     pub size_in_mb: u64,
-    /// in memory if on `/dev/shm`; created readable only by the server's user
+    /// the most one remote file may take, in percent of the size
+    pub max_file_percent: u64,
+    /// relative to the server's working directory; created readable only by the server's user
     pub directory: std::path::PathBuf,
 }
 
@@ -646,7 +649,8 @@ impl Default for ByteCacheSettings {
     fn default() -> Self {
         Self {
             size_in_mb: 0,
-            directory: "/dev/shm/geoengine-gdal-byte-cache".into(),
+            max_file_percent: 25,
+            directory: "gdal-byte-cache".into(),
         }
     }
 }
@@ -728,9 +732,13 @@ impl From<GdalProcessPoolWorkerConfig>
                 endpoint: config.open_telemetry.endpoint,
             },
             byte_cache: (config.byte_cache.size_in_mb > 0).then(|| {
+                let size_bytes = config.byte_cache.size_in_mb * 1024 * 1024;
                 geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
-                    directory: config.byte_cache.directory,
-                    size_bytes: config.byte_cache.size_in_mb * 1024 * 1024,
+                    // absolute, as the workers need not share the server's working directory
+                    directory: std::path::absolute(&config.byte_cache.directory)
+                        .unwrap_or(config.byte_cache.directory),
+                    size_bytes,
+                    max_file_bytes: size_bytes / 100 * config.byte_cache.max_file_percent.min(100),
                 }
             }),
         }
@@ -1167,8 +1175,9 @@ mod tests {
             )),
             Some(
                 geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
-                    directory: "/dev/shm/geoengine-gdal-byte-cache".into(),
+                    directory: std::path::absolute("gdal-byte-cache").unwrap(),
                     size_bytes: 2 * 1024 * 1024,
+                    max_file_bytes: 2 * 1024 * 1024 / 100 * 25,
                 }
             )
         );

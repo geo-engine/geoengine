@@ -1,4 +1,4 @@
-pub mod byte_cache;
+pub use gdal_byte_cache as byte_cache;
 mod db_types;
 mod gdal_dataset_params;
 mod grid_and_properties;
@@ -7,11 +7,6 @@ pub mod process_impl;
 mod process_pool;
 pub mod reader;
 pub mod reader_mode;
-/// The benches' HTTP range server, for tests of remote reads.
-#[cfg(test)]
-#[path = "../../../benches/common/range_server.rs"]
-#[allow(dead_code)]
-mod test_range_server;
 
 use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition};
 use num::integer::div_floor;

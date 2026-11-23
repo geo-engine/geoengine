@@ -296,9 +296,10 @@ impl GdalDatasetHolder {
         if !self.byte_cache {
             return path;
         }
-        let mut hasher = rustc_hash::FxHasher::default();
+        // collision-resistant: the parameters, credentials included, come partly from users
+        let mut hasher = super::byte_cache::KeyHasher::default();
         dataset_params.partial_hash(&mut hasher);
-        super::byte_cache::wrap(&path, std::hash::Hasher::finish(&hasher)).unwrap_or(path)
+        super::byte_cache::wrap(&path, &hasher.key()).unwrap_or(path)
     }
 
     fn open_ex(

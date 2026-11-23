@@ -2012,17 +2012,20 @@ mod tests {
                 byte_cache: Some(super::super::byte_cache::ByteCacheConfig {
                     directory: chunks.clone(),
                     size_bytes: 1 << 20,
+                    max_file_bytes: 1 << 18,
                 }),
                 ..WorkerConfig::default()
             },
         );
-        let file_chunks = chunks.join("0000000000000001");
-        std::fs::create_dir_all(&file_chunks).unwrap();
-        std::fs::write(file_chunks.join("0"), [0_u8; 16]).unwrap();
+        std::fs::create_dir_all(&chunks).unwrap();
+        for ext in ["data", "map"] {
+            std::fs::write(chunks.join(format!("file.{ext}")), [1_u8; 16]).unwrap();
+        }
 
         pool.clear_caches().await.unwrap();
 
-        assert!(!file_chunks.join("0").exists());
+        assert!(!chunks.join("file.data").exists());
+        assert!(!chunks.join("file.map").exists());
     }
 
     #[tokio::test]
