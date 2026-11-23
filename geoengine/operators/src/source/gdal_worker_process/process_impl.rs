@@ -1443,6 +1443,104 @@ mod tests {
         }
     }
 
+    /// The byte cache, installed once in the test process, as a worker does at start.
+    fn test_byte_cache() {
+        static CACHE: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+        CACHE.get_or_init(|| {
+            let dir = tempfile::tempdir().expect("a temporary directory");
+            super::super::byte_cache::install(&super::super::byte_cache::ByteCacheConfig {
+                directory: dir.path().join("cache"),
+                size_bytes: 1 << 30,
+                max_file_bytes: 1 << 28,
+            })
+            .expect("the cache installs");
+            dir
+        });
+    }
+
+    /// A remote file that does not exist stays "not found" when the worker reads through the byte
+    /// cache, so datasets that turn missing files into no data keep doing so.
+    #[test]
+    #[serial_test::serial]
+    fn it_creates_no_data_for_http_404_through_the_byte_cache() {
+        test_byte_cache();
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/non_existing.tif"))
+                .times(1..)
+                .respond_with(responders::status_code(404)),
+        );
+        let ds = GdalDatasetParameters {
+            file_path: server.url_str("/non_existing.tif").into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(vec![
+                (
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif".to_owned(),
+                ),
+                (
+                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                    "EMPTY_DIR".to_owned(),
+                ),
+                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+            ]),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+        let gdal_read_advice = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
+            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            flip_y: false,
+        };
+
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut GdalDatasetHolder::with_byte_cache(),
+            &ds,
+            gdal_read_advice,
+            None,
+        );
+
+        match result {
+            Err(IpcProcessError::GdalError {
+                kind: IpcProcessGdalErrorKind::FileNotFound,
+                ..
+            }) => {}
+            other => panic!("expected FileNotFound error, got {other:?}"),
+        }
+
+        // any other failure stays an error
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/internal_error.tif"))
+                .times(1..)
+                .respond_with(responders::status_code(500)),
+        );
+        let ds = GdalDatasetParameters {
+            file_path: server.url_str("/internal_error.tif").into(),
+            ..ds
+        };
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut GdalDatasetHolder::with_byte_cache(),
+            &ds,
+            gdal_read_advice,
+            None,
+        );
+        match result {
+            Err(IpcProcessError::GdalError { kind, .. }) => {
+                assert_ne!(kind, IpcProcessGdalErrorKind::FileNotFound);
+            }
+            other => panic!("expected GdalError error, got {other:?}"),
+        }
+    }
+
     #[test]
     #[serial_test::serial]
     fn it_creates_no_data_only_for_http_404() {

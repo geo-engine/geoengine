@@ -2018,14 +2018,15 @@ mod tests {
             },
         );
         std::fs::create_dir_all(&chunks).unwrap();
+        let stem = "0".repeat(64); // the cache names its files by a SHA-256
         for ext in ["data", "map"] {
-            std::fs::write(chunks.join(format!("file.{ext}")), [1_u8; 16]).unwrap();
+            std::fs::write(chunks.join(format!("{stem}.{ext}")), [1_u8; 16]).unwrap();
         }
 
         pool.clear_caches().await.unwrap();
 
-        assert!(!chunks.join("file.data").exists());
-        assert!(!chunks.join("file.map").exists());
+        assert!(!chunks.join(format!("{stem}.data")).exists());
+        assert!(!chunks.join(format!("{stem}.map")).exists());
     }
 
     #[tokio::test]
