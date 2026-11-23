@@ -610,6 +610,25 @@ describe('FootprintsService overlay', () => {
             expect(service.selectedDateEmpty()).toBe(false);
         });
 
+        it('still says that the selected date has no data while the dates of a view inside the one that said so load', async () => {
+            answerDates([day(1, TimeStepFootprintStatus.Empty), day(2, TimeStepFootprintStatus.Data)]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedDateEmpty()).toBe(true);
+
+            // zoomed in: what had no scenes has none in a part of it
+            getFootprints.mockReturnValue(new Promise(() => undefined));
+            viewport.next({extent: [0.25, 0.25, 0.75, 0.75], resolution: 0.5});
+            await settle();
+            expect(service.selectedDateEmpty()).toBe(true);
+
+            // panned partly out of it: the new part may have scenes
+            viewport.next({extent: [0.5, 0.5, 1.5, 1.5], resolution: 0.5});
+            await settle();
+            expect(service.selectedDateEmpty()).toBe(false);
+        });
+
         it('does not call a date empty that the layer cannot tell', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Unknown)]);
             const service = createService();
