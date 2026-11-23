@@ -537,6 +537,43 @@ mod tests {
     }
 
     #[test]
+    fn it_intersects_grids_whose_pixel_sizes_differ_in_the_last_bit() {
+        // Sentinel-3 SYN NetCDF files: GDAL derives the pixel size from the coordinate vectors, so the files of
+        // different regions of the same 1/112 degree grid differ in the last bit of the pixel size
+        let europe = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(
+                (-10.995_535_714_293_83, 75.004_464_285_714_29).into(),
+                0.008_928_571_428_571,
+                -0.008_928_571_428_571,
+            ),
+            GridBoundingBox2D::new([0, 0], [7999, 15999]).unwrap(),
+        );
+        let asian_islands = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(
+                (92.004_464_285_701_19, 28.995_535_714_287_925).into(),
+                0.008_928_571_428_571_001,
+                -0.008_928_571_428_571,
+            ),
+            GridBoundingBox2D::new([0, 0], [1999, 1999]).unwrap(),
+        );
+
+        assert_eq!(
+            europe.intersection(&asian_islands),
+            Some(SpatialGridDefinition::new(
+                europe.geo_transform,
+                GridBoundingBox2D::new([5153, 11536], [7152, 13535]).unwrap(),
+            ))
+        );
+        assert_eq!(
+            asian_islands.intersection(&europe),
+            Some(SpatialGridDefinition::new(
+                asian_islands.geo_transform,
+                GridBoundingBox2D::new([0, 0], [1999, 1999]).unwrap(),
+            ))
+        );
+    }
+
+    #[test]
     fn move_origin_with_floating_point_discrepancies() {
         let tile = SpatialGridDefinition {
             geo_transform: GeoTransform::new_unchecked((0.0, 0.0).into(), 0.2, -0.2),
