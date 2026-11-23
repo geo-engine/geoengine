@@ -464,8 +464,8 @@ pub struct StacDataProvider {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for
     datetime_frequency_aggregation: bool,
-    /// The time of the datasets, from the definition or else from the collection, asked once
-    time_bounds: Arc<tokio::sync::OnceCell<Option<TimeInterval>>>,
+    /// The time of the datasets from the definition, which overrides that of the collection
+    time_bounds: Option<TimeInterval>,
     grid: StacGrid,
 }
 
@@ -517,12 +517,7 @@ impl StacDataProvider {
             datetime_frequency_aggregation: definition
                 .datetime_frequency_aggregation
                 .unwrap_or(false),
-            time_bounds: Arc::new(
-                definition
-                    .time_bounds
-                    .map(|bounds| tokio::sync::OnceCell::new_with(Some(Some(bounds))))
-                    .unwrap_or_default(),
-            ),
+            time_bounds: definition.time_bounds,
             grid,
         })
     }
