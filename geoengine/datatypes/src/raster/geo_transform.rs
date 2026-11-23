@@ -335,14 +335,6 @@ impl GeoTransform {
         self.grid_idx_to_pixel_upper_left_coordinate_2d(self.nearest_pixel_edge(coordinate))
     }
 
-    pub fn distance_to_nearest_pixel_edge(&self, coordinate: Coordinate2D) -> Coordinate2D {
-        let pixel_edge = self.nearest_pixel_edge_coordinate(coordinate);
-        let dist = coordinate - pixel_edge;
-        debug_assert!(dist.x.abs() <= self.x_pixel_size().get().abs() * 0.5);
-        debug_assert!(dist.y.abs() <= self.y_pixel_size().get().abs() * 0.5);
-        dist
-    }
-
     /// `coordinate` is a valid pixel edge if it is approximately equal to the nearest pixel edge, within floating point
     /// precision or within [`PIXEL_EDGE_TOLERANCE`] pixels.
     ///

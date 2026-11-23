@@ -79,18 +79,6 @@ impl SpatialGridDefinition {
         self.shift_bounds_relative_by_pixel_offset(-nearest_to_target)
     }
 
-    /// This method moves the origin to the coordinate of the grid edge nearest to the supplied new origin reference
-    pub fn with_moved_origin_to_nearest_grid_edge_with_distance(
-        &self,
-        new_origin_referece: Coordinate2D,
-    ) -> (Self, Coordinate2D) {
-        let distance = self
-            .geo_transform
-            .distance_to_nearest_pixel_edge(new_origin_referece);
-        let new_self = self.with_moved_origin_to_nearest_grid_edge(new_origin_referece);
-        (new_self, distance)
-    }
-
     /// Creates a new spatial grid with the self shape and pixel size but new origin.
     #[must_use]
     pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
@@ -132,15 +120,9 @@ impl SpatialGridDefinition {
             return None;
         }
 
-        let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
-            self.geo_transform.origin_coordinate,
-        );
-
-        if dist.x.abs() > self.geo_transform().x_pixel_size().get().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
-            || dist.y.abs() > self.geo_transform().y_pixel_size().get().abs() * 0.00001
-        {
-            return None;
-        }
+        // `is_compatible_grid` already checked that the origin of other is a pixel edge of self
+        let other_shift =
+            other.with_moved_origin_to_nearest_grid_edge(self.geo_transform.origin_coordinate);
 
         let intersection_bounds = self
             .grid_bounds()
