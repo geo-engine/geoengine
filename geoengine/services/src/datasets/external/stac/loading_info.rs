@@ -63,8 +63,8 @@ pub struct StacMultiBandMetaData {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for.
     datetime_frequency_aggregation: bool,
-    /// The time of the datasets, shared with the provider, see `time_bounds`.
-    time_bounds: Arc<tokio::sync::OnceCell<Option<TimeInterval>>>,
+    /// The time of the datasets from the provider definition, see `time_bounds`.
+    time_bounds: Option<TimeInterval>,
     grid: StacGrid,
 }
 
@@ -499,23 +499,28 @@ impl StacMultiBandMetaData {
             query_cache: provider.query_cache.clone(),
             max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
             datetime_frequency_aggregation: provider.datetime_frequency_aggregation,
-            time_bounds: provider.time_bounds.clone(),
+            time_bounds: provider.time_bounds,
             grid: provider.grid,
         }
     }
 
     /// The time of the datasets: from the provider definition, or else from the temporal extent of
-    /// the collection, asked once. A failed request is not kept, so a later call asks again.
+    /// the collection, kept in the query cache.
     async fn time_bounds(&self) -> Option<TimeInterval> {
+        if self.time_bounds.is_some() {
+            return self.time_bounds;
+        }
         let collection_url = Url::from_str(&self.api_url).ok().and_then(|base| {
             join_base_url_and_path(&base, &format!("collections/{}", self.collection_name)).ok()
         })?;
-        self.time_bounds
-            .get_or_try_init(|| self.client.collection_time_bounds(collection_url))
+        self.query_cache
+            .get_or_fetch_collection_time(async {
+                self.client
+                    .collection_time_bounds(collection_url)
+                    .await
+                    .ok()
+            })
             .await
-            .ok()
-            .copied()
-            .flatten()
     }
 
     /// Estimate the metadata cache weight of a complete query result, in bytes.
@@ -2056,7 +2061,7 @@ mod tests {
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
                 datetime_frequency_aggregation: false,
-                time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
+                time_bounds: None,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -2173,7 +2178,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
-            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
+            time_bounds: None,
             cache_ttl_secs: None,
             grid: StacGrid::default(),
         };
@@ -2247,7 +2252,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
-            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
+            time_bounds: None,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2337,7 +2342,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
-            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
+            time_bounds: None,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2443,7 +2448,7 @@ mod tests {
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
             datetime_frequency_aggregation: false,
-            time_bounds: Arc::new(tokio::sync::OnceCell::new_with(Some(None))),
+            time_bounds: None,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
