@@ -65,8 +65,9 @@ multi_band_gdal_source_read_ahead = 16
 footprint_boxes_per_step_limit = 64
 # Operators that query their source once per output tile (Warp, reprojection, neighborhood aggregate,
 # downsampling, interpolation) first ask the source where it has data and skip the tiles without. This saves the reads of
-# sparse data, e.g. satellite swaths, and costs one footprint query per query. On a STAC source that query
-# searches the catalogue for the whole area the query reads.
+# sparse data, e.g. satellite swaths. The footprint query takes the place of the time query that each of these
+# queries makes of its source, also each sub-query of an operator in a chain, e.g. a Warp on a Warp. On a STAC
+# source it searches the catalogue for the whole area the query reads, the same cells the reads need.
 footprint_skipping = false
 # Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
 # tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
