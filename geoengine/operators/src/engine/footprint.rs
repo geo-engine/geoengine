@@ -5,7 +5,7 @@ use futures::{
     stream::{self, BoxStream},
 };
 use geoengine_datatypes::{
-    primitives::TimeInterval,
+    primitives::{CacheTtlSeconds, TimeInterval},
     raster::{GridBoundingBox2D, GridBoundingBoxExt, GridContains, GridIntersection, GridSize},
 };
 use std::sync::Arc;
@@ -160,6 +160,9 @@ fn merge_cheapest_pair(kept: &mut Vec<GridBoundingBox2D>) {
 pub struct Footprint {
     pub time: TimeInterval,
     pub bounds: FootprintBounds,
+    /// How long the answer holds, as the cache hint of the data it tells about. A tile skipped
+    /// because of it may be cached only that long, as the empty tile loaded instead would be.
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 /// How the footprints of several inputs make the footprint of one step of their output.
@@ -242,20 +245,29 @@ pub fn zip_footprints(
             return Ok(None);
         };
 
-        let bounds = {
-            let covering = zip
-                .heads
-                .iter()
-                .map(|head| {
-                    head.as_ref()
-                        .filter(|head| {
-                            head.time.start() <= time.start() && time.end() <= head.time.end()
-                        })
-                        .map(|head| &head.bounds)
+        let covering = zip
+            .heads
+            .iter()
+            .map(|head| {
+                head.as_ref().filter(|head| {
+                    head.time.start() <= time.start() && time.end() <= head.time.end()
                 })
-                .collect::<Vec<_>>();
-            combine_bounds(combine, &covering, max_boxes)
-        };
+            })
+            .collect::<Vec<_>>();
+        let bounds = combine_bounds(
+            combine,
+            &covering
+                .iter()
+                .map(|head| head.map(|head| &head.bounds))
+                .collect::<Vec<_>>(),
+            max_boxes,
+        );
+        let cache_ttl = covering
+            .iter()
+            .flatten()
+            .map(|head| head.cache_ttl)
+            .min()
+            .unwrap_or_else(CacheTtlSeconds::max);
 
         for head in &mut zip.heads {
             if head
@@ -267,7 +279,14 @@ pub fn zip_footprints(
         }
         zip.current = Some(time);
 
-        Ok::<_, crate::error::Error>(Some((Footprint { time, bounds }, zip)))
+        Ok::<_, crate::error::Error>(Some((
+            Footprint {
+                time,
+                bounds,
+                cache_ttl,
+            },
+            zip,
+        )))
     })
     .boxed()
 }
@@ -298,6 +317,7 @@ pub fn unknown_footprints(
             time.map(|time| Footprint {
                 time,
                 bounds: FootprintBounds::Unknown,
+                cache_ttl: CacheTtlSeconds::max(),
             })
         })
         .boxed()
@@ -495,6 +515,7 @@ mod tests {
                 boxes.iter().copied(),
                 DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             ),
+            cache_ttl: CacheTtlSeconds::max(),
         }
     }
 

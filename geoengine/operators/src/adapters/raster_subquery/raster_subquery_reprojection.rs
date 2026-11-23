@@ -1136,16 +1136,20 @@ mod tests {
 
     #[tokio::test]
     async fn it_skips_the_tiles_where_the_footprint_has_no_data() {
+        use geoengine_datatypes::primitives::CacheTtlSeconds;
+
         let left_tile = GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap();
         // the footprints deny the data of the right tile in the first step and of both in the second
         let footprints = vec![
             Footprint {
                 time: TimeInterval::new_unchecked(0, 5),
                 bounds: FootprintBounds::from_boxes([left_tile], 8),
+                cache_ttl: CacheTtlSeconds::new(60),
             },
             Footprint {
                 time: TimeInterval::new_unchecked(5, 10),
                 bounds: FootprintBounds::from_boxes([], 8),
+                cache_ttl: CacheTtlSeconds::new(30),
             },
         ];
 
@@ -1154,5 +1158,9 @@ mod tests {
         assert_eq!(res.len(), 4);
         assert_eq_two_list_of_tiles_u8(&data[..1], &res[..1], false);
         assert!(res[1..].iter().all(RasterTile2D::is_empty));
+        // a skipped tile may be cached only as long as the footprint that skipped it holds
+        let ttl = |tile: &RasterTile2D<u8>| tile.cache_hint.total_ttl_seconds().seconds();
+        assert!((59..=60).contains(&ttl(&res[1])));
+        assert!(res[2..].iter().all(|tile| (29..=30).contains(&ttl(tile))));
     }
 }

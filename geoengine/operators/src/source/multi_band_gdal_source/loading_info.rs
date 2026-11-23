@@ -181,7 +181,11 @@ impl MultiBandGdalLoadingInfoPart {
     }
 
     pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
-        self.cache_ttl.unwrap_or(default_ttl).into()
+        self.cache_ttl(default_ttl).into()
+    }
+
+    pub fn cache_ttl(&self, default_ttl: CacheTtlSeconds) -> CacheTtlSeconds {
+        self.cache_ttl.unwrap_or(default_ttl)
     }
 
     /// The plan of one output tile, with its files highest z-index first.

@@ -306,6 +306,7 @@ where
                         boxes,
                         ctx.footprint_boxes_per_step_limit(),
                     ),
+                    cache_ttl: geoengine_datatypes::primitives::CacheTtlSeconds::max(),
                 })
             })
             .collect::<Vec<_>>();

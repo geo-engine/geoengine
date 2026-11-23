@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
 };
-use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
+use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::raster::{
     GeoTransform, GridBoundingBox2D, GridIntersection, GridOrEmpty,
     TileInformationBandCrossProductIter, TilingSpecification, TilingStrategy,
@@ -143,6 +143,8 @@ where
 
     /// Where the source has data in the current time step.
     current_bounds: FootprintBounds,
+    /// how long a tile skipped because of `current_bounds` may be cached
+    current_cache_ttl: CacheTtlSeconds,
 
     band_tile_iter: TileInformationBandCrossProductIter,
 
@@ -182,6 +184,7 @@ where
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
             footprints: unknown_footprints(time_stream.boxed()),
             current_bounds: FootprintBounds::Unknown,
+            current_cache_ttl: CacheTtlSeconds::max(),
             query_rect_to_answer,
             source_data_bounds,
             tiling_strategy,
@@ -350,6 +353,8 @@ where
             .map_ok(|time| Footprint {
                 time,
                 bounds: FootprintBounds::empty(),
+                // the bounds of the data of the source do not change
+                cache_ttl: CacheTtlSeconds::max(),
             })
             .boxed());
     };
@@ -368,21 +373,31 @@ where
     let max_boxes = query_ctx.footprint_boxes_per_step_limit();
 
     Ok(footprints
-        .map_ok(move |Footprint { time, bounds }| {
-            let bounds = match bounds {
-                FootprintBounds::Unknown => FootprintBounds::Unknown,
-                FootprintBounds::Boxes(source_boxes) => match output_bounds(&source_boxes) {
-                    Some(boxes) => FootprintBounds::from_boxes(
-                        boxes
-                            .iter()
-                            .filter_map(|bounds| bounds.intersection(&query_bounds)),
-                        max_boxes,
-                    ),
-                    None => FootprintBounds::from_boxes([query_bounds], max_boxes),
-                },
-            };
-            Footprint { time, bounds }
-        })
+        .map_ok(
+            move |Footprint {
+                      time,
+                      bounds,
+                      cache_ttl,
+                  }| {
+                let bounds = match bounds {
+                    FootprintBounds::Unknown => FootprintBounds::Unknown,
+                    FootprintBounds::Boxes(source_boxes) => match output_bounds(&source_boxes) {
+                        Some(boxes) => FootprintBounds::from_boxes(
+                            boxes
+                                .iter()
+                                .filter_map(|bounds| bounds.intersection(&query_bounds)),
+                            max_boxes,
+                        ),
+                        None => FootprintBounds::from_boxes([query_bounds], max_boxes),
+                    },
+                };
+                Footprint {
+                    time,
+                    bounds,
+                    cache_ttl,
+                }
+            },
+        )
         .boxed())
 }
 
@@ -562,9 +577,14 @@ where
                     this.state.set(StateInner::Ended);
                     return Poll::Ready(Some(Err(e)));
                 }
-                Some(Ok(Footprint { time, bounds })) => {
+                Some(Ok(Footprint {
+                    time,
+                    bounds,
+                    cache_ttl,
+                })) => {
                     *this.current_time = time;
                     *this.current_bounds = bounds;
+                    *this.current_cache_ttl = cache_ttl;
                     this.band_tile_iter.reset();
                     let (tile, band) = this
                         .band_tile_iter
@@ -765,7 +785,7 @@ where
                 tile,
                 band,
                 GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
-                CacheHint::max_duration(),
+                (*this.current_cache_ttl).into(),
             )
         });
 

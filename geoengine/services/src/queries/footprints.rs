@@ -173,8 +173,18 @@ mod tests {
     fn it_maps_bounds_to_statuses() {
         let geo_transform = GeoTransform::new_unchecked((0., 0.).into(), 1., -1.);
         let time = TimeInterval::new_unchecked(0, 1);
-        let status =
-            |bounds| time_step_footprint(&Footprint { time, bounds }, geo_transform).status;
+        let cache_ttl = geoengine_datatypes::primitives::CacheTtlSeconds::max();
+        let status = |bounds| {
+            time_step_footprint(
+                &Footprint {
+                    time,
+                    bounds,
+                    cache_ttl,
+                },
+                geo_transform,
+            )
+            .status
+        };
 
         assert!(matches!(
             status(FootprintBounds::Unknown),
@@ -192,6 +202,7 @@ mod tests {
                     [GridBoundingBox2D::new_min_max(0, 1, 2, 3).unwrap()],
                     DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
                 ),
+                cache_ttl,
             },
             geo_transform,
         );

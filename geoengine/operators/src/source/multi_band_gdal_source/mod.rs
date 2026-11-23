@@ -452,6 +452,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Footprint>>> {
         let max_boxes = ctx.footprint_boxes_per_step_limit();
+        let default_cache_ttl = self.default_cache_ttl;
         let tiling_grid = self
             .result_descriptor()
             .spatial_grid
@@ -499,7 +500,11 @@ where
                             ),
                         };
 
-                        Ok(Footprint { time, bounds })
+                        Ok(Footprint {
+                            time,
+                            bounds,
+                            cache_ttl: loading_info.cache_ttl(default_cache_ttl),
+                        })
                     })
                     .collect::<Vec<Result<Footprint>>>();
                 stream::iter(footprints)
@@ -1478,6 +1483,8 @@ mod tests {
         let partition = files[0].spatial_partition;
         let dataset_name =
             add_multi_tile_dataset(&mut execution_context, files, vec![january, february]);
+        // the footprints hold as long as the tiles of the source
+        let cache_ttl = execution_context.default_cache_ttl();
 
         let processor = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
@@ -1527,10 +1534,12 @@ mod tests {
                         [geo_transform.spatial_to_grid_bounds(&partition)],
                         crate::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
                     ),
+                    cache_ttl,
                 },
                 Footprint {
                     time: february,
                     bounds: FootprintBounds::empty(),
+                    cache_ttl,
                 },
             ]
         );

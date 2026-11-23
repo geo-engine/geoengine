@@ -606,7 +606,7 @@ where
                 footprint.and_then(|footprint| {
                     Ok(crate::engine::Footprint {
                         time: self.shift.reverse_shift(footprint.time, state)?,
-                        bounds: footprint.bounds,
+                        ..footprint
                     })
                 })
             })
