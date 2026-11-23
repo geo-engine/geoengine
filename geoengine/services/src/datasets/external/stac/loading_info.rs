@@ -2404,7 +2404,12 @@ mod tests {
                     .downcast_ref::<asset_probe::AssetProbeError>()
                     .is_some_and(asset_probe::AssetProbeError::is_userfaultfd_unavailable) =>
             {
-                // e.g. in a container with the default seccomp profile
+                // e.g. in a container with the default seccomp profile, but CI runs with
+                // `seccomp=unconfined`, so this test of the probed assets must not pass there
+                assert!(
+                    std::env::var_os("CI").is_none(),
+                    "userfaultfd must be available in CI: {source}"
+                );
                 tracing::warn!("skipping the header assertions: {source}");
                 return;
             }
