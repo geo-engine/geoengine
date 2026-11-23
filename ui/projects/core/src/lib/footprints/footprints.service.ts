@@ -70,12 +70,12 @@ function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin
     return [minX - width * margin, minY - height * margin, maxX + width * margin, maxY + height * margin];
 }
 
-/** The time `count` steps before `timeMs`. */
 /** Which layer and time step dates belong to. */
 function datesKeyOf(layer: FootprintLayer | undefined, timeStep: TimeStepDuration | undefined): string {
     return `${layer?.key}/${timeStep?.durationAmount} ${timeStep?.durationUnit}`;
 }
 
+/** The time `count` steps before `timeMs`. */
 function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
     return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
 }
@@ -309,12 +309,41 @@ export class FootprintsService {
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
     readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
     /**
-     * The selected date certainly has no data in this view, so an app need not load its tiles. Only from the dates of
-     * this view: while they load, or where the layer cannot tell, this is false and tiles load as usual.
+     * Where the dates said that the selected date has no data, kept while the dates of a moved view load, since a part of
+     * that area has none either. Another layer, time step, date or projection, or dates that say otherwise, forget it.
+     */
+    private readonly emptyExtent = linkedSignal<
+        {key: string; time?: number; spatialReference?: unknown; status?: TimeStepFootprintStatus; extent?: ViewportSize['extent']},
+        ViewportSize['extent'] | undefined
+    >({
+        source: () => {
+            const time = this.time()?.start.valueOf();
+            return {
+                key: this.datesKey(),
+                time,
+                spatialReference: this.mapSpatialReference(),
+                status: time === undefined ? undefined : stepAt(this.freshSteps(), time)?.status,
+                extent: this.datesViewport()?.extent,
+            };
+        },
+        computation: (source, previous) => {
+            if (source.status === TimeStepFootprintStatus.Empty) return source.extent;
+            const same =
+                previous?.source.key === source.key &&
+                previous.source.time === source.time &&
+                previous.source.spatialReference === source.spatialReference;
+            return source.status === undefined && same ? previous.value : undefined;
+        },
+    });
+    /**
+     * The selected date certainly has no data in this view, so an app need not load its tiles: the dates of this view
+     * say so, or those of an earlier view around it. Elsewhere, while they load, or where the layer cannot tell, this is
+     * false and tiles load as usual.
      */
     readonly selectedDateEmpty = computed(() => {
-        const time = this.time();
-        return !!time && stepAt(this.freshSteps(), time.start.valueOf())?.status === TimeStepFootprintStatus.Empty;
+        const empty = this.emptyExtent();
+        const viewport = this.viewport();
+        return !!empty && !!viewport && containsExtent(empty, viewport.extent);
     });
     /** The dates with data of the view need too many catalog searches, so the user has to zoom in. */
     readonly tooLarge = computed(() => this.footprints()?.tooLarge ?? false);
