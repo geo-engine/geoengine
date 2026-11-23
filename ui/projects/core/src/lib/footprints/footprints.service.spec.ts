@@ -546,6 +546,33 @@ describe('FootprintsService overlay', () => {
             expect(service.datesStale()).toBe(false);
         });
 
+        it('keeps the dates of the layer around the selected date while a first part of a moved view ends before it', async () => {
+            const DAY = 24 * 60 * 60 * 1000;
+            // a server with data on every day; once `stall` is set, only requests that start before April answer
+            let stall = false;
+            getFootprints.mockImplementation((_, query) => {
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                if (stall && start >= Date.UTC(2026, 3, 1)) return new Promise<RasterFootprints>(() => undefined);
+                const answered = [];
+                for (let time = start; time < end; time += DAY) {
+                    answered.push({time: {start: time, end: time + DAY}, status: TimeStepFootprintStatus.Data, bounds: []});
+                }
+                return Promise.resolve({...FOOTPRINTS, steps: answered, next: null});
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.stepsAround(15)).toHaveLength(15);
+
+            // the window starts a week before 1 April, so the first part of the moved view is March alone
+            stall = true;
+            viewport.next({extent: [0, 0, 2, 2], resolution: 1});
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.stepsAround(15)).toHaveLength(15);
+            expect(service.datesStale()).toBe(true);
+        });
+
         it('never takes the partial dates of the previous layer for those of the next one', async () => {
             // daily steps: the month first, then the rest, which does not arrive, so the month is a partial answer
             let isFirst = true;

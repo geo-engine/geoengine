@@ -283,18 +283,29 @@ export class FootprintsService {
      * The dates to show. While those of a moved view load, the ones of the same layer and time step stay, like map
      * tiles, so a strip of dates does not blink; `datesStale` tells. Another layer or time step clears them at once.
      */
-    private readonly footprints = linkedSignal<{key: string; current?: Footprints; isLoading: boolean}, Footprints | undefined>({
+    private readonly footprints = linkedSignal<
+        {key: string; current?: Footprints; isLoading: boolean; time?: number},
+        Footprints | undefined
+    >({
         source: () => ({
             key: this.datesKey(),
             current: this.currentFootprints(),
             isLoading: this.footprintsResource.isLoading(),
+            time: this.time()?.start.valueOf(),
         }),
-        computation: (source, previous) =>
-            source.current ?? (source.isLoading && previous?.source.key === source.key ? previous.value : undefined),
+        computation: (source, previous) => {
+            const kept = source.isLoading && previous?.source.key === source.key ? previous.value : undefined;
+            // a first part of the new dates may end before the selected time, e.g. the month the window starts in; the
+            // kept dates show it until a part does, so a strip around it does not empty while the rest loads
+            const partialWithoutTime =
+                source.isLoading && source.time !== undefined && !!source.current && !stepAt(source.current.steps, source.time);
+            if (kept && partialWithoutTime) return kept;
+            return source.current ?? kept;
+        },
     });
     readonly steps = computed(() => this.footprints()?.steps ?? []);
     /** The dates shown are those of an earlier view, kept while the ones of this view load. */
-    readonly datesStale = computed(() => !this.currentFootprints() && this.footprints() !== undefined);
+    readonly datesStale = computed(() => this.footprints() !== undefined && this.footprints() !== this.currentFootprints());
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
     readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
     /**
