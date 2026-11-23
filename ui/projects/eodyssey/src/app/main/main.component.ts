@@ -27,7 +27,20 @@ import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
 import {EOdysseyLayerService} from '../layers/layers.service';
-import {viewportMaxResolution} from '../layers/viewport-pixel-budget';
+import {
+    estimateViewportCost,
+    viewportLoadingLimit,
+    ViewportCost,
+    ViewportLimits,
+    ViewportLoadingLimit,
+} from '../layers/viewport-pixel-budget';
+
+interface ZoomDiagnostics {
+    reason: string;
+    limits?: ViewportLimits;
+    current?: ViewportCost;
+    blocking?: ViewportCost;
+}
 
 @Component({
     selector: 'geoengine-main',
@@ -78,6 +91,7 @@ export class MainComponent {
 
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
+    private readonly viewport = toSignal(this.mapService.getViewportSizeStream());
 
     // Temporary comparison controls, enabled by the router's `debug` query parameter.
     readonly debug = input(false, {transform: booleanAttribute});
@@ -86,19 +100,43 @@ export class MainComponent {
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
-    readonly maxViewResolution = computed(() => {
+    private readonly loadingLimit = computed<ViewportLoadingLimit | undefined>(() => {
         const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
         if (!budget) return undefined;
-        if (budget.crs !== this.spatialReference()?.srsString) return 0;
-        if (budget.tileMatrixSet !== this.tileMatrixSet()) return 0;
+        if (budget.crs !== this.spatialReference()?.srsString) return {maxResolution: 0};
+        if (budget.tileMatrixSet !== this.tileMatrixSet()) return {maxResolution: 0};
         // Search keys contain the dataset, native grid cell and displayed time step.
         // EOdyssey displays instants; do not undercount an unsupported multi-step query.
-        if (this.currentTime()?.type !== 'TimePoint') return 0;
+        if (this.currentTime()?.type !== 'TimePoint') return {maxResolution: 0};
         // Native STAC cell intersections depend on location, even at unchanged zoom.
         this.eodysseyLayerService.mapCenter();
-        return viewportMaxResolution(budget, this.mapSize(), this.mapService.view().getCenter());
+        return viewportLoadingLimit(budget, this.mapSize(), this.mapService.view().getCenter());
     });
+    readonly maxViewResolution = computed(() => this.loadingLimit()?.maxResolution);
     readonly zoomRequired = signal(false);
+    readonly zoomDiagnostics = computed<ZoomDiagnostics | undefined>(() => {
+        if (!this.zoomRequired()) return undefined;
+        const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
+        if (!budget) return {reason: 'The layer requires a finer tile matrix.'};
+        if (budget.crs !== this.spatialReference()?.srsString) return {reason: 'The map projection does not match the cost model.'};
+        if (budget.tileMatrixSet !== this.tileMatrixSet()) return {reason: 'The selected tile matrix set has no cost model.'};
+        if (this.currentTime()?.type !== 'TimePoint') return {reason: 'The cost model requires a single time instant.'};
+        this.eodysseyLayerService.mapCenter();
+        const current = estimateViewportCost(budget, this.mapSize(), this.mapService.view().getCenter(), this.viewport()?.resolution);
+        if (!current) return {reason: 'Waiting for valid map dimensions, center and resolution.'};
+        const reason = exceededBudgetReason(current, budget);
+        const blocking = reason ? undefined : this.loadingLimit()?.blockingCost;
+        return {
+            reason: reason
+                ? `${reason}.`
+                : blocking
+                  ? `${exceededBudgetReason(blocking, budget) ?? 'Loading limit exceeded'} at the zoom cutoff.`
+                  : 'The view is at the minimum permitted zoom level.',
+            limits: budget,
+            current,
+            blocking,
+        };
+    });
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
 
@@ -163,6 +201,10 @@ export class MainComponent {
         this.tileLoading.set(loading);
     }
 
+    formatCount(value: number): string {
+        return Math.ceil(value).toLocaleString('en-US');
+    }
+
     onResize(): void {
         this.totalHeight.set(window.innerHeight);
     }
@@ -216,4 +258,11 @@ function replaceCitationPlaceholders(citation: string, currentTime: Time | Date)
         year = currentTime.toString().substring(0, 4);
     }
     return citation.replace('[Year]', year);
+}
+
+function exceededBudgetReason(cost: ViewportCost, limits: ViewportLimits): string | undefined {
+    const reasons: string[] = [];
+    if (cost.sourcePixels > limits.maxSourcePixels) reasons.push('Pixel limit');
+    if (cost.stacSearches > limits.maxStacSearches) reasons.push('STAC search limit');
+    return reasons.length ? `${reasons.join(' and ')} exceeded` : undefined;
 }

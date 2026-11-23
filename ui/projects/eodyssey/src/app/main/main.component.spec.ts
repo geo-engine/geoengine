@@ -7,20 +7,59 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
-import {of} from 'rxjs';
+import {BehaviorSubject, of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {SpatialReference, Time, UserService} from '@geoengine/common';
-import {CoreModule, DEFAULT_CORE_CONFIG, MapContainerComponent, MapService, ProjectService, SpatialReferenceService} from '@geoengine/core';
+import {
+    CoreModule,
+    DEFAULT_CORE_CONFIG,
+    MapContainerComponent,
+    MapService,
+    ProjectService,
+    SpatialReferenceService,
+    ViewportSize,
+} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 import {MainComponent} from './main.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
 import type {ViewportPixelBudget} from '../layers/viewport-pixel-budget';
+
+const pixelModel: ViewportPixelBudget = {
+    tileMatrixSet: 'CustomWebMercator',
+    crs: 'EPSG:3857',
+    maxSourcePixels: 80_000_000,
+    maxStacSearches: 10_000,
+    searchGrids: [
+        {
+            datasetId: 'one',
+            projection: 'EPSG:3857',
+            projString: 'EPSG:3857',
+            extent: [0, -51200000, 51200000, 0],
+            cellSize: 512000,
+            columns: 100,
+            rows: 100,
+        },
+    ],
+    matrices: [
+        {
+            id: '0',
+            cellSize: 4000,
+            tileWidth: 128,
+            tileHeight: 128,
+            matrixWidth: 100,
+            matrixHeight: 100,
+            sourcePixels: 8_000_000,
+            pointOfOrigin: [0, 0],
+        },
+    ],
+};
 
 // Keep the real toolbar and bindings; the map and its HTTP requests are tested in core.
 describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
     const pixelBudget = signal<ViewportPixelBudget | undefined>(undefined);
     const mapCenter = signal([0, 0]);
+    let viewport: BehaviorSubject<ViewportSize>;
     let mapWidth: number;
     let mapHeight: number;
     let resizeCallbacks: Array<() => void>;
@@ -31,6 +70,7 @@ describe('EOdyssey debug reprojection', () => {
     beforeEach(async () => {
         pixelBudget.set(undefined);
         mapCenter.set([0, 0]);
+        viewport = new BehaviorSubject<ViewportSize>({extent: [0, 0, 1, 1], resolution: 1});
         mapWidth = mapHeight = 1000;
         resizeCallbacks = [];
         disconnect.mockClear();
@@ -55,7 +95,12 @@ describe('EOdyssey debug reprojection', () => {
                 {provide: AppConfig, useValue: DEFAULT_CORE_CONFIG},
                 {
                     provide: MapService,
-                    useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn(), view: (): unknown => ({getCenter: mapCenter})},
+                    useValue: {
+                        registerMapComponent: vi.fn(),
+                        zoomTo: vi.fn(),
+                        view: (): unknown => ({getCenter: mapCenter}),
+                        getViewportSizeStream: (): unknown => viewport.asObservable(),
+                    },
                 },
                 {
                     provide: ProjectService,
@@ -119,35 +164,7 @@ describe('EOdyssey debug reprojection', () => {
         mapTargets.set([]);
         fixture.detectChanges();
         expect(fixture.componentInstance.maxViewResolution()).toBeUndefined();
-        pixelBudget.set({
-            tileMatrixSet: 'CustomWebMercator',
-            crs: 'EPSG:3857',
-            maxSourcePixels: 80_000_000,
-            maxStacSearches: 10_000,
-            searchGrids: [
-                {
-                    datasetId: 'one',
-                    projection: 'EPSG:3857',
-                    projString: 'EPSG:3857',
-                    extent: [0, -51200000, 51200000, 0],
-                    cellSize: 512000,
-                    columns: 100,
-                    rows: 100,
-                },
-            ],
-            matrices: [
-                {
-                    id: '0',
-                    cellSize: 4000,
-                    tileWidth: 128,
-                    tileHeight: 128,
-                    matrixWidth: 100,
-                    matrixHeight: 100,
-                    sourcePixels: 8_000_000,
-                    pointOfOrigin: [0, 0],
-                },
-            ],
-        });
+        pixelBudget.set(pixelModel);
         fixture.detectChanges();
         expect(fixture.componentInstance.maxViewResolution()).toBe(0);
         // Projection/layout initialization may supply the rendered map after the main view.
@@ -207,6 +224,64 @@ describe('EOdyssey debug reprojection', () => {
         fixture.componentInstance.frontendReprojection.set(true);
         fixture.detectChanges();
         expect(fixture.componentInstance.maxViewResolution()).toBe(0);
+    });
+
+    it('shows estimated pixels and searches beside their limits and updates on zoom', () => {
+        pixelBudget.set(pixelModel);
+        viewport.next({extent: [0, 0, 1, 1], resolution: 2000});
+        fixture.componentInstance.zoomRequired.set(true);
+        fixture.detectChanges();
+        const prompt = (): string => (fixture.nativeElement as HTMLElement).querySelector('.zoom-prompt')!.textContent.replace(/\s+/g, ' ');
+        expect(prompt()).toContain('Pixel limit exceeded.');
+        expect(prompt()).toContain('Estimated pixels: 200,000,000 / 80,000,000 limit (exceeded)');
+        expect(prompt()).toContain('STAC searches: 9 / 10,000 limit (within limit)');
+        viewport.next({extent: [0, 0, 1, 1], resolution: 1500});
+        fixture.detectChanges();
+        expect(prompt()).toContain('Estimated pixels: 128,000,000 / 80,000,000 limit');
+        viewport.next({extent: [0, 0, 1, 1], resolution: 500});
+        fixture.detectChanges();
+        expect(prompt()).toContain('Estimated pixels: 32,000,000 / 80,000,000 limit (within limit)');
+        fixture.componentInstance.zoomRequired.set(false);
+        fixture.detectChanges();
+        expect((fixture.nativeElement as HTMLElement).querySelector('.zoom-prompt')).toBeNull();
+    });
+
+    it('identifies the STAC limit and updates search counts on pan', () => {
+        pixelBudget.set({...pixelModel, maxStacSearches: 1, matrices: [{...pixelModel.matrices[0], sourcePixels: 1}]});
+        viewport.next({extent: [0, 0, 1, 1], resolution: 2000});
+        fixture.componentInstance.zoomRequired.set(true);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.zoomDiagnostics()?.reason).toBe('STAC search limit exceeded.');
+        expect(fixture.componentInstance.zoomDiagnostics()?.current).toEqual({sourcePixels: 25, stacSearches: 9});
+        mapCenter.set([2_000_000, -2_000_000]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.zoomDiagnostics()?.current?.stacSearches).toBeGreaterThan(9);
+        const text = (fixture.nativeElement as HTMLElement).querySelector('.zoom-prompt')!.textContent.replace(/\s+/g, ' ');
+        expect(text).toContain('/ 1 limit (exceeded)');
+    });
+
+    it('explains when a cheaper coarser view is blocked by an unsafe finer view', () => {
+        pixelBudget.set({
+            ...pixelModel,
+            maxSourcePixels: 10,
+            matrices: [4, 2, 1].map((cellSize, index) => ({
+                ...pixelModel.matrices[0],
+                id: String(index),
+                cellSize,
+                matrixWidth: 1,
+                matrixHeight: 1,
+                sourcePixels: index === 1 ? 100 : 1,
+            })),
+        });
+        viewport.next({extent: [0, 0, 1, 1], resolution: 4});
+        fixture.componentInstance.zoomRequired.set(true);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.zoomDiagnostics()?.reason).toBe('Pixel limit exceeded at the zoom cutoff.');
+        expect(fixture.componentInstance.zoomDiagnostics()?.current?.sourcePixels).toBe(1);
+        expect(fixture.componentInstance.zoomDiagnostics()?.blocking?.sourcePixels).toBe(100);
+        const text = (fixture.nativeElement as HTMLElement).querySelector('.zoom-prompt')!.textContent.replace(/\s+/g, ' ');
+        expect(text).toContain('Estimated pixels: 1 / 10 limit (within limit)');
+        expect(text).toContain('Blocking view: pixels: 100 / 10 limit');
     });
 
     function selectFrontend(): void {

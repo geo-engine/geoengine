@@ -2,9 +2,11 @@ import TileGrid from 'ol/tilegrid/TileGrid';
 import {describe, expect, it} from 'vitest';
 import {
     estimatedStacSearches,
+    estimateViewportCost,
     parseViewportLimits,
     parseViewportPixelBudget,
     viewportMaxResolution,
+    viewportLoadingLimit,
     ViewportPixelBudget,
 } from './viewport-pixel-budget';
 
@@ -67,12 +69,29 @@ const dualBudget: ViewportPixelBudget = {
 };
 
 describe('viewport pixel budget', () => {
+    it('reports current-view costs with the same nearest matrix selection as OpenLayers', () => {
+        const grid = new TileGrid({origin: [-2048, 2048], resolutions: [4, 2, 1], tileSize: 128});
+        for (const resolution of [1, 1.49, 1.5, 1.99, 2.01, 3, 4]) {
+            const cost = estimateViewportCost(dualBudget, [512, 512], [0, 0], resolution)!;
+            const matrix = dualBudget.matrices[grid.getZForResolution(resolution)];
+            expect(cost.stacSearches).toBe(estimatedStacSearches(dualBudget, matrix, [512, 512], [0, 0], resolution));
+        }
+        expect(estimateViewportCost(dualBudget, [512, 512], [0, 0], 1.99)).toEqual({sourcePixels: 25, stacSearches: 36});
+        expect(estimateViewportCost(dualBudget, [512, 512], [0, 0], 2.01)).toEqual({sourcePixels: 36, stacSearches: 64});
+        expect(estimateViewportCost(dualBudget, [], [0, 0], 1)).toBeUndefined();
+        expect(estimateViewportCost(dualBudget, [512, 512], undefined, 1)).toBeUndefined();
+        expect(estimateViewportCost(dualBudget, [512, 512], [0, 0], undefined)).toBeUndefined();
+    });
+
     it('blocks excessive STAC cell searches even when the pixel budget fits', () => {
         const cutoff = viewportMaxResolution(dualBudget, [512, 512], [0, 0]);
         expect(cutoff).toBeCloseTo(2, 8);
         expect(estimatedStacSearches(dualBudget, dualBudget.matrices[1], [512, 512], [0, 0], 1.99)).toBe(36);
         expect(estimatedStacSearches(dualBudget, dualBudget.matrices[1], [512, 512], [0, 0], 2.01)).toBeGreaterThan(36);
         expect(viewportMaxResolution({...dualBudget, maxSourcePixels: 1}, [512, 512], [0, 0])).toBe(0);
+        const limit = viewportLoadingLimit(dualBudget, [512, 512], [0, 0]);
+        expect(limit.maxResolution).toBe(cutoff);
+        expect(limit.blockingCost!.stacSearches).toBeGreaterThan(dualBudget.maxStacSearches);
     });
 
     it('keeps every finer matrix and intermediate resolution within both limits', () => {

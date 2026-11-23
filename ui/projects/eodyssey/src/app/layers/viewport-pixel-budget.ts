@@ -36,6 +36,50 @@ interface SearchGrid {
     rows: number;
 }
 
+export interface ViewportCost {
+    sourcePixels: number;
+    stacSearches: number;
+}
+
+export interface ViewportLoadingLimit {
+    maxResolution: number;
+    blockingCost?: ViewportCost;
+}
+
+/** Cost of the matrix OGCMapTile selects for the current view. */
+export function estimateViewportCost(
+    budget: ViewportPixelBudget,
+    size: readonly number[],
+    center: readonly number[] | undefined,
+    resolution: number | undefined,
+): ViewportCost | undefined {
+    if (
+        size.length !== 2 ||
+        !size.every(positiveNumber) ||
+        center?.length !== 2 ||
+        !center.every(Number.isFinite) ||
+        !positiveNumber(resolution)
+    )
+        return undefined;
+    const matrix = budget.matrices.reduce((nearest, candidate) =>
+        Math.abs(candidate.cellSize - resolution) <= Math.abs(nearest.cellSize - resolution) ? candidate : nearest,
+    );
+    return matrixViewportCost(budget, matrix, size, center, resolution);
+}
+
+function matrixViewportCost(
+    budget: ViewportPixelBudget,
+    matrix: TilePixelCost,
+    size: readonly number[],
+    center: readonly number[],
+    resolution: number,
+): ViewportCost {
+    return {
+        sourcePixels: estimatedViewPixels(matrix, size, resolution),
+        stacSearches: estimatedStacSearches(budget, matrix, size, center, resolution),
+    };
+}
+
 export function parseViewportLimits(value: string | undefined): ViewportLimits | undefined {
     if (value === undefined) return undefined;
     try {
@@ -118,9 +162,18 @@ export function parseViewportPixelBudget(value: string | undefined, limits?: Vie
  * EOdyssey disables map rotation. Matrix selection uses OGCMapTile's default nearest resolution.
  */
 export function viewportMaxResolution(budget: ViewportPixelBudget, size: readonly number[], center: readonly number[] | undefined): number {
+    return viewportLoadingLimit(budget, size, center).maxResolution;
+}
+
+/** Keep the first unsafe finer view as evidence when a cheaper coarser view is blocked. */
+export function viewportLoadingLimit(
+    budget: ViewportPixelBudget,
+    size: readonly number[],
+    center: readonly number[] | undefined,
+): ViewportLoadingLimit {
     const [width, height] = size;
-    if (!positiveNumber(width) || !positiveNumber(height)) return 0;
-    if (center?.length !== 2 || !center.every(Number.isFinite)) return 0;
+    if (!positiveNumber(width) || !positiveNumber(height)) return {maxResolution: 0};
+    if (center?.length !== 2 || !center.every(Number.isFinite)) return {maxResolution: 0};
     const matrices = budget.matrices;
     for (let index = matrices.length - 1; index >= 0; index--) {
         const matrix = matrices[index];
@@ -138,7 +191,7 @@ export function viewportMaxResolution(budget: ViewportPixelBudget, size: readonl
         const fits = (resolution: number): boolean =>
             estimatedViewPixels(matrix, size, resolution) <= budget.maxSourcePixels &&
             estimatedStacSearches(budget, matrix, size, center, resolution) <= budget.maxStacSearches;
-        if (!fits(lower)) return lower;
+        if (!fits(lower)) return {maxResolution: lower, blockingCost: matrixViewportCost(budget, matrix, size, center, lower)};
         if (fits(upper)) continue;
 
         // Cost is monotonic within this matrix's selection interval, though it need not be
@@ -150,9 +203,9 @@ export function viewportMaxResolution(budget: ViewportPixelBudget, size: readonl
             if (fits(middle)) safe = middle;
             else unsafe = middle;
         }
-        return safe;
+        return {maxResolution: safe, blockingCost: matrixViewportCost(budget, matrix, size, center, unsafe)};
     }
-    return Infinity;
+    return {maxResolution: Infinity};
 }
 
 /** Cold logical searches: distinct dataset/cell pairs for the displayed time step. */
