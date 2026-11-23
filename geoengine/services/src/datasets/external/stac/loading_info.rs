@@ -11,7 +11,7 @@ use crate::util::join_base_url_and_path;
 use crate::util::retry::RetryPolicy;
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
-use futures::{StreamExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt, future::BoxFuture};
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
@@ -63,7 +63,8 @@ pub struct StacMultiBandMetaData {
     max_concurrent_cell_searches: usize,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for.
     datetime_frequency_aggregation: bool,
-    /// The time of the datasets from the provider definition, see `time_bounds`.
+    /// The time of the datasets, from the provider definition or else the collection, see
+    /// [`StacDataProvider::time_bounds`].
     time_bounds: Option<TimeInterval>,
     grid: StacGrid,
 }
@@ -228,7 +229,7 @@ impl
             data_type: self.dataset.data_type,
             spatial_reference: self.dataset.projection.into(),
             time: TimeDescriptor {
-                bounds: self.time_bounds().await,
+                bounds: self.time_bounds,
                 dimension: self.time_dimension,
             },
             spatial_grid: self.dataset.spatial_grid,
@@ -509,25 +510,6 @@ impl StacMultiBandMetaData {
         }
     }
 
-    /// The time of the datasets: from the provider definition, or else from the temporal extent of
-    /// the collection, kept in the query cache.
-    async fn time_bounds(&self) -> Option<TimeInterval> {
-        if self.time_bounds.is_some() {
-            return self.time_bounds;
-        }
-        let collection_url = Url::from_str(&self.api_url).ok().and_then(|base| {
-            join_base_url_and_path(&base, &format!("collections/{}", self.collection_name)).ok()
-        })?;
-        self.query_cache
-            .get_or_fetch_collection_time(async {
-                self.client
-                    .collection_time_bounds(collection_url)
-                    .await
-                    .ok()
-            })
-            .await
-    }
-
     /// Estimate the metadata cache weight of a complete query result, in bytes.
     pub fn cache_weight(files: &[StacTileFile]) -> usize {
         super::cache::result_bytes(files)
@@ -693,21 +675,25 @@ impl StacMultiBandMetaData {
 
     /// The intervals of `range` with at least one item in the search box `bbox` (WGS84), if the
     /// provider says that its server can tell.
-    async fn intervals_with_items(
+    fn intervals_with_items(
         &self,
         items_url: &Url,
         step: TimeStep,
         range: TimeInterval,
         bbox: BoundingBox2D,
-    ) -> Option<Vec<TimeInterval>> {
-        if !self.datetime_frequency_aggregation {
-            return None;
+    ) -> BoxFuture<'static, Option<Vec<TimeInterval>>> {
+        let request = self
+            .datetime_frequency_aggregation
+            .then(|| items_url.join("aggregate").ok())
+            .flatten()
+            .map(|aggregate_url| (self.client.clone(), aggregate_url));
+        async move {
+            let (client, aggregate_url) = request?;
+            client
+                .datetime_frequency(aggregate_url, bbox, range, step)
+                .await
         }
-        let aggregate_url = items_url.join("aggregate").ok()?;
-
-        self.client
-            .datetime_frequency(aggregate_url, bbox, range, step)
-            .await
+        .boxed()
     }
 
     /// Stores a complete, empty result for every cell and each step without items. These steps
@@ -1578,7 +1564,30 @@ impl
     > {
         let dataset = self.dataset_from_data_id(id)?;
 
-        Ok(Box::new(StacMultiBandMetaData::new(self, dataset.clone())))
+        // like other providers, e.g. Pangaea, the metadata asks the server once when it is created
+        Ok(Box::new(StacMultiBandMetaData {
+            time_bounds: self.time_bounds().await,
+            ..StacMultiBandMetaData::new(self, dataset.clone())
+        }))
+    }
+}
+
+impl StacDataProvider {
+    /// The time of the datasets: from the provider definition, or else from the temporal extent of
+    /// the collection, kept in the query cache.
+    async fn time_bounds(&self) -> Option<TimeInterval> {
+        if self.time_bounds.is_some() {
+            return self.time_bounds;
+        }
+        let collection_url = Url::from_str(&self.api_url).ok().and_then(|base| {
+            join_base_url_and_path(&base, &format!("collections/{}", self.collection_name)).ok()
+        })?;
+        let client = self.client.clone();
+        self.query_cache
+            .get_or_fetch_collection_time(async move {
+                client.collection_time_bounds(collection_url).await.ok()
+            })
+            .await
     }
 }
 
@@ -2699,6 +2708,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ndvi_stac_loading_info(app_ctx: PostgresContext<NoTls>) {
         let server = Server::run();
+        // the time of the dataset; the collection does not know it, so it has none
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/sentinel-2-l2a"))
+                .times(1..)
+                .respond_with(responders::status_code(404)),
+        );
         server.expect(
             Expectation::matching(request::method_path(
                 "GET",
@@ -3250,8 +3265,22 @@ mod grid_request_tests {
             max_concurrent_cell_searches: None,
             // most tests are about a server that aggregates
             datetime_frequency_aggregation: Some(true),
-            time_bounds: None,
+            // most tests are not about the time of the collection, which the metadata would ask for
+            time_bounds: Some(TimeInterval::default()),
         }
+    }
+
+    /// A provider without time bounds in its definition, which asks the collection for them.
+    fn provider_asking_the_collection(server: &Server) -> StacDataProvider {
+        let mut provider = provider(
+            server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.time_bounds = None;
+        provider
     }
 
     fn provider_with_registry(
@@ -4438,13 +4467,7 @@ mod grid_request_tests {
                     },
                 }))),
         );
-        let provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
+        let provider = provider_asking_the_collection(&server);
         // 2015-06-27T00:00:00Z
         let start =
             geoengine_datatypes::primitives::TimeInstance::from_millis(1_435_363_200_000).unwrap();
@@ -4463,6 +4486,40 @@ mod grid_request_tests {
                 )
             );
         }
+    }
+
+    #[tokio::test]
+    async fn it_keeps_asking_for_the_time_of_the_collection_when_the_first_caller_gives_up() {
+        let server = Server::run();
+        // a second request, after the first one was cancelled, would be unexpected and fail
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test"))
+                .times(1)
+                .respond_with(responders::delay_and_then(
+                    Duration::from_millis(300),
+                    responders::json_encoded(json!({
+                        "id": "test",
+                        "extent": {
+                            "spatial": {"bbox": [[-180, -90, 180, 90]]},
+                            "temporal": {"interval": [["2015-06-27T00:00:00Z", null]]},
+                        },
+                    })),
+                )),
+        );
+        let provider = provider_asking_the_collection(&server);
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), metadata(&provider, 0))
+                .await
+                .is_err()
+        );
+        let descriptor = metadata(&provider, 0)
+            .await
+            .result_descriptor()
+            .await
+            .unwrap();
+
+        assert!(descriptor.time.bounds.is_some());
     }
 
     #[tokio::test]

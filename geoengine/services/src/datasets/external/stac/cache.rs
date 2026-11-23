@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tracing::trace;
+use tracing::{trace, warn};
 
 pub(crate) type StacQueryCacheResult = Result<Arc<Vec<StacTileFile>>, Arc<Error>>;
 
@@ -103,6 +103,17 @@ impl Key {
     }
 }
 
+/// Runs a shared fetch in a detached task, like [`StacQueryCache::get_or_fetch`]: dropping the
+/// caller that started it must not cancel it for the others waiting on it.
+async fn detached<T: Send + 'static>(
+    fetch: impl Future<Output = Option<T>> + Send + 'static,
+) -> Option<T> {
+    tokio::spawn(fetch).await.unwrap_or_else(|error| {
+        warn!("STAC fetch task failed: {error}");
+        None
+    })
+}
+
 fn aggregation_cache(entries: u64, ttl: Duration) -> Cache<AggregationKey, Arc<Vec<TimeInterval>>> {
     Cache::builder()
         .max_capacity(entries)
@@ -153,14 +164,14 @@ impl StacQueryCache {
     /// The temporal extent of the collection, fetched once for concurrent callers and kept like a
     /// search result. A failed fetch (`None`) is not kept, so a later call asks again.
     pub(crate) async fn get_or_fetch_collection_time(
-        &self,
-        fetch: impl Future<Output = Option<Option<TimeInterval>>>,
+        self: &Arc<Self>,
+        fetch: impl Future<Output = Option<Option<TimeInterval>>> + Send + 'static,
     ) -> Option<TimeInterval> {
         if !self.stores_results() {
             return fetch.await.flatten();
         }
-        self.collection_time
-            .optionally_get_with((), fetch)
+        let cache = self.clone();
+        detached(async move { cache.collection_time.optionally_get_with((), fetch).await })
             .await
             .flatten()
     }
@@ -190,11 +201,11 @@ impl StacQueryCache {
     /// The steps with items of an aggregation over `bbox` and `range`, aggregated once for
     /// concurrent callers and kept while the server tells something.
     pub(crate) async fn get_or_aggregate(
-        &self,
+        self: &Arc<Self>,
         dataset_id: u64,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         range: TimeInterval,
-        aggregate: impl Future<Output = Option<Vec<TimeInterval>>>,
+        aggregate: impl Future<Output = Option<Vec<TimeInterval>>> + Send + 'static,
     ) -> Option<Arc<Vec<TimeInterval>>> {
         let (ll, ur) = (bbox.lower_left(), bbox.upper_right());
         let key = AggregationKey {
@@ -211,9 +222,14 @@ impl StacQueryCache {
         if !self.stores_results() {
             return aggregate.await.map(Arc::new);
         }
-        self.aggregations
-            .optionally_get_with(key, async move { aggregate.await.map(Arc::new) })
-            .await
+        let cache = self.clone();
+        detached(async move {
+            cache
+                .aggregations
+                .optionally_get_with(key, async move { aggregate.await.map(Arc::new) })
+                .await
+        })
+        .await
     }
 
     #[cfg(test)]

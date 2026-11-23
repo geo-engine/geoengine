@@ -236,10 +236,13 @@ where
 
     /// The parts of the loading info of `query`. The first part is read before this returns, so
     /// its errors come right away. The next part is read in the background while the caller works
-    /// on the current one, so at most two parts are held at a time.
+    /// on the current one, so at most two parts are held at a time. Unlike
+    /// [`crate::util::spawn_stream`], which reads its capacity plus one items ahead, it reads only one,
+    /// because a part can cost searches of a remote catalogue that are wasted if the query ends early.
     async fn loading_info_parts(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
+        ctx: &dyn QueryContext,
     ) -> Result<MultiBandGdalLoadingInfo> {
         let mut parts = self.meta_data.loading_info(query).await?;
         let Some(first) = parts.try_next().await? else {
@@ -247,18 +250,20 @@ where
         };
 
         let (sender, receiver) = tokio::sync::mpsc::channel(1);
-        let task = AbortOnDropHandle::new(tokio::spawn(
-            async move {
-                // wait until the caller took the part before, then read the next one
-                while let Ok(permit) = sender.reserve().await {
-                    match parts.next().await {
-                        Some(part) => permit.send(part),
-                        None => return,
+        let task = AbortOnDropHandle::new(
+            ctx.processing_runtime().spawn(
+                async move {
+                    // wait until the caller took the part before, then read the next one
+                    while let Ok(permit) = sender.reserve().await {
+                        match parts.next().await {
+                            Some(part) => permit.send(part),
+                            None => return,
+                        }
                     }
                 }
-            }
-            .in_current_span(),
-        ));
+                .in_current_span(),
+            ),
+        );
 
         let rest_parts = stream::unfold(Some((receiver, task)), |state| async move {
             let (mut receiver, task) = state?;
@@ -340,12 +345,15 @@ where
 
         let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
         let parts = self
-            .loading_info_parts(raster_query_rectangle_to_loading_info_query_rectangle(
-                &query,
-                produced_tiling_grid,
-                self.loading_info_resolution(),
-                LoadingInfoDetail::Files,
-            ))
+            .loading_info_parts(
+                raster_query_rectangle_to_loading_info_query_rectangle(
+                    &query,
+                    produced_tiling_grid,
+                    self.loading_info_resolution(),
+                    LoadingInfoDetail::Files,
+                ),
+                ctx,
+            )
             .await?;
         if let Some(loading_info_start) = loading_info_start {
             let loading_info_ms = loading_info_start.elapsed().as_millis();
@@ -429,7 +437,7 @@ where
             LoadingInfoDetail::TimeSteps,
         );
 
-        let parts = self.loading_info_parts(qrect).await?;
+        let parts = self.loading_info_parts(qrect, ctx).await?;
 
         Ok(parts
             .map_ok(|loading_info| stream::iter(loading_info.time_steps().to_vec()).map(Result::Ok))
@@ -465,7 +473,7 @@ where
         if ctx.footprints_for_display() {
             loading_info_query = loading_info_query.for_display();
         }
-        let parts = self.loading_info_parts(loading_info_query).await?;
+        let parts = self.loading_info_parts(loading_info_query, ctx).await?;
 
         Ok(parts
             .map_ok(move |loading_info| {
