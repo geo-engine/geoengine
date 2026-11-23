@@ -7,7 +7,12 @@ import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
-import {parseViewportPixelBudget} from './viewport-pixel-budget';
+import {parseViewportLimits, parseViewportPixelBudget, ViewportLimits} from './viewport-pixel-budget';
+
+interface Catalogue {
+    categories: DataSourceCategory[];
+    limits?: ViewportLimits;
+}
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -99,12 +104,15 @@ export class EOdysseyLayerService {
         return error ? String(error) : undefined;
     });
 
-    private readonly catalogueResource: ResourceRef<DataSourceCategory[] | undefined> = resource({
+    private readonly catalogueResource: ResourceRef<Catalogue | undefined> = resource({
         params: () => LAYER_DB_ROOT_COLLECTION_ID,
         loader: ({params}) => this.loadCatalogue(params),
     });
 
-    readonly categories = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
+    readonly categories = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value().categories : []));
+    private readonly viewportLimits = computed(() =>
+        this.catalogueResource.hasValue() ? this.catalogueResource.value().limits : undefined,
+    );
     readonly dataSources = computed(() => this.selectedCategory()?.sources ?? []);
     readonly catalogueLoading = computed(() => this.catalogueResource.isLoading());
     readonly currentVariants = computed(() => this.selectedDataSource()?.variants ?? []);
@@ -246,12 +254,13 @@ export class EOdysseyLayerService {
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */
-    private async loadCatalogue(rootCollectionId: string): Promise<DataSourceCategory[]> {
+    private async loadCatalogue(rootCollectionId: string): Promise<Catalogue> {
         const edvCollection = await this.findItem(rootCollectionId, (item) => item.type === 'collection' && item.name === 'EDV');
         const edvCollectionId = edvCollection && getCollectionId(edvCollection);
-        if (!edvCollectionId) {
+        if (!edvCollection || !edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
+        const limits = parseViewportLimits(getProperties(edvCollection).get('edv:viewportLimits'));
         const items = (await this.allItems(edvCollectionId)).filter(isCollection);
         // Keep existing deployments usable until their catalogue is bootstrapped with categories.
         const legacySources = items.filter((item) => getProperties(item).has('edv:dataset'));
@@ -271,7 +280,7 @@ export class EOdysseyLayerService {
             categories.flatMap((category) => category.sources),
             'data source',
         );
-        return categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+        return {categories: categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key)), limits};
     }
 
     private async loadSources(items: Extract<CollectionItem, {type: 'collection'}>[]): Promise<DataSourceDefinition[]> {
@@ -322,7 +331,7 @@ export class EOdysseyLayerService {
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
             minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
-            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:viewportPixelBudget')),
+            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:viewportPixelBudget'), this.viewportLimits()),
         };
     }
 

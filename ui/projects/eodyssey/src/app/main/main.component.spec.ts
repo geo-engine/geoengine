@@ -20,6 +20,7 @@ import type {ViewportPixelBudget} from '../layers/viewport-pixel-budget';
 describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
     const pixelBudget = signal<ViewportPixelBudget | undefined>(undefined);
+    const mapCenter = signal([0, 0]);
     let mapWidth: number;
     let mapHeight: number;
     let resizeCallbacks: Array<() => void>;
@@ -29,6 +30,7 @@ describe('EOdyssey debug reprojection', () => {
 
     beforeEach(async () => {
         pixelBudget.set(undefined);
+        mapCenter.set([0, 0]);
         mapWidth = mapHeight = 1000;
         resizeCallbacks = [];
         disconnect.mockClear();
@@ -51,7 +53,10 @@ describe('EOdyssey debug reprojection', () => {
             providers: [
                 provideRouter([]),
                 {provide: AppConfig, useValue: DEFAULT_CORE_CONFIG},
-                {provide: MapService, useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn()}},
+                {
+                    provide: MapService,
+                    useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn(), view: (): unknown => ({getCenter: mapCenter})},
+                },
                 {
                     provide: ProjectService,
                     useValue: {
@@ -75,6 +80,7 @@ describe('EOdyssey debug reprojection', () => {
                         catalogueLoading: vi.fn().mockReturnValue(false),
                         appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
                         appliedViewportPixelBudget: pixelBudget,
+                        mapCenter,
                     },
                 },
             ],
@@ -138,6 +144,50 @@ describe('EOdyssey debug reprojection', () => {
         expect(fixture.componentInstance.maxViewResolution()).toBeCloseTo(512, 8);
         fixture.destroy();
         expect(disconnect).toHaveBeenCalled();
+    });
+
+    it('recomputes the search-limited cutoff on pan without applying the preset again', () => {
+        pixelBudget.set({
+            version: 2,
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            maxSourcePixels: 1_000_000,
+            maxStacSearches: 36,
+            matrices: [
+                {
+                    id: '0',
+                    cellSize: 4,
+                    tileWidth: 128,
+                    tileHeight: 128,
+                    matrixWidth: 8,
+                    matrixHeight: 8,
+                    pointOfOrigin: [-2048, 2048],
+                    sourcePixels: 1,
+                },
+            ],
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [-2048, -2048, 2048, 2048],
+                    cellSize: 256,
+                    columns: 16,
+                    rows: 16,
+                },
+            ],
+        });
+        fixture.detectChanges();
+        const initial = fixture.componentInstance.maxViewResolution()!;
+        expect(initial).toBeGreaterThan(0);
+        mapCenter.set([1800, 1800]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBeGreaterThan(initial);
+        // The temporary native-matrix debug path does not match this cost model.
+        fixture.componentRef.setInput('debug', 'true');
+        fixture.componentInstance.frontendReprojection.set(true);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBe(0);
     });
 
     function selectFrontend(): void {

@@ -90,6 +90,15 @@ export class MainComponent {
         const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
         if (!budget) return undefined;
         if (budget.crs !== this.spatialReference()?.srsString) return 0;
+        if (budget.version === 2) {
+            if (budget.tileMatrixSet !== this.tileMatrixSet()) return 0;
+            // Search keys contain the dataset, native grid cell and displayed time step.
+            // EOdyssey displays instants; do not undercount an unsupported multi-step query.
+            if (this.currentTime()?.type !== 'TimePoint') return 0;
+            // Native STAC cell intersections depend on location, even at unchanged zoom.
+            this.eodysseyLayerService.mapCenter();
+            return viewportMaxResolution(budget, this.mapSize(), this.mapService.view().getCenter());
+        }
         return viewportMaxResolution(budget, this.mapSize());
     });
     readonly zoomRequired = signal(false);

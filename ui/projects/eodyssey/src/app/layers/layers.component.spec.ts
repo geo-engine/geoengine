@@ -465,6 +465,72 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(6);
     });
 
+    it.each([true, false])('uses collection limits and fails closed for missing preset costs (model present: %s)', async (withModel) => {
+        const limits = {maxSourcePixels: 100, maxStacSearches: 64};
+        const model = {
+            version: 2,
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            matrices: [
+                {
+                    id: '0',
+                    cellSize: 1000,
+                    tileWidth: 512,
+                    tileHeight: 512,
+                    matrixWidth: 10,
+                    matrixHeight: 10,
+                    pointOfOrigin: [0, 0],
+                    sourcePixels: 10,
+                },
+            ],
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [0, -5120000, 5120000, 0],
+                    cellSize: 512000,
+                    columns: 10,
+                    rows: 10,
+                },
+            ],
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection) => {
+            if (collection === LAYER_DB_ROOT_COLLECTION_ID)
+                return Promise.resolve({
+                    items: [
+                        {
+                            ...(listings[LAYER_DB_ROOT_COLLECTION_ID].items[0] as CollectionItem),
+                            properties: [['edv:viewportLimits', JSON.stringify(limits)]],
+                        },
+                    ],
+                });
+            if (collection === 'region')
+                return Promise.resolve({
+                    items: [
+                        {
+                            ...(listings.region.items[0] as CollectionItem),
+                            properties: [
+                                ['edv:presetKey', 'Default'],
+                                ...(withModel ? [['edv:viewportPixelBudget', JSON.stringify(model)]] : []),
+                            ],
+                        },
+                    ],
+                });
+            return Promise.resolve(listings[collection] ?? {items: []});
+        });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        if (withModel) {
+            eodysseyLayerService.applySelectedPreset();
+            expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...model, ...limits});
+            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
+        } else {
+            expect(eodysseyLayerService.variantError()).toContain('Missing edv:viewportPixelBudget');
+            expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        }
+    });
+
     it('reports invalid viewport metadata instead of silently removing the viewport guard', async () => {
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
