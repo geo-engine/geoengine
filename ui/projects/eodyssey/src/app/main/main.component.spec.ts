@@ -120,12 +120,32 @@ describe('EOdyssey debug reprojection', () => {
         fixture.detectChanges();
         expect(fixture.componentInstance.maxViewResolution()).toBeUndefined();
         pixelBudget.set({
-            version: 1,
             tileMatrixSet: 'CustomWebMercator',
             crs: 'EPSG:3857',
             maxSourcePixels: 80_000_000,
+            maxStacSearches: 10_000,
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [0, -51200000, 51200000, 0],
+                    cellSize: 512000,
+                    columns: 100,
+                    rows: 100,
+                },
+            ],
             matrices: [
-                {id: '0', cellSize: 4000, tileWidth: 128, tileHeight: 128, matrixWidth: 100, matrixHeight: 100, sourcePixels: 8_000_000},
+                {
+                    id: '0',
+                    cellSize: 4000,
+                    tileWidth: 128,
+                    tileHeight: 128,
+                    matrixWidth: 100,
+                    matrixHeight: 100,
+                    sourcePixels: 8_000_000,
+                    pointOfOrigin: [0, 0],
+                },
             ],
         });
         fixture.detectChanges();
@@ -148,7 +168,6 @@ describe('EOdyssey debug reprojection', () => {
 
     it('recomputes the search-limited cutoff on pan without applying the preset again', () => {
         pixelBudget.set({
-            version: 2,
             tileMatrixSet: 'CustomWebMercator',
             crs: 'EPSG:3857',
             maxSourcePixels: 1_000_000,

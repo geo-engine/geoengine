@@ -9,15 +9,36 @@ import {
 } from './viewport-pixel-budget';
 
 const budget: ViewportPixelBudget = {
-    version: 1,
     tileMatrixSet: 'CustomWebMercator',
     crs: 'EPSG:3857',
     maxSourcePixels: 80_000_000,
-    matrices: [{id: '0', cellSize: 4000, tileWidth: 128, tileHeight: 128, matrixWidth: 100, matrixHeight: 100, sourcePixels: 8_000_000}],
+    maxStacSearches: 10_000,
+    searchGrids: [
+        {
+            datasetId: 'one',
+            projection: 'EPSG:3857',
+            projString: 'EPSG:3857',
+            extent: [0, -51200000, 51200000, 0],
+            cellSize: 512000,
+            columns: 100,
+            rows: 100,
+        },
+    ],
+    matrices: [
+        {
+            id: '0',
+            cellSize: 4000,
+            tileWidth: 128,
+            tileHeight: 128,
+            matrixWidth: 100,
+            matrixHeight: 100,
+            sourcePixels: 8_000_000,
+            pointOfOrigin: [0, 0],
+        },
+    ],
 };
 
 const dualBudget: ViewportPixelBudget = {
-    version: 2,
     tileMatrixSet: 'CustomWebMercator',
     crs: 'EPSG:3857',
     maxSourcePixels: 1_000_000,
@@ -66,7 +87,7 @@ describe('viewport pixel budget', () => {
                 const resolution = (cutoff * step) / 200;
                 const matrix = dualBudget.matrices[grid.getZForResolution(resolution)];
                 expect(estimatedStacSearches(dualBudget, matrix, [512, 512], center, resolution)).toBeLessThanOrEqual(
-                    dualBudget.maxStacSearches!,
+                    dualBudget.maxStacSearches,
                 );
             }
         }
@@ -75,11 +96,11 @@ describe('viewport pixel budget', () => {
     it('coalesces overlapping tile searches but counts distinct datasets separately', () => {
         const repeated = {
             ...dualBudget,
-            searchGrids: [dualBudget.searchGrids![0], {...dualBudget.searchGrids![0], datasetId: 'dataset/two'}],
+            searchGrids: [dualBudget.searchGrids[0], {...dualBudget.searchGrids[0], datasetId: 'dataset/two'}],
         };
         expect(estimatedStacSearches(repeated, repeated.matrices[1], [512, 512], [0, 0], 1.99)).toBe(72);
         expect(viewportMaxResolution(repeated, [512, 512], [0, 0])).toBeLessThan(viewportMaxResolution(dualBudget, [512, 512], [0, 0]));
-        expect(viewportMaxResolution(dualBudget, [512, 512])).toBe(0);
+        expect(viewportMaxResolution(dualBudget, [512, 512], undefined)).toBe(0);
     });
 
     it('does not allow unbounded zoom-out when the map center is outside the dataset', () => {
@@ -117,17 +138,19 @@ describe('viewport pixel budget', () => {
         for (let step = 1; step < 100; step++) expect(searches((cutoff * step) / 100)).toBeLessThanOrEqual(64);
     });
 
-    it('reads global limits from collection metadata and rejects incomplete v2 models', () => {
+    it('reads global limits from collection metadata and rejects incomplete cost models', () => {
         const limits = {maxSourcePixels: 1_000_000, maxStacSearches: 36};
         const {maxSourcePixels: _pixels, maxStacSearches: _searches, ...payload} = dualBudget;
         expect(parseViewportLimits(JSON.stringify(limits))).toEqual(limits);
         expect(parseViewportPixelBudget(JSON.stringify(payload), limits)).toEqual(dualBudget);
         expect(() => parseViewportPixelBudget(undefined, limits)).toThrow('Missing edv:viewportPixelBudget');
-        expect(() => parseViewportPixelBudget(JSON.stringify(budget), limits)).toThrow('Invalid edv:viewportPixelBudget');
+        expect(() => parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: undefined}), limits)).toThrow(
+            'Invalid edv:viewportPixelBudget',
+        );
         expect(() => parseViewportPixelBudget(JSON.stringify(payload))).toThrow('Invalid edv:viewportPixelBudget');
         expect(() => parseViewportLimits('{"maxSourcePixels":100,"maxStacSearches":0}')).toThrow('Invalid edv:viewportLimits');
         expect(() =>
-            parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: [payload.searchGrids![0], payload.searchGrids![0]]}), limits),
+            parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: [payload.searchGrids[0], payload.searchGrids[0]]}), limits),
         ).toThrow();
     });
     it('allows a Germany-sized view and blocks a larger view using the same matrix', () => {
@@ -135,7 +158,7 @@ describe('viewport pixel budget', () => {
         const germanyResolution = 500;
         const europeResolution = 2000;
         expect(grid.getZForResolution(germanyResolution)).toBe(grid.getZForResolution(europeResolution));
-        const cutoff = viewportMaxResolution(budget, [1000, 1000]);
+        const cutoff = viewportMaxResolution(budget, [1000, 1000], [0, 0]);
         // At 1024 m/pixel the view can intersect 3×3 tiles = 72M pixels. Any larger
         // view may intersect 4×4 tiles = 128M. The cutoff is exclusive and safe to reuse.
         expect(cutoff).toBeCloseTo(1024, 8);
@@ -144,24 +167,24 @@ describe('viewport pixel budget', () => {
     });
 
     it('recalculates for map size and includes full partially visible edge tiles', () => {
-        expect(viewportMaxResolution(budget, [2000, 2000])).toBeCloseTo(512, 8);
+        expect(viewportMaxResolution(budget, [2000, 2000], [0, 0])).toBeCloseTo(512, 8);
         // A tiny shift of a one-tile-wide view can need two tiles on each axis.
-        expect(viewportMaxResolution({...budget, maxSourcePixels: 3 * 8_000_000}, [128, 128])).toBe(0);
-        expect(viewportMaxResolution(budget, [0, 500])).toBe(0);
-        expect(viewportMaxResolution(budget, [500, Number.NaN])).toBe(0);
+        expect(viewportMaxResolution({...budget, maxSourcePixels: 3 * 8_000_000}, [128, 128], [0, 0])).toBe(0);
+        expect(viewportMaxResolution(budget, [0, 500], [0, 0])).toBe(0);
+        expect(viewportMaxResolution(budget, [500, Number.NaN], [0, 0])).toBe(0);
     });
 
     it('caps the count at the matrix dimensions when the whole dataset is cheap enough', () => {
         const small = {...budget, matrices: [{...budget.matrices[0], matrixWidth: 2, matrixHeight: 3}]};
-        expect(viewportMaxResolution(small, [1000, 1000])).toBe(Infinity);
+        expect(viewportMaxResolution(small, [1000, 1000], [0, 0])).toBe(Infinity);
     });
 
     it('uses the same budget for expensive and cheap datasets and permits cheaper larger views', () => {
         const cheap = {...budget, matrices: [{...budget.matrices[0], sourcePixels: 80_000}]};
         const europeResolution = 2000;
         expect(cheap.maxSourcePixels).toBe(budget.maxSourcePixels);
-        expect(viewportMaxResolution(budget, [1000, 1000])).toBeLessThan(europeResolution);
-        expect(viewportMaxResolution(cheap, [1000, 1000])).toBeGreaterThan(europeResolution);
+        expect(viewportMaxResolution(budget, [1000, 1000], [0, 0])).toBeLessThan(europeResolution);
+        expect(viewportMaxResolution(cheap, [1000, 1000], [0, 0])).toBeGreaterThan(europeResolution);
     });
 
     it('does not reopen zoomed-out views after a cheaper coarser-asset transition', () => {
@@ -177,11 +200,20 @@ describe('viewport pixel budget', () => {
                 sourcePixels: index === 1 ? 100 : 1,
             })),
         };
-        expect(viewportMaxResolution(nonMonotonic, [1000, 1000])).toBe(1.5);
+        expect(viewportMaxResolution(nonMonotonic, [1000, 1000], [0, 0])).toBe(1.5);
     });
 
-    it('accepts the bootstrap contract and leaves legacy catalogues unchanged', () => {
-        expect(parseViewportPixelBudget(JSON.stringify(budget))).toEqual(budget);
+    it.each([0, Number.MAX_SAFE_INTEGER + 1])('rejects an invalid global pixel limit: %s', (maxSourcePixels) => {
+        expect(() => parseViewportLimits(JSON.stringify({maxSourcePixels, maxStacSearches: 64}))).toThrow('Invalid edv:viewportLimits');
+    });
+
+    it('accepts the unversioned bootstrap contract', () => {
+        expect(
+            parseViewportPixelBudget(JSON.stringify(budget), {
+                maxSourcePixels: budget.maxSourcePixels,
+                maxStacSearches: budget.maxStacSearches,
+            }),
+        ).toEqual(budget);
         expect(parseViewportPixelBudget(undefined)).toBeUndefined();
     });
 
@@ -189,16 +221,18 @@ describe('viewport pixel budget', () => {
         '',
         'null',
         '{}',
-        JSON.stringify({...budget, version: 2}),
+        JSON.stringify({...budget, searchGrids: []}),
+        JSON.stringify({...budget, searchGrids: undefined}),
+        JSON.stringify({...budget, matrices: [{...budget.matrices[0], pointOfOrigin: undefined}]}),
         JSON.stringify({...budget, crs: 'EPSG:4326'}),
-        JSON.stringify({...budget, maxSourcePixels: 0}),
-        JSON.stringify({...budget, maxSourcePixels: Number.MAX_SAFE_INTEGER + 1}),
         JSON.stringify({...budget, matrices: []}),
         JSON.stringify({...budget, matrices: [{...budget.matrices[0], id: '1'}]}),
         JSON.stringify({...budget, matrices: [{...budget.matrices[0], sourcePixels: -1}]}),
         JSON.stringify({...budget, matrices: [{...budget.matrices[0], tileWidth: 1.5}]}),
         JSON.stringify({...budget, matrices: [budget.matrices[0], {...budget.matrices[0], id: '1'}]}),
     ])('rejects invalid viewport metadata: %s', (value) => {
-        expect(() => parseViewportPixelBudget(value)).toThrow('Invalid edv:viewportPixelBudget');
+        expect(() =>
+            parseViewportPixelBudget(value, {maxSourcePixels: budget.maxSourcePixels, maxStacSearches: budget.maxStacSearches}),
+        ).toThrow('Invalid edv:viewportPixelBudget');
     });
 });

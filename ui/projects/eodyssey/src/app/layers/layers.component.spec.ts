@@ -424,51 +424,90 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
-    it('uses the viewport budget as authoritative on Apply and restores the legacy cutoff for an older preset', async () => {
+    it('applies the complete viewport model only on Apply', async () => {
+        const limits = {maxSourcePixels: 100, maxStacSearches: 64};
         const budget = {
-            version: 1,
             tileMatrixSet: 'CustomWebMercator',
             crs: 'EPSG:3857',
-            maxSourcePixels: 100,
-            matrices: [{id: '0', cellSize: 1000, tileWidth: 512, tileHeight: 512, matrixWidth: 10, matrixHeight: 10, sourcePixels: 10}],
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [0, -5120000, 5120000, 0],
+                    cellSize: 512000,
+                    columns: 10,
+                    rows: 10,
+                },
+            ],
+            matrices: [
+                {
+                    id: '0',
+                    cellSize: 1000,
+                    tileWidth: 512,
+                    tileHeight: 512,
+                    matrixWidth: 10,
+                    matrixHeight: 10,
+                    sourcePixels: 10,
+                    pointOfOrigin: [0, 0],
+                },
+            ],
         };
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
-                collection === 'region'
+                collection === LAYER_DB_ROOT_COLLECTION_ID
                     ? {
-                          items: listings.region.items.map((item, index) => {
-                              const preset = item as Extract<CollectionItem, {type: 'layer'}>;
-                              return {
-                                  ...preset,
-                                  properties: [
-                                      ...(preset.properties ?? []),
-                                      ['edv:minTileMatrixIndex', String(index === 0 ? 9 : 6)],
-                                      ...(index === 0 ? [['edv:viewportPixelBudget', JSON.stringify(budget)]] : []),
-                                  ],
-                              };
-                          }),
+                          items: [
+                              {
+                                  ...(listings[LAYER_DB_ROOT_COLLECTION_ID].items[0] as CollectionItem),
+                                  properties: [['edv:viewportLimits', JSON.stringify(limits)]],
+                              },
+                          ],
                       }
-                    : (listings[collection] ?? {items: []}),
+                    : collection === 'region'
+                      ? {
+                            items: listings.region.items.map((item, index) => {
+                                const preset = item as Extract<CollectionItem, {type: 'layer'}>;
+                                return {
+                                    ...preset,
+                                    properties: [
+                                        ...(preset.properties ?? []),
+                                        ['edv:minTileMatrixIndex', String(index === 0 ? 9 : 6)],
+                                        [
+                                            'edv:viewportPixelBudget',
+                                            JSON.stringify({
+                                                ...budget,
+                                                matrices: budget.matrices.map((m) => ({...m, sourcePixels: index === 0 ? 10 : 20})),
+                                            }),
+                                        ],
+                                    ],
+                                };
+                            }),
+                        }
+                      : (listings[collection] ?? {items: []}),
             ),
         );
         fixture.detectChanges();
         await fixture.whenStable();
         expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
         eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...budget, ...limits});
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
         eodysseyLayerService.setSelectedPreset('Alternate');
-        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...budget, ...limits});
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
         eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(6);
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({
+            ...budget,
+            ...limits,
+            matrices: [{...budget.matrices[0], sourcePixels: 20}],
+        });
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
     });
 
     it.each([true, false])('uses collection limits and fails closed for missing preset costs (model present: %s)', async (withModel) => {
         const limits = {maxSourcePixels: 100, maxStacSearches: 64};
         const model = {
-            version: 2,
             tileMatrixSet: 'CustomWebMercator',
             crs: 'EPSG:3857',
             matrices: [
