@@ -19,6 +19,7 @@ exports.LayerToJSON = LayerToJSON;
 exports.LayerToJSONTyped = LayerToJSONTyped;
 const Symbology_1 = require("./Symbology");
 const ProviderLayerId_1 = require("./ProviderLayerId");
+const LayerLoadingCost_1 = require("./LayerLoadingCost");
 const ProcessingGraph_1 = require("./ProcessingGraph");
 /**
  * Check if a given object implements the Layer interface.
@@ -42,6 +43,7 @@ function LayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : (0, LayerLoadingCost_1.LayerLoadingCostFromJSON)(json['loadingCost']),
         'id': (0, ProviderLayerId_1.ProviderLayerIdFromJSON)(json['id']),
         'name': json['name'],
         'description': json['description'],
@@ -59,6 +61,7 @@ function LayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'loadingCost': (0, LayerLoadingCost_1.LayerLoadingCostToJSON)(value['loadingCost']),
         'id': (0, ProviderLayerId_1.ProviderLayerIdToJSON)(value['id']),
         'name': value['name'],
         'description': value['description'],

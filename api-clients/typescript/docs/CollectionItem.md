@@ -11,6 +11,7 @@ Name | Type
 `name` | string
 `description` | string
 `properties` | Array&lt;Array&lt;string&gt;&gt;
+`loadingCost` | [LayerLoadingCost](LayerLoadingCost.md)
 
 ## Example
 
@@ -24,6 +25,7 @@ const example = {
   "name": null,
   "description": null,
   "properties": null,
+  "loadingCost": null,
 } satisfies CollectionItem
 
 console.log(example)

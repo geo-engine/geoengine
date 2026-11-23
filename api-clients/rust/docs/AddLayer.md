@@ -4,6 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
+**loading_cost** | Option<[**models::LayerLoadingCost**](LayerLoadingCost.md)> | Optional structured loading-cost estimates for viewport guards. | [optional]
 **name** | **String** |  | 
 **description** | **String** |  | 
 **processing_graph** | [**models::ProcessingGraph**](ProcessingGraph.md) |  | 

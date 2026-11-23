@@ -36,6 +36,34 @@ class TestLayerListing(unittest.TestCase):
         if include_optional:
             return LayerListing(
                 type = 'layer',
+                loading_cost = geoengine_api_client.models.layer_loading_cost.LayerLoadingCost(
+                    tile_matrix_set = '', 
+                    crs = '', 
+                    matrices = [
+                        geoengine_api_client.models.tile_source_pixel_cost.TileSourcePixelCost(
+                            id = '', 
+                            cell_size = 1.337, 
+                            tile_width = 56, 
+                            tile_height = 56, 
+                            matrix_width = 56, 
+                            matrix_height = 56, 
+                            source_pixels = 1.337, 
+                            point_of_origin = [
+                                1.337
+                                ], )
+                        ], 
+                    search_grids = [
+                        geoengine_api_client.models.stac_search_grid.StacSearchGrid(
+                            dataset_id = '', 
+                            projection = '', 
+                            proj_string = '', 
+                            extent = [
+                                1.337
+                                ], 
+                            cell_size = 1.337, 
+                            columns = 0, 
+                            rows = 0, )
+                        ], ),
                 id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
                     provider_id = '', 
                     layer_id = '', ),

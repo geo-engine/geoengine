@@ -196,6 +196,7 @@ __all__ = [
     "LayerCollectionListing",
     "LayerCollectionResource",
     "LayerListing",
+    "LayerLoadingCost",
     "LayerProviderListing",
     "LayerResource",
     "LayerUpdate",
@@ -387,6 +388,7 @@ __all__ = [
     "StacProviderDatasetBand",
     "StacProviderS3Config",
     "StacQueryBuffer",
+    "StacSearchGrid",
     "StaticColor",
     "StaticNumber",
     "Statistics",
@@ -424,6 +426,7 @@ __all__ = [
     "TileSetDataType",
     "TileSetItem",
     "TileSets",
+    "TileSourcePixelCost",
     "TilesCrs",
     "TilesCrsOneOf",
     "TilesCrsOneOf1",
@@ -684,6 +687,7 @@ from geoengine_api_client.models.layer_collection import LayerCollection as Laye
 from geoengine_api_client.models.layer_collection_listing import LayerCollectionListing as LayerCollectionListing
 from geoengine_api_client.models.layer_collection_resource import LayerCollectionResource as LayerCollectionResource
 from geoengine_api_client.models.layer_listing import LayerListing as LayerListing
+from geoengine_api_client.models.layer_loading_cost import LayerLoadingCost as LayerLoadingCost
 from geoengine_api_client.models.layer_provider_listing import LayerProviderListing as LayerProviderListing
 from geoengine_api_client.models.layer_resource import LayerResource as LayerResource
 from geoengine_api_client.models.layer_update import LayerUpdate as LayerUpdate
@@ -875,6 +879,7 @@ from geoengine_api_client.models.stac_provider_dataset import StacProviderDatase
 from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand as StacProviderDatasetBand
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config as StacProviderS3Config
 from geoengine_api_client.models.stac_query_buffer import StacQueryBuffer as StacQueryBuffer
+from geoengine_api_client.models.stac_search_grid import StacSearchGrid as StacSearchGrid
 from geoengine_api_client.models.static_color import StaticColor as StaticColor
 from geoengine_api_client.models.static_number import StaticNumber as StaticNumber
 from geoengine_api_client.models.statistics import Statistics as Statistics
@@ -912,6 +917,7 @@ from geoengine_api_client.models.tile_set import TileSet as TileSet
 from geoengine_api_client.models.tile_set_data_type import TileSetDataType as TileSetDataType
 from geoengine_api_client.models.tile_set_item import TileSetItem as TileSetItem
 from geoengine_api_client.models.tile_sets import TileSets as TileSets
+from geoengine_api_client.models.tile_source_pixel_cost import TileSourcePixelCost as TileSourcePixelCost
 from geoengine_api_client.models.tiles_crs import TilesCrs as TilesCrs
 from geoengine_api_client.models.tiles_crs_one_of import TilesCrsOneOf as TilesCrsOneOf
 from geoengine_api_client.models.tiles_crs_one_of1 import TilesCrsOneOf1 as TilesCrsOneOf1

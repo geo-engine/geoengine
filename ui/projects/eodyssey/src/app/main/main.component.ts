@@ -99,7 +99,6 @@ export class MainComponent {
     readonly tileMatrixSet = computed<TMSId>(() => (this.debug() && this.frontendReprojection() ? 'Custom' : 'CustomWebMercator'));
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
-    readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
     private readonly loadingLimit = computed<ViewportLoadingLimit | undefined>(() => {
         const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
         if (!budget) return undefined;
@@ -117,7 +116,7 @@ export class MainComponent {
     readonly zoomDiagnostics = computed<ZoomDiagnostics | undefined>(() => {
         if (!this.zoomRequired()) return undefined;
         const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
-        if (!budget) return {reason: 'The layer requires a finer tile matrix.'};
+        if (!budget) return {reason: 'No loading-cost model is available for this layer.'};
         if (budget.crs !== this.spatialReference()?.srsString) return {reason: 'The map projection does not match the cost model.'};
         if (budget.tileMatrixSet !== this.tileMatrixSet()) return {reason: 'The selected tile matrix set has no cost model.'};
         if (this.currentTime()?.type !== 'TimePoint') return {reason: 'The cost model requires a single time instant.'};

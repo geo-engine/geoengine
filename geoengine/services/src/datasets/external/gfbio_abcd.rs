@@ -294,6 +294,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
@@ -349,6 +350,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
         let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
 
         Ok(Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: GFBIO_PROVIDER_ID,
                 layer_id: id.clone(),
@@ -431,6 +433,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
@@ -802,6 +805,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -812,6 +816,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -880,6 +885,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -890,6 +896,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -931,6 +938,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
@@ -1027,6 +1035,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -1037,6 +1046,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
@@ -1078,6 +1088,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,

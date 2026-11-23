@@ -346,6 +346,7 @@ impl GbifDataProvider {
                 let num_points = row.get::<usize, i64>(1);
 
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
@@ -438,6 +439,7 @@ impl GbifDataProvider {
                 let rank = row.get::<usize, String>(2);
 
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
@@ -782,6 +784,7 @@ impl LayerCollectionProvider for GbifDataProvider {
                 })?;
 
         Ok(Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: GBIF_PROVIDER_ID,
                 layer_id: id.clone(),
@@ -1965,6 +1968,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
@@ -3635,6 +3639,7 @@ mod tests {
                 .map_err(|e| e.to_string())?;
 
             let expected = Layer {
+                loading_cost: None,
                 id: ProviderLayerId {
                     provider_id: GBIF_PROVIDER_ID,
                     layer_id: layer_id.clone(),
@@ -3676,6 +3681,7 @@ mod tests {
     }
 
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_performs_global_search_on_select_items(
         db_config: DatabaseConnectionConfig,
         ctx: PostgresSessionContext<NoTls>,
@@ -3749,6 +3755,7 @@ mod tests {
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
@@ -3759,6 +3766,7 @@ mod tests {
                         properties: vec![]
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
@@ -3769,6 +3777,7 @@ mod tests {
                         properties: vec![]
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
@@ -4393,6 +4402,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
@@ -4458,6 +4468,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,

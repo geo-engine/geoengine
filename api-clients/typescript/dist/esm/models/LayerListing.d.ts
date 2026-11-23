@@ -9,6 +9,7 @@
  * Do not edit the class manually.
  */
 import type { ProviderLayerId } from './ProviderLayerId';
+import type { LayerLoadingCost } from './LayerLoadingCost';
 /**
  *
  * @export
@@ -19,6 +20,10 @@ export interface LayerListing {
      *
      */
     type: LayerListingTypeEnum;
+    /**
+     * Optional structured loading-cost estimates for viewport guards.
+     */
+    loadingCost?: LayerLoadingCost | null;
     /**
      *
      */

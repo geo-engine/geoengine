@@ -1,7 +1,14 @@
 import {Injectable} from '@angular/core';
 import {mergeDeepOverrideLists} from '@geoengine/common';
-import {CoreConfig, DEFAULT_CORE_CONFIG} from '@geoengine/core';
+import {CoreConfig, CoreConfigStructure, DEFAULT_CORE_CONFIG} from '@geoengine/core';
+export const DEFAULT_VIEWPORT_LIMITS = {MAX_SOURCE_PIXELS: 20_000_000_000, MAX_STAC_SEARCHES: 64};
+
+interface EOdysseyConfigStructure extends CoreConfigStructure {
+    VIEWPORT_LIMITS: typeof DEFAULT_VIEWPORT_LIMITS;
+}
+
 const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
+    VIEWPORT_LIMITS: DEFAULT_VIEWPORT_LIMITS,
     BRANDING: {
         LOGO_URL: 'assets/eodyssey-logo.svg',
         LOGO_ICON_URL: 'assets/eodyssey-icon.svg',
@@ -41,7 +48,17 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
 
 @Injectable()
 export class AppConfig extends CoreConfig {
-    override load(): Promise<void> {
-        return super.load(APP_CONFIG_DEFAULTS);
+    protected override config!: EOdysseyConfigStructure;
+
+    get VIEWPORT_LIMITS(): typeof DEFAULT_VIEWPORT_LIMITS {
+        return this.config.VIEWPORT_LIMITS;
+    }
+
+    override async load(): Promise<void> {
+        await super.load(APP_CONFIG_DEFAULTS);
+        const limits = this.VIEWPORT_LIMITS;
+        if (!limits || ![limits.MAX_SOURCE_PIXELS, limits.MAX_STAC_SEARCHES].every((value) => Number.isSafeInteger(value) && value > 0)) {
+            throw new Error('VIEWPORT_LIMITS must contain positive JavaScript-safe integer limits');
+        }
     }
 }

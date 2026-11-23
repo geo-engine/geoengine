@@ -231,6 +231,7 @@ impl SentinelS2L2aCogsDataProvider {
                     .map(move |band| {
                         let layer_id = LayerId(format!("{}:{}", zone, band.name()));
                         let listing = Layer {
+loading_cost: None,
                         id: ProviderLayerId {
                             provider_id: *id,
                             layer_id: layer_id.clone(),
@@ -329,6 +330,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             .values()
             .map(|d| {
                 Ok(CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
@@ -366,6 +368,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
         let dataset = self.datasets.get(id).ok_or(Error::UnknownDataId)?;
 
         Ok(Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: self.id,
                 layer_id: id.clone(),

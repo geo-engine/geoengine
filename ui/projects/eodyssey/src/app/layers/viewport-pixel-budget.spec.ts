@@ -3,7 +3,6 @@ import {describe, expect, it} from 'vitest';
 import {
     estimatedStacSearches,
     estimateViewportCost,
-    parseViewportLimits,
     parseViewportPixelBudget,
     viewportMaxResolution,
     viewportLoadingLimit,
@@ -157,19 +156,15 @@ describe('viewport pixel budget', () => {
         for (let step = 1; step < 100; step++) expect(searches((cutoff * step) / 100)).toBeLessThanOrEqual(64);
     });
 
-    it('reads global limits from collection metadata and rejects incomplete cost models', () => {
+    it('combines structured costs with frontend limits and rejects incomplete cost models', () => {
         const limits = {maxSourcePixels: 1_000_000, maxStacSearches: 36};
         const {maxSourcePixels: _pixels, maxStacSearches: _searches, ...payload} = dualBudget;
-        expect(parseViewportLimits(JSON.stringify(limits))).toEqual(limits);
-        expect(parseViewportPixelBudget(JSON.stringify(payload), limits)).toEqual(dualBudget);
-        expect(() => parseViewportPixelBudget(undefined, limits)).toThrow('Missing edv:viewportPixelBudget');
-        expect(() => parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: undefined}), limits)).toThrow(
-            'Invalid edv:viewportPixelBudget',
-        );
-        expect(() => parseViewportPixelBudget(JSON.stringify(payload))).toThrow('Invalid edv:viewportPixelBudget');
-        expect(() => parseViewportLimits('{"maxSourcePixels":100,"maxStacSearches":0}')).toThrow('Invalid edv:viewportLimits');
+        expect(parseViewportPixelBudget(payload, limits)).toEqual(dualBudget);
+        expect(() => parseViewportPixelBudget(undefined, limits)).toThrow('Missing layer loadingCost');
+        expect(() => parseViewportPixelBudget({...payload, searchGrids: undefined}, limits)).toThrow('Invalid layer loadingCost');
+        expect(() => parseViewportPixelBudget(payload, undefined!)).toThrow('Invalid layer loadingCost');
         expect(() =>
-            parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: [payload.searchGrids[0], payload.searchGrids[0]]}), limits),
+            parseViewportPixelBudget({...payload, searchGrids: [payload.searchGrids[0], payload.searchGrids[0]]}, limits),
         ).toThrow();
     });
     it('allows a Germany-sized view and blocks a larger view using the same matrix', () => {
@@ -222,36 +217,32 @@ describe('viewport pixel budget', () => {
         expect(viewportMaxResolution(nonMonotonic, [1000, 1000], [0, 0])).toBe(1.5);
     });
 
-    it.each([0, Number.MAX_SAFE_INTEGER + 1])('rejects an invalid global pixel limit: %s', (maxSourcePixels) => {
-        expect(() => parseViewportLimits(JSON.stringify({maxSourcePixels, maxStacSearches: 64}))).toThrow('Invalid edv:viewportLimits');
-    });
-
     it('accepts the unversioned bootstrap contract', () => {
         expect(
-            parseViewportPixelBudget(JSON.stringify(budget), {
+            parseViewportPixelBudget(budget, {
                 maxSourcePixels: budget.maxSourcePixels,
                 maxStacSearches: budget.maxStacSearches,
             }),
         ).toEqual(budget);
-        expect(parseViewportPixelBudget(undefined)).toBeUndefined();
+        expect(() => parseViewportPixelBudget(undefined, {maxSourcePixels: 100, maxStacSearches: 64})).toThrow('Missing layer loadingCost');
     });
 
     it.each([
         '',
         'null',
         '{}',
-        JSON.stringify({...budget, searchGrids: []}),
-        JSON.stringify({...budget, searchGrids: undefined}),
-        JSON.stringify({...budget, matrices: [{...budget.matrices[0], pointOfOrigin: undefined}]}),
-        JSON.stringify({...budget, crs: 'EPSG:4326'}),
-        JSON.stringify({...budget, matrices: []}),
-        JSON.stringify({...budget, matrices: [{...budget.matrices[0], id: '1'}]}),
-        JSON.stringify({...budget, matrices: [{...budget.matrices[0], sourcePixels: -1}]}),
-        JSON.stringify({...budget, matrices: [{...budget.matrices[0], tileWidth: 1.5}]}),
-        JSON.stringify({...budget, matrices: [budget.matrices[0], {...budget.matrices[0], id: '1'}]}),
+        {...budget, searchGrids: []},
+        {...budget, searchGrids: undefined},
+        {...budget, matrices: [{...budget.matrices[0], pointOfOrigin: undefined}]},
+        {...budget, crs: 'EPSG:4326'},
+        {...budget, matrices: []},
+        {...budget, matrices: [{...budget.matrices[0], id: '1'}]},
+        {...budget, matrices: [{...budget.matrices[0], sourcePixels: -1}]},
+        {...budget, matrices: [{...budget.matrices[0], tileWidth: 1.5}]},
+        {...budget, matrices: [budget.matrices[0], {...budget.matrices[0], id: '1'}]},
     ])('rejects invalid viewport metadata: %s', (value) => {
         expect(() =>
             parseViewportPixelBudget(value, {maxSourcePixels: budget.maxSourcePixels, maxStacSearches: budget.maxStacSearches}),
-        ).toThrow('Invalid edv:viewportPixelBudget');
+        ).toThrow('Invalid layer loadingCost');
     });
 });

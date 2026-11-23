@@ -212,6 +212,20 @@ describe('OGC map tile minimum matrix index', () => {
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
     });
 
+    it('reports a zero viewport cutoff as blocked without requesting imagery', async () => {
+        fixture.componentRef.setInput('minTileMatrixIndex', 0);
+        fixture.componentRef.setInput('maxViewResolution', 0);
+        await setResolution(600);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+        source.getTile(5, 0, 0, 1, getProjection('EPSG:3857')!).load();
+        expect(tileRequests).toHaveLength(0);
+        fixture.componentRef.setInput('maxViewResolution', 650);
+        await setResolution(600);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
+    });
+
     it('updates the viewport cutoff without recreating metadata and aborts existing requests', async () => {
         await setResolution(600);
         const tile = source.getTile(5, 0, 0, 1, getProjection('EPSG:3857')!);

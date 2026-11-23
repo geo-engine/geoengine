@@ -12,6 +12,7 @@
  */
 import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
 import { ProviderLayerIdFromJSON, ProviderLayerIdToJSON, } from './ProviderLayerId';
+import { LayerLoadingCostFromJSON, LayerLoadingCostToJSON, } from './LayerLoadingCost';
 import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from './ProcessingGraph';
 /**
  * Check if a given object implements the Layer interface.
@@ -35,6 +36,7 @@ export function LayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
         'description': json['description'],
@@ -52,6 +54,7 @@ export function LayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
         'description': value['description'],

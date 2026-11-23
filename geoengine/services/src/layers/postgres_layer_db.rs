@@ -1,8 +1,8 @@
 use super::external::{DataProvider, SharedDataConnector, TypedDataProviderDefinition};
 use super::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
-    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
-    UpdateLayerCollection,
+    LayerListing, LayerLoadingCost, Property, ProviderLayerCollectionId, ProviderLayerId,
+    UpdateLayer, UpdateLayerCollection,
 };
 use super::listing::{
     LayerCollectionProvider, ProviderCapabilities, SearchCapabilities, SearchParameters,
@@ -41,7 +41,7 @@ use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio_postgres::Transaction;
+use tokio_postgres::{Transaction, types::Json};
 use uuid::Uuid;
 
 #[async_trait]
@@ -81,7 +81,7 @@ where
         transaction.execute(
                 "
                 UPDATE layers
-                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, processing_graph_id = $6
+                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, processing_graph_id = $6, loading_cost = $8
                 WHERE id = $7;",
                 &[
                     &layer.name,
@@ -91,6 +91,7 @@ where
                     &HashMapTextTextDbType::from(&layer.metadata),
                     &processing_graph_id,
                     &layer_id,
+                    &layer.loading_cost.as_ref().map(Json),
                 ],
             )
             .await?;
@@ -376,14 +377,14 @@ fn create_search_query(full_info: bool) -> String {
         name,
         description,
         properties,
-        FALSE AS is_layer"
+        FALSE AS is_layer, NULL::jsonb AS loading_cost"
         } else { "name" },
         if full_info {
             "concat(id, '') AS id,
         name,
         description,
         properties,
-        TRUE AS is_layer"
+        TRUE AS is_layer, loading_cost"
         } else { "name" },
         if full_info { "is_layer ASC," } else { "" })
 }
@@ -458,14 +459,14 @@ where
         let stmt = tx
             .prepare(
                 "
-        SELECT DISTINCT id, name, description, properties, is_layer
+        SELECT DISTINCT id, name, description, properties, is_layer, loading_cost
         FROM (
             SELECT 
                 concat(id, '') AS id, 
                 name, 
                 description, 
                 properties, 
-                FALSE AS is_layer
+                FALSE AS is_layer, NULL::jsonb AS loading_cost
             FROM user_permitted_layer_collections u
                 JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
                 JOIN collection_children cc ON (layer_collection_id = cc.child)
@@ -476,7 +477,7 @@ where
                 name, 
                 description, 
                 properties, 
-                TRUE AS is_layer
+                TRUE AS is_layer, loading_cost
             FROM user_permitted_layers ul
                 JOIN layers uc ON (ul.layer_id = uc.id)
                 JOIN collection_layers cl ON (layer_id = cl.layer)
@@ -516,6 +517,9 @@ where
                         name: row.get(1),
                         description: row.get(2),
                         properties: row.get(3),
+                        loading_cost: row
+                            .get::<_, Option<Json<LayerLoadingCost>>>(5)
+                            .map(|cost| cost.0),
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
@@ -623,6 +627,9 @@ where
                         name: row.get(1),
                         description: row.get(2),
                         properties: row.get(3),
+                        loading_cost: row
+                            .get::<_, Option<Json<LayerLoadingCost>>>(5)
+                            .map(|cost| cost.0),
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
@@ -735,7 +742,8 @@ where
                 w.processing_graph,
                 l.symbology,
                 l.properties,
-                l.metadata
+                l.metadata,
+                l.loading_cost
             FROM 
                 layers l JOIN processing_graphs w ON (l.processing_graph_id = w.id)
             WHERE 
@@ -762,6 +770,9 @@ where
             symbology: row.get(3),
             properties: row.get(4),
             metadata: row.get::<_, HashMapTextTextDbType>(5).into(),
+            loading_cost: row
+                .get::<_, Option<Json<LayerLoadingCost>>>(6)
+                .map(|cost| cost.0),
         })
     }
 }
@@ -1164,8 +1175,8 @@ pub async fn insert_layer<W: TxProcessingGraphRegistry>(
     let stmt = trans
         .prepare(
             "
-            INSERT INTO layers (id, name, description, processing_graph_id, symbology, properties, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7);",
+            INSERT INTO layers (id, name, description, processing_graph_id, symbology, properties, metadata, loading_cost)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
         )
         .await?;
 
@@ -1180,6 +1191,7 @@ pub async fn insert_layer<W: TxProcessingGraphRegistry>(
                 &layer.symbology,
                 &layer.properties,
                 &HashMapTextTextDbType::from(&layer.metadata),
+                &layer.loading_cost.as_ref().map(Json),
             ],
         )
         .await?;

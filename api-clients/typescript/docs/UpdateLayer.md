@@ -6,6 +6,7 @@
 
 Name | Type
 ------------ | -------------
+`loadingCost` | [LayerLoadingCost](LayerLoadingCost.md)
 `name` | string
 `description` | string
 `processingGraph` | [ProcessingGraph](ProcessingGraph.md)
@@ -20,6 +21,7 @@ import type { UpdateLayer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "loadingCost": null,
   "name": Example Layer,
   "description": Example layer description,
   "processingGraph": null,

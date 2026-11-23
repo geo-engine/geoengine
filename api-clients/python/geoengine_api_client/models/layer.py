@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from geoengine_api_client.models.layer_loading_cost import LayerLoadingCost
 from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.provider_layer_id import ProviderLayerId
 from geoengine_api_client.models.symbology import Symbology
@@ -31,6 +32,7 @@ class Layer(BaseModel):
     """
     Layer
     """ # noqa: E501
+    loading_cost: Optional[LayerLoadingCost] = Field(default=None, description="Optional structured loading-cost estimates for viewport guards.", alias="loadingCost")
     id: ProviderLayerId
     name: StrictStr
     description: StrictStr
@@ -38,7 +40,7 @@ class Layer(BaseModel):
     symbology: Optional[Symbology] = None
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
     metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
-    __properties: ClassVar[List[str]] = ["id", "name", "description", "processingGraph", "symbology", "properties", "metadata"]
+    __properties: ClassVar[List[str]] = ["loadingCost", "id", "name", "description", "processingGraph", "symbology", "properties", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -79,6 +81,9 @@ class Layer(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of loading_cost
+        if self.loading_cost:
+            _dict['loadingCost'] = self.loading_cost.to_dict()
         # override the default output from pydantic by calling `to_dict()` of id
         if self.id:
             _dict['id'] = self.id.to_dict()
@@ -88,6 +93,11 @@ class Layer(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of symbology
         if self.symbology:
             _dict['symbology'] = self.symbology.to_dict()
+        # set to None if loading_cost (nullable) is None
+        # and model_fields_set contains the field
+        if self.loading_cost is None and "loading_cost" in self.model_fields_set:
+            _dict['loadingCost'] = None
+
         # set to None if symbology (nullable) is None
         # and model_fields_set contains the field
         if self.symbology is None and "symbology" in self.model_fields_set:
@@ -105,6 +115,7 @@ class Layer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "loadingCost": LayerLoadingCost.from_dict(obj["loadingCost"]) if obj.get("loadingCost") is not None else None,
             "id": ProviderLayerId.from_dict(obj["id"]) if obj.get("id") is not None else None,
             "name": obj.get("name"),
             "description": obj.get("description"),

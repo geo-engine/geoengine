@@ -401,6 +401,7 @@ impl StacDataProvider {
             })
             .map(|dataset| {
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
@@ -467,6 +468,7 @@ impl LayerCollectionProvider for StacDataProvider {
             .ok_or(error::Error::UnknownLayerId { id: id.clone() })?;
 
         Ok(Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: self.id,
                 layer_id: id.clone(),

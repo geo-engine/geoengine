@@ -229,6 +229,7 @@ async fn add_dataset_to_collection(
     share_layer: bool,
 ) -> anyhow::Result<()> {
     let add_layer = AddLayer {
+        loading_cost: None,
         name: layer_name.to_string(),
         description: String::new(),
         processing_graph: ProcessingGraph {

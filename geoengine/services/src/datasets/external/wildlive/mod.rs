@@ -269,6 +269,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
             WildliveCollectionId::Projects => {
                 let mut items: Vec<_> = vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: self.layer_id(WildliveLayerId::Projects)?,
                         name: "Projects".to_string(),
@@ -276,6 +277,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                         properties: Vec::new(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: self.layer_id(WildliveLayerId::ProjectBounds)?,
                         name: "Project bounds".to_string(),
@@ -321,6 +323,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
             WildliveCollectionId::Project { project_id } => {
                 let mut items: Vec<_> = vec![
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: self.layer_id(WildliveLayerId::Stations {
                             project_id: project_id.clone(),
@@ -330,6 +333,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                         properties: Vec::new(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: self.layer_id(WildliveLayerId::Captures {
                             project_id: project_id.clone(),
@@ -361,6 +365,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
     async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         match WildliveLayerId::try_from(id.clone())? {
             WildliveLayerId::Projects => Ok(Layer {
+                loading_cost: None,
                 id: self.layer_id(WildliveLayerId::Projects)?,
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
@@ -429,6 +434,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 metadata: Default::default(),
             }),
             WildliveLayerId::ProjectBounds => Ok(Layer {
+                loading_cost: None,
                 id: self.layer_id(WildliveLayerId::ProjectBounds)?,
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
@@ -457,6 +463,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 )
                 .await?;
                 Ok(Layer {
+                    loading_cost: None,
                     id: self.layer_id(WildliveLayerId::Stations {
                         project_id: project_id.clone(),
                     })?,
@@ -488,6 +495,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 )
                 .await?;
                 Ok(Layer {
+                    loading_cost: None,
                     id: self.layer_id(WildliveLayerId::Captures {
                         project_id: project_id.clone(),
                     })?,
@@ -1226,6 +1234,7 @@ mod tests {
         assert_eq!(
             layer,
             Layer {
+                loading_cost: None,
                 id: ProviderLayerId {
                     provider_id: connector.definition.id,
                     layer_id: WildliveLayerId::ProjectBounds.try_into().unwrap(),
@@ -1258,6 +1267,7 @@ mod tests {
         assert_eq!(
             layer,
             Layer {
+                loading_cost: None,
                 id: ProviderLayerId {
                     provider_id: connector.definition.id,
                     layer_id: WildliveLayerId::Projects.try_into().unwrap(),
@@ -1593,6 +1603,7 @@ mod tests {
         assert_eq!(
             layer,
             Layer {
+                loading_cost: None,
                 id: ProviderLayerId {
                     provider_id: connector.definition.id,
                     layer_id: WildliveLayerId::Captures {

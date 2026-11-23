@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
+import { LayerLoadingCostFromJSON, LayerLoadingCostToJSON, } from './LayerLoadingCost';
 import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from './ProcessingGraph';
 /**
  * Check if a given object implements the UpdateLayer interface.
@@ -32,6 +33,7 @@ export function UpdateLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'name': json['name'],
         'description': json['description'],
         'processingGraph': ProcessingGraphFromJSON(json['processingGraph']),
@@ -48,6 +50,7 @@ export function UpdateLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'name': value['name'],
         'description': value['description'],
         'processingGraph': ProcessingGraphToJSON(value['processingGraph']),

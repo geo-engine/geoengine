@@ -1586,6 +1586,13 @@ impl From<RasterDatasetFromProcessingGraph> for crate::datasets::RasterDatasetFr
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub struct Layer {
+    /// Optional structured loading-cost estimates for viewport guards.
+    #[serde(
+        default,
+        rename = "loadingCost",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub loading_cost: Option<crate::layers::layer::LayerLoadingCost>,
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
@@ -1603,6 +1610,13 @@ pub struct Layer {
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 // TODO: validate user input
 pub struct AddLayer {
+    /// Optional structured loading-cost estimates for viewport guards.
+    #[serde(
+        default,
+        rename = "loadingCost",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub loading_cost: Option<crate::layers::layer::LayerLoadingCost>,
     #[schema(example = "Example Layer")]
     pub name: String,
     #[schema(example = "Example layer description")]
@@ -1620,6 +1634,13 @@ pub struct AddLayer {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate, ToSchema)]
 pub struct UpdateLayer {
+    /// Optional structured loading-cost estimates for viewport guards.
+    #[serde(
+        default,
+        rename = "loadingCost",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub loading_cost: Option<crate::layers::layer::LayerLoadingCost>,
     #[schema(example = "Example Layer")]
     #[validate(length(min = 1))]
     pub name: String,
@@ -1639,6 +1660,13 @@ pub struct UpdateLayer {
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct LayerDefinition {
+    /// Optional structured loading-cost estimates for viewport guards.
+    #[serde(
+        default,
+        rename = "loadingCost",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub loading_cost: Option<crate::layers::layer::LayerLoadingCost>,
     pub id: LayerId,
     pub name: String,
     pub description: String,
@@ -1665,6 +1693,7 @@ impl TryFrom<Layer> for crate::layers::layer::Layer {
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
+            loading_cost: value.loading_cost,
         })
     }
 }
@@ -1682,6 +1711,7 @@ impl TryFrom<crate::layers::layer::Layer> for Layer {
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
+            loading_cost: value.loading_cost,
         })
     }
 }
@@ -1697,6 +1727,7 @@ impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
+            loading_cost: value.loading_cost,
         })
     }
 }
@@ -1712,6 +1743,7 @@ impl TryFrom<UpdateLayer> for crate::layers::layer::UpdateLayer {
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
+            loading_cost: value.loading_cost,
         })
     }
 }
@@ -1728,6 +1760,7 @@ impl TryFrom<LayerDefinition> for crate::layers::layer::LayerDefinition {
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
+            loading_cost: value.loading_cost,
         })
     }
 }

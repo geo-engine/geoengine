@@ -9,6 +9,7 @@
  * Do not edit the class manually.
  */
 import type { Symbology } from './Symbology';
+import type { LayerLoadingCost } from './LayerLoadingCost';
 import type { ProcessingGraph } from './ProcessingGraph';
 /**
  *
@@ -16,6 +17,10 @@ import type { ProcessingGraph } from './ProcessingGraph';
  * @interface UpdateLayer
  */
 export interface UpdateLayer {
+    /**
+     * Optional structured loading-cost estimates for viewport guards.
+     */
+    loadingCost?: LayerLoadingCost | null;
     /**
      *
      */

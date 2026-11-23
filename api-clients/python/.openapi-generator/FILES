@@ -157,6 +157,7 @@ docs/LayerCollection.md
 docs/LayerCollectionListing.md
 docs/LayerCollectionResource.md
 docs/LayerListing.md
+docs/LayerLoadingCost.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
 docs/LayerUpdate.md
@@ -360,6 +361,7 @@ docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
 docs/StacProviderS3Config.md
 docs/StacQueryBuffer.md
+docs/StacSearchGrid.md
 docs/StaticColor.md
 docs/StaticNumber.md
 docs/Statistics.md
@@ -398,6 +400,7 @@ docs/TileSet.md
 docs/TileSetDataType.md
 docs/TileSetItem.md
 docs/TileSets.md
+docs/TileSourcePixelCost.md
 docs/TilesCrs.md
 docs/TilesCrsOneOf.md
 docs/TilesCrsOneOf1.md
@@ -651,6 +654,7 @@ geoengine_api_client/models/layer_collection.py
 geoengine_api_client/models/layer_collection_listing.py
 geoengine_api_client/models/layer_collection_resource.py
 geoengine_api_client/models/layer_listing.py
+geoengine_api_client/models/layer_loading_cost.py
 geoengine_api_client/models/layer_provider_listing.py
 geoengine_api_client/models/layer_resource.py
 geoengine_api_client/models/layer_update.py
@@ -842,6 +846,7 @@ geoengine_api_client/models/stac_provider_dataset.py
 geoengine_api_client/models/stac_provider_dataset_band.py
 geoengine_api_client/models/stac_provider_s3_config.py
 geoengine_api_client/models/stac_query_buffer.py
+geoengine_api_client/models/stac_search_grid.py
 geoengine_api_client/models/static_color.py
 geoengine_api_client/models/static_number.py
 geoengine_api_client/models/statistics.py
@@ -879,6 +884,7 @@ geoengine_api_client/models/tile_set.py
 geoengine_api_client/models/tile_set_data_type.py
 geoengine_api_client/models/tile_set_item.py
 geoengine_api_client/models/tile_sets.py
+geoengine_api_client/models/tile_source_pixel_cost.py
 geoengine_api_client/models/tiles_crs.py
 geoengine_api_client/models/tiles_crs_one_of.py
 geoengine_api_client/models/tiles_crs_one_of1.py
@@ -1117,6 +1123,7 @@ test/test_layer_collection.py
 test/test_layer_collection_listing.py
 test/test_layer_collection_resource.py
 test/test_layer_listing.py
+test/test_layer_loading_cost.py
 test/test_layer_provider_listing.py
 test/test_layer_resource.py
 test/test_layer_update.py
@@ -1320,6 +1327,7 @@ test/test_stac_provider_dataset.py
 test/test_stac_provider_dataset_band.py
 test/test_stac_provider_s3_config.py
 test/test_stac_query_buffer.py
+test/test_stac_search_grid.py
 test/test_static_color.py
 test/test_static_number.py
 test/test_statistics.py
@@ -1358,6 +1366,7 @@ test/test_tile_set.py
 test/test_tile_set_data_type.py
 test/test_tile_set_item.py
 test/test_tile_sets.py
+test/test_tile_source_pixel_cost.py
 test/test_tiles_crs.py
 test/test_tiles_crs_one_of.py
 test/test_tiles_crs_one_of1.py

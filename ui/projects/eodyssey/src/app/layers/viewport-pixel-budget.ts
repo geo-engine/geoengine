@@ -1,39 +1,15 @@
 import proj4 from 'proj4';
+import type {LayerLoadingCost, TileSourcePixelCost as TilePixelCost, StacSearchGrid as SearchGrid} from '@geoengine/api-client';
 
 export interface ViewportLimits {
     maxSourcePixels: number;
     maxStacSearches: number;
 }
 
-/** Cost model combined with the global limits from EDV collection metadata. */
-export interface ViewportPixelBudget {
+/** Structured layer cost model combined with EOdyssey configuration limits. */
+export interface ViewportPixelBudget extends LayerLoadingCost, ViewportLimits {
     tileMatrixSet: 'CustomWebMercator';
     crs: 'EPSG:3857';
-    maxSourcePixels: number;
-    maxStacSearches: number;
-    searchGrids: SearchGrid[];
-    matrices: TilePixelCost[];
-}
-
-interface TilePixelCost {
-    id: string;
-    cellSize: number;
-    tileWidth: number;
-    tileHeight: number;
-    matrixWidth: number;
-    matrixHeight: number;
-    sourcePixels: number;
-    pointOfOrigin: number[];
-}
-
-interface SearchGrid {
-    datasetId: string;
-    projection: string;
-    projString: string;
-    extent: number[];
-    cellSize: number;
-    columns: number;
-    rows: number;
 }
 
 export interface ViewportCost {
@@ -80,24 +56,10 @@ function matrixViewportCost(
     };
 }
 
-export function parseViewportLimits(value: string | undefined): ViewportLimits | undefined {
-    if (value === undefined) return undefined;
+export function parseViewportPixelBudget(value: unknown, limits: ViewportLimits): ViewportPixelBudget {
+    if (value === undefined) throw new Error('Missing layer loadingCost');
     try {
-        const limits: unknown = JSON.parse(value);
-        if (!isRecord(limits) || !positiveInteger(limits.maxSourcePixels) || !positiveInteger(limits.maxStacSearches)) throw new Error();
-        return {maxSourcePixels: limits.maxSourcePixels, maxStacSearches: limits.maxStacSearches};
-    } catch {
-        throw new Error('Invalid edv:viewportLimits');
-    }
-}
-
-export function parseViewportPixelBudget(value: string | undefined, limits?: ViewportLimits): ViewportPixelBudget | undefined {
-    if (value === undefined) {
-        if (limits) throw new Error('Missing edv:viewportPixelBudget for collection limits');
-        return undefined;
-    }
-    try {
-        const budget: unknown = JSON.parse(value);
+        const budget = value;
         if (!isRecord(budget) || budget.tileMatrixSet !== 'CustomWebMercator' || budget.crs !== 'EPSG:3857') {
             throw new Error('unsupported grid');
         }
@@ -151,7 +113,7 @@ export function parseViewportPixelBudget(value: string | undefined, limits?: Vie
         }
         return {...budget, ...limits} as unknown as ViewportPixelBudget;
     } catch {
-        throw new Error('Invalid edv:viewportPixelBudget');
+        throw new Error('Invalid layer loadingCost');
     }
 }
 

@@ -19,6 +19,13 @@ import {
     ProviderLayerIdToJSON,
     ProviderLayerIdToJSONTyped,
 } from './ProviderLayerId';
+import type { LayerLoadingCost } from './LayerLoadingCost';
+import {
+    LayerLoadingCostFromJSON,
+    LayerLoadingCostFromJSONTyped,
+    LayerLoadingCostToJSON,
+    LayerLoadingCostToJSONTyped,
+} from './LayerLoadingCost';
 
 /**
  * 
@@ -30,6 +37,10 @@ export interface LayerListing {
      * 
      */
     type: LayerListingTypeEnum;
+    /**
+     * Optional structured loading-cost estimates for viewport guards.
+     */
+    loadingCost?: LayerLoadingCost | null;
     /**
      * 
      */
@@ -82,6 +93,7 @@ export function LayerListingFromJSONTyped(json: any, ignoreDiscriminator: boolea
     return {
         
         'type': json['type'],
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
         'description': json['description'],
@@ -101,6 +113,7 @@ export function LayerListingToJSONTyped(value?: LayerListing | null, ignoreDiscr
     return {
         
         'type': value['type'],
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
         'description': value['description'],

@@ -1446,6 +1446,140 @@ mod tests {
         }));
     }
 
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_roundtrips_structured_loading_cost(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let cost = serde_json::json!({
+            "tileMatrixSet":"CustomWebMercator", "crs":"EPSG:3857",
+            "matrices":[{"id":"0","cellSize":1000.0,"tileWidth":128,"tileHeight":128,
+                "matrixWidth":10,"matrixHeight":10,"sourcePixels":1234.0,"pointOfOrigin":[0.0,10000.0]}],
+            "searchGrids":[{"datasetId":"dataset/one","projection":"EPSG:3857","projString":"EPSG:3857",
+                "extent":[0.0,0.0,10000.0,10000.0],"cellSize":1000.0,"columns":10,"rows":10}]
+        });
+        let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let req = TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(serde_json::json!({
+                "name": "Foo",
+                "description": "Bar",
+                "processingGraph": {
+                  "type": "Vector",
+                  "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                      "points": [
+                        { "x": 0.0, "y": 0.1 },
+                        { "x": 1.0, "y": 1.1 }
+                      ]
+                    }
+                  }
+                },
+                "symbology": null,
+                "loadingCost": cost,
+            }));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let result: IdResponse<LayerId> = read_body_json(response).await;
+
+        ctx.db()
+            .load_layer(&result.id.clone().into())
+            .await
+            .unwrap();
+
+        let collection = ctx
+            .db()
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
+
+        assert!(collection.items.iter().any(|item| match item {
+            CollectionItem::Layer(layer) => layer.id.layer_id == result.id.clone().into(),
+            CollectionItem::Collection(_) => false,
+        }));
+        let listing = collection
+            .items
+            .iter()
+            .find_map(|item| match item {
+                CollectionItem::Layer(layer) if layer.id.layer_id == result.id.clone().into() => {
+                    Some(layer)
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(serde_json::to_value(listing).unwrap()["loadingCost"], cost);
+        let provider = crate::layers::storage::INTERNAL_PROVIDER_ID;
+        let req = TestRequest::get()
+            .uri(&format!("/layers/{provider}/{}", result.id))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+        assert!(response.status().is_success());
+        let mut detail: serde_json::Value = read_body_json(response).await;
+        assert_eq!(detail["loadingCost"], cost);
+        assert!(detail["loadingCost"].is_object());
+        detail["loadingCost"]["matrices"][0]["sourcePixels"] = serde_json::json!(5678.0);
+        let req = TestRequest::put()
+            .uri(&format!("/layerDb/layers/{}", result.id))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&detail);
+        let response = send_test_request(req, app_ctx.clone()).await;
+        assert!(response.status().is_success(), "{response:?}");
+        let loaded = ctx
+            .db()
+            .load_layer(&result.id.clone().into())
+            .await
+            .unwrap();
+        assert_eq!(
+            loaded.loading_cost.unwrap().matrices[0].source_pixels,
+            5678.0
+        );
+        let searched = ctx
+            .db()
+            .search(
+                &collection_id,
+                crate::layers::listing::SearchParameters {
+                    search_type: crate::layers::listing::SearchType::Fulltext,
+                    search_string: "Foo".into(),
+                    limit: 20,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+        let found = searched
+            .items
+            .iter()
+            .find_map(|item| match item {
+                CollectionItem::Layer(layer) => layer.loading_cost.as_ref(),
+                CollectionItem::Collection(_) => None,
+            })
+            .unwrap();
+        assert_eq!(found.matrices[0].source_pixels, 5678.0);
+        detail["loadingCost"] = serde_json::Value::Null;
+        let req = TestRequest::put()
+            .uri(&format!("/layerDb/layers/{}", result.id))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&detail);
+        let response = send_test_request(req, app_ctx.clone()).await;
+        assert!(response.status().is_success());
+        assert!(
+            ctx.db()
+                .load_layer(&result.id.clone().into())
+                .await
+                .unwrap()
+                .loading_cost
+                .is_none()
+        );
+    }
+
     #[ge_context::test]
     async fn test_add_existing_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
@@ -1459,6 +1593,7 @@ mod tests {
             .db()
             .add_layer(
                 ServicesAddLayer {
+                    loading_cost: None,
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
                     processing_graph: ServicesProcessingGraph {
@@ -1590,6 +1725,7 @@ mod tests {
         let session_id = session.id();
 
         let add_layer = ServicesAddLayer {
+            loading_cost: None,
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
@@ -1618,6 +1754,7 @@ mod tests {
             .unwrap();
 
         let update_layer = ServicesUpdateLayer {
+            loading_cost: None,
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
             processing_graph: ServicesProcessingGraph {
@@ -1699,6 +1836,7 @@ mod tests {
         .await;
 
         let add_layer = ServicesAddLayer {
+            loading_cost: None,
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
@@ -1749,6 +1887,7 @@ mod tests {
         let session_id = session.id();
 
         let add_layer = ServicesAddLayer {
+            loading_cost: None,
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
@@ -1868,6 +2007,7 @@ mod tests {
             .db()
             .add_layer(
                 ServicesAddLayer {
+                    loading_cost: None,
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
                     processing_graph: ServicesProcessingGraph {
@@ -2718,6 +2858,7 @@ mod tests {
                 .db()
                 .add_layer(
                     ServicesAddLayer {
+                        loading_cost: None,
                         name: self.layer_name.clone(),
                         description: self.layer_description.clone(),
                         processing_graph: self.processing_graph.clone(),

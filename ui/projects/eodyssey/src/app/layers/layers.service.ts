@@ -7,12 +7,8 @@ import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
-import {parseViewportLimits, parseViewportPixelBudget, ViewportLimits} from './viewport-pixel-budget';
-
-interface Catalogue {
-    categories: DataSourceCategory[];
-    limits?: ViewportLimits;
-}
+import {parseViewportPixelBudget} from './viewport-pixel-budget';
+import {AppConfig} from '../app-config.service';
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -20,6 +16,7 @@ interface Catalogue {
 @Service()
 export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
+    private readonly config = inject(AppConfig);
     private readonly mapService = inject(MapService);
 
     readonly selectedCategory = linkedSignal<DataSourceCategory[] | undefined, DataSourceCategory | undefined>({
@@ -80,13 +77,6 @@ export class EOdysseyLayerService {
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedViewportPixelBudget = computed(() => this.appliedVisualization()?.preset.viewportPixelBudget);
-    readonly appliedMinTileMatrixIndex = computed(() => {
-        const applied = this.appliedVisualization();
-        // A viewport budget already bounds every requested tile. The legacy matrix
-        // cutoff is only a fallback for catalogues without a viewport cost model.
-        if (applied?.preset.viewportPixelBudget) return 0;
-        return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
-    });
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -104,15 +94,12 @@ export class EOdysseyLayerService {
         return error ? String(error) : undefined;
     });
 
-    private readonly catalogueResource: ResourceRef<Catalogue | undefined> = resource({
+    private readonly catalogueResource: ResourceRef<DataSourceCategory[] | undefined> = resource({
         params: () => LAYER_DB_ROOT_COLLECTION_ID,
         loader: ({params}) => this.loadCatalogue(params),
     });
 
-    readonly categories = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value().categories : []));
-    private readonly viewportLimits = computed(() =>
-        this.catalogueResource.hasValue() ? this.catalogueResource.value().limits : undefined,
-    );
+    readonly categories = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
     readonly dataSources = computed(() => this.selectedCategory()?.sources ?? []);
     readonly catalogueLoading = computed(() => this.catalogueResource.isLoading());
     readonly currentVariants = computed(() => this.selectedDataSource()?.variants ?? []);
@@ -254,13 +241,12 @@ export class EOdysseyLayerService {
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */
-    private async loadCatalogue(rootCollectionId: string): Promise<Catalogue> {
+    private async loadCatalogue(rootCollectionId: string): Promise<DataSourceCategory[]> {
         const edvCollection = await this.findItem(rootCollectionId, (item) => item.type === 'collection' && item.name === 'EDV');
         const edvCollectionId = edvCollection && getCollectionId(edvCollection);
         if (!edvCollection || !edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
-        const limits = parseViewportLimits(getProperties(edvCollection).get('edv:viewportLimits'));
         const items = (await this.allItems(edvCollectionId)).filter(isCollection);
         // Keep existing deployments usable until their catalogue is bootstrapped with categories.
         const legacySources = items.filter((item) => getProperties(item).has('edv:dataset'));
@@ -280,7 +266,7 @@ export class EOdysseyLayerService {
             categories.flatMap((category) => category.sources),
             'data source',
         );
-        return {categories: categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key)), limits};
+        return categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
     private async loadSources(items: Extract<CollectionItem, {type: 'collection'}>[]): Promise<DataSourceDefinition[]> {
@@ -306,7 +292,6 @@ export class EOdysseyLayerService {
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
         };
     }
 
@@ -330,8 +315,11 @@ export class EOdysseyLayerService {
             connectorId: item.id.providerId,
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
-            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:viewportPixelBudget'), this.viewportLimits()),
+
+            viewportPixelBudget: parseViewportPixelBudget(item.loadingCost, {
+                maxSourcePixels: this.config.VIEWPORT_LIMITS.MAX_SOURCE_PIXELS,
+                maxStacSearches: this.config.VIEWPORT_LIMITS.MAX_STAC_SEARCHES,
+            }),
         };
     }
 
@@ -533,13 +521,4 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
     }
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseMinTileMatrixIndex(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined;
-    const parsed = Number(value);
-    if (!value.trim() || !Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-        throw new Error('Invalid edv:minTileMatrixIndex: ' + value);
-    }
-    return parsed;
 }

@@ -70,6 +70,7 @@ pub fn create_layer_collection_from_parts<ID: LayerCollectionIdFn>(
         entities
             .map(|entity| {
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id,
@@ -142,6 +143,7 @@ pub fn create_layer(
     data_range: DataRange,
 ) -> Result<Layer> {
     Ok(Layer {
+        loading_cost: None,
         id: provider_layer_id,
         name: netcdf_entity.name.clone(),
         description: netcdf_entity.name,

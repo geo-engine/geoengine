@@ -2157,6 +2157,7 @@ mod tests {
         let layer1 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
@@ -2172,6 +2173,7 @@ mod tests {
         assert_eq!(
             layer_db.load_layer(&layer1).await.unwrap(),
             crate::layers::layer::Layer {
+                loading_cost: None,
                 id: ProviderLayerId {
                     provider_id: INTERNAL_PROVIDER_ID,
                     layer_id: layer1.clone(),
@@ -2200,6 +2202,7 @@ mod tests {
         let layer2 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
@@ -2271,6 +2274,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2318,6 +2322,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2355,6 +2360,7 @@ mod tests {
         let layer1 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
@@ -2382,6 +2388,7 @@ mod tests {
         let layer2 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
@@ -2462,6 +2469,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2472,6 +2480,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2570,6 +2579,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2608,6 +2618,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -2673,6 +2684,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -2714,6 +2726,7 @@ mod tests {
         let layer1 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
@@ -2741,6 +2754,7 @@ mod tests {
         let layer2 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
@@ -2780,6 +2794,7 @@ mod tests {
         let layer3 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer3".to_string(),
                     description: "Layer 3".to_string(),
                     symbology: None,
@@ -2896,6 +2911,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2906,6 +2922,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2916,6 +2933,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2987,6 +3005,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -2997,6 +3016,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -3095,6 +3115,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -3133,6 +3154,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -3198,6 +3220,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -3234,6 +3257,7 @@ mod tests {
         let _layer1 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
@@ -3261,6 +3285,7 @@ mod tests {
         let _layer2 = layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
@@ -3417,6 +3442,7 @@ mod tests {
         let layer1 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
@@ -3444,6 +3470,7 @@ mod tests {
         let layer2 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
@@ -3483,6 +3510,7 @@ mod tests {
         let _layer3 = admin_layer_db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "Layer3".to_string(),
                     description: "Layer 3".to_string(),
                     symbology: None,
@@ -3937,6 +3965,7 @@ mod tests {
         let layer_db = app_ctx.session_context(session).db();
 
         let layer = AddLayer {
+            loading_cost: None,
             name: "layer".to_string(),
             description: "description".to_string(),
             processing_graph: ProcessingGraph {
@@ -4010,6 +4039,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
@@ -4049,6 +4079,7 @@ mod tests {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
@@ -4133,6 +4164,7 @@ mod tests {
         let layer_id = db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "layer".to_string(),
                     description: "description".to_string(),
                     processing_graph: ProcessingGraph {
@@ -4203,6 +4235,7 @@ mod tests {
         let layer_in_one_collection = db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "layer 1".to_string(),
                     description: "description".to_string(),
                     processing_graph: ProcessingGraph {
@@ -4228,6 +4261,7 @@ mod tests {
         let layer_in_two_collections = db
             .add_layer(
                 AddLayer {
+                    loading_cost: None,
                     name: "layer 2".to_string(),
                     description: "description".to_string(),
                     processing_graph: ProcessingGraph {

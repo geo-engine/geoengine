@@ -199,6 +199,7 @@ where
             .iter()
             .map(|d| {
                 CollectionItem::Layer(LayerListing {
+                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
@@ -271,6 +272,7 @@ where
             source_operator_from_dataset(&dataset.source_operator, &dataset.name.into())?;
 
         Ok(Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: self.id,
                 layer_id: id.clone(),

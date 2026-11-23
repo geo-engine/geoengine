@@ -262,6 +262,7 @@ pub async fn session_and_ndvi_multi_band_layer_id(
     db.add_layer_with_id(
         &db_layer_id,
         crate::layers::layer::AddLayer {
+            loading_cost: None,
             name: "NDVI MultiBand".to_string(),
             description: "NDVI data loaded via MultiBandGdalSource".to_string(),
             processing_graph: crate::processing_graphs::processing_graph::ProcessingGraph {

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 import { ProviderLayerIdFromJSON, ProviderLayerIdToJSON, } from './ProviderLayerId';
+import { LayerLoadingCostFromJSON, LayerLoadingCostToJSON, } from './LayerLoadingCost';
 /**
  * @export
  */
@@ -42,6 +43,7 @@ export function LayerListingFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'type': json['type'],
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
         'description': json['description'],
@@ -57,6 +59,7 @@ export function LayerListingToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'type': value['type'],
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
         'description': value['description'],

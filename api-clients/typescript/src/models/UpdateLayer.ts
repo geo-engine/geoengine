@@ -19,6 +19,13 @@ import {
     SymbologyToJSON,
     SymbologyToJSONTyped,
 } from './Symbology';
+import type { LayerLoadingCost } from './LayerLoadingCost';
+import {
+    LayerLoadingCostFromJSON,
+    LayerLoadingCostFromJSONTyped,
+    LayerLoadingCostToJSON,
+    LayerLoadingCostToJSONTyped,
+} from './LayerLoadingCost';
 import type { ProcessingGraph } from './ProcessingGraph';
 import {
     ProcessingGraphFromJSON,
@@ -33,6 +40,10 @@ import {
  * @interface UpdateLayer
  */
 export interface UpdateLayer {
+    /**
+     * Optional structured loading-cost estimates for viewport guards.
+     */
+    loadingCost?: LayerLoadingCost | null;
     /**
      * 
      */
@@ -79,6 +90,7 @@ export function UpdateLayerFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'name': json['name'],
         'description': json['description'],
         'processingGraph': ProcessingGraphFromJSON(json['processingGraph']),
@@ -99,6 +111,7 @@ export function UpdateLayerToJSONTyped(value?: UpdateLayer | null, ignoreDiscrim
 
     return {
         
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'name': value['name'],
         'description': value['description'],
         'processingGraph': ProcessingGraphToJSON(value['processingGraph']),

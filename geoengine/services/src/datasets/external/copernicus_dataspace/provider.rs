@@ -270,6 +270,7 @@ impl CopernicusDataspaceDataProvider {
                 .product_bands()
                 .map(|product_band| {
                     CollectionItem::Layer(LayerListing {
+                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
@@ -292,6 +293,7 @@ impl CopernicusDataspaceDataProvider {
 
     fn load_sentinel2_layer(&self, id: &Sentinel2LayerId) -> Layer {
         Layer {
+            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: self.id,
                 layer_id: id.clone().into(),

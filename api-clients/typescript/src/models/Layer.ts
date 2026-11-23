@@ -26,6 +26,13 @@ import {
     ProviderLayerIdToJSON,
     ProviderLayerIdToJSONTyped,
 } from './ProviderLayerId';
+import type { LayerLoadingCost } from './LayerLoadingCost';
+import {
+    LayerLoadingCostFromJSON,
+    LayerLoadingCostFromJSONTyped,
+    LayerLoadingCostToJSON,
+    LayerLoadingCostToJSONTyped,
+} from './LayerLoadingCost';
 import type { ProcessingGraph } from './ProcessingGraph';
 import {
     ProcessingGraphFromJSON,
@@ -40,6 +47,10 @@ import {
  * @interface Layer
  */
 export interface Layer {
+    /**
+     * Optional structured loading-cost estimates for viewport guards.
+     */
+    loadingCost?: LayerLoadingCost | null;
     /**
      * 
      */
@@ -91,6 +102,7 @@ export function LayerFromJSONTyped(json: any, ignoreDiscriminator: boolean): Lay
     }
     return {
         
+        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : LayerLoadingCostFromJSON(json['loadingCost']),
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
         'description': json['description'],
@@ -112,6 +124,7 @@ export function LayerToJSONTyped(value?: Layer | null, ignoreDiscriminator: bool
 
     return {
         
+        'loadingCost': LayerLoadingCostToJSON(value['loadingCost']),
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
         'description': value['description'],
