@@ -4,6 +4,7 @@ import {
     Component,
     ElementRef,
     afterNextRender,
+    afterRenderEffect,
     booleanAttribute,
     computed,
     inject,
@@ -26,6 +27,7 @@ import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
 import {EOdysseyLayerService} from '../layers/layers.service';
+import {viewportMaxResolution} from '../layers/viewport-pixel-budget';
 
 @Component({
     selector: 'geoengine-main',
@@ -63,6 +65,7 @@ export class MainComponent {
 
     readonly topToolbar = viewChild.required<MatToolbar, ElementRef<HTMLElement>>('topToolbar', {read: ElementRef});
     readonly mapComponent = viewChild.required(MapContainerComponent);
+    private readonly mapSize = signal<readonly number[]>([0, 0]);
 
     readonly layersReverse = signal<Array<Layer>>([]);
 
@@ -83,6 +86,12 @@ export class MainComponent {
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
+    readonly maxViewResolution = computed(() => {
+        const budget = this.eodysseyLayerService.appliedViewportPixelBudget();
+        if (!budget) return undefined;
+        if (budget.crs !== this.spatialReference()?.srsString) return 0;
+        return viewportMaxResolution(budget, this.mapSize());
+    });
     readonly zoomRequired = signal(false);
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
@@ -99,6 +108,22 @@ export class MainComponent {
     readonly testIsVisible = signal(true);
 
     constructor() {
+        afterRenderEffect((onCleanup) => {
+            // The real map target appears after the child finishes projection/layout setup.
+            // Follow its rendered grid tile, rather than the inline map-container host.
+            const mapElement = this.mapComponent().mapContainers()[0]?.nativeElement;
+            if (!mapElement) {
+                this.mapSize.set([0, 0]);
+                return;
+            }
+            const updateMapSize = (): void => {
+                this.mapSize.set([mapElement.clientWidth, mapElement.clientHeight]);
+            };
+            const observer = new ResizeObserver(updateMapSize);
+            observer.observe(mapElement);
+            updateMapSize();
+            onCleanup(() => observer.disconnect());
+        });
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());

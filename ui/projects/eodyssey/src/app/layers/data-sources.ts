@@ -1,5 +1,6 @@
 import type {TimeStepDuration} from '@geoengine/common';
 import type {GeographicCoverage} from './coverage';
+import type {ViewportPixelBudget} from './viewport-pixel-budget';
 
 export interface VisualizationPreset {
     key: string;
@@ -10,6 +11,7 @@ export interface VisualizationPreset {
     order: number;
     /** Minimum matrix index derived for this preset's processing graph and grid. */
     minTileMatrixIndex?: number;
+    viewportPixelBudget?: ViewportPixelBudget;
 }
 export interface DataSourceVariant {
     key: string;

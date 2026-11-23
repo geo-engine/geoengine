@@ -424,6 +424,67 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
+    it('applies the preset viewport budget only on Apply and clears it for a legacy preset', async () => {
+        const budget = {
+            version: 1,
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            maxSourcePixels: 100,
+            matrices: [{id: '0', cellSize: 1000, tileWidth: 512, tileHeight: 512, matrixWidth: 10, matrixHeight: 10, sourcePixels: 10}],
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'region'
+                    ? {
+                          items: listings.region.items.map((item, index) => {
+                              const preset = item as Extract<CollectionItem, {type: 'layer'}>;
+                              return {
+                                  ...preset,
+                                  properties: [
+                                      ...(preset.properties ?? []),
+                                      ...(index === 0 ? [['edv:viewportPixelBudget', JSON.stringify(budget)]] : []),
+                                  ],
+                              };
+                          }),
+                      }
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        eodysseyLayerService.setSelectedPreset('Alternate');
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual(budget);
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
+    });
+
+    it('reports invalid viewport metadata instead of silently removing the viewport guard', async () => {
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'region'
+                    ? {
+                          items: [
+                              {
+                                  ...(listings.region.items[0] as CollectionItem),
+                                  properties: [
+                                      ['edv:presetKey', 'invalid'],
+                                      ['edv:viewportPixelBudget', '{}'],
+                                  ],
+                              },
+                          ],
+                      }
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:viewportPixelBudget');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+    });
+
     it.each(['', '-1', '4.5', '256', 'NaN', 'Infinity'])('reports invalid tile matrix index metadata %j', async (value) => {
         const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
         getLayerCollectionItems.mockImplementation((_provider, collection) =>

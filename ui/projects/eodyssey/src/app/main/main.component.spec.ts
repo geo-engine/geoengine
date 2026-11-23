@@ -1,4 +1,4 @@
-import {NO_ERRORS_SCHEMA} from '@angular/core';
+import {NO_ERRORS_SCHEMA, signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconRegistry} from '@angular/material/icon';
@@ -14,20 +14,35 @@ import {CoreModule, DEFAULT_CORE_CONFIG, MapContainerComponent, MapService, Proj
 import {AppConfig} from '../app-config.service';
 import {MainComponent} from './main.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
+import type {ViewportPixelBudget} from '../layers/viewport-pixel-budget';
 
 // Keep the real toolbar and bindings; the map and its HTTP requests are tested in core.
 describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
+    const pixelBudget = signal<ViewportPixelBudget | undefined>(undefined);
+    let mapWidth: number;
+    let mapHeight: number;
+    let resizeCallbacks: Array<() => void>;
+    let mapTarget: HTMLElement;
+    const mapTargets = signal<Array<{nativeElement: HTMLElement}>>([]);
+    const disconnect = vi.fn();
 
     beforeEach(async () => {
+        pixelBudget.set(undefined);
+        mapWidth = mapHeight = 1000;
+        resizeCallbacks = [];
+        disconnect.mockClear();
         vi.stubGlobal(
             'ResizeObserver',
             class {
+                constructor(callback: () => void) {
+                    resizeCallbacks.push(callback);
+                }
                 observe(): void {
                     /* No layout observer is needed for this toolbar test. */
                 }
                 disconnect(): void {
-                    /* No observer to disconnect. */
+                    disconnect();
                 }
             },
         );
@@ -59,6 +74,7 @@ describe('EOdyssey debug reprojection', () => {
                         mapTileLayer: vi.fn().mockReturnValue({dataConnectorId: 'data', layerId: 'layer'}),
                         catalogueLoading: vi.fn().mockReturnValue(false),
                         appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
+                        appliedViewportPixelBudget: pixelBudget,
                     },
                 },
             ],
@@ -73,8 +89,15 @@ describe('EOdyssey debug reprojection', () => {
             TestBed.inject(DomSanitizer).bypassSecurityTrustHtml('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
         );
         fixture = TestBed.createComponent(MainComponent);
-        // The empty map element stands in for the queried map component during layout setup.
-        vi.spyOn(fixture.componentInstance, 'mapComponent').mockReturnValue({} as MapContainerComponent);
+        mapTarget = document.createElement('div');
+        Object.defineProperties(mapTarget, {
+            clientWidth: {get: (): number => mapWidth},
+            clientHeight: {get: (): number => mapHeight},
+        });
+        mapTargets.set([{nativeElement: mapTarget}]);
+        vi.spyOn(fixture.componentInstance, 'mapComponent').mockReturnValue({
+            mapContainers: mapTargets,
+        } as unknown as MapContainerComponent);
     });
 
     afterEach(() => {
@@ -85,6 +108,37 @@ describe('EOdyssey debug reprojection', () => {
     function tms(): unknown {
         return fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['tmsId'];
     }
+
+    it('computes the viewport cutoff on Apply and resize and passes it to the existing guard', () => {
+        mapTargets.set([]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBeUndefined();
+        pixelBudget.set({
+            version: 1,
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            maxSourcePixels: 80_000_000,
+            matrices: [
+                {id: '0', cellSize: 4000, tileWidth: 128, tileHeight: 128, matrixWidth: 100, matrixHeight: 100, sourcePixels: 8_000_000},
+            ],
+        });
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBe(0);
+        // Projection/layout initialization may supply the rendered map after the main view.
+        mapTargets.set([{nativeElement: mapTarget}]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBeCloseTo(1024, 8);
+        expect(fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['maxViewResolution']).toBeCloseTo(
+            1024,
+            8,
+        );
+        mapWidth = mapHeight = 2000;
+        for (const callback of resizeCallbacks) callback();
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxViewResolution()).toBeCloseTo(512, 8);
+        fixture.destroy();
+        expect(disconnect).toHaveBeenCalled();
+    });
 
     function selectFrontend(): void {
         const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('mat-button-toggle:last-child button');

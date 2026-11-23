@@ -7,6 +7,7 @@ import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
+import {parseViewportPixelBudget} from './viewport-pixel-budget';
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -73,6 +74,7 @@ export class EOdysseyLayerService {
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
+    readonly appliedViewportPixelBudget = computed(() => this.appliedVisualization()?.preset.viewportPixelBudget);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
@@ -317,6 +319,7 @@ export class EOdysseyLayerService {
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
             minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
+            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:viewportPixelBudget')),
         };
     }
 
