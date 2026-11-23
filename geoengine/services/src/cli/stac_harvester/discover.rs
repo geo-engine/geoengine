@@ -407,34 +407,33 @@ fn process_sample_assets(
             }
 
             // the header of a sample file completes the metadata NetCDF assets lack
-            let probe = common::is_netcdf_media_type(asset.r#type.as_deref())
+            let metadata = common::AssetGridMetadata::from_asset_or_item(asset, item, item_epsg);
+            let probe = metadata
+                .needs_header_probe(asset)
                 .then(|| sample_probes.get(asset_key))
                 .flatten();
 
-            let geo_transform = common::geo_transform_from_asset_or_item(asset, item)
+            let geo_transform = metadata
+                .geo_transform
                 .or(probe.map(|probe| probe.geo_transform));
-            let proj_shape = common::proj_shape_from_asset_or_item(asset, item)
+            let proj_shape = metadata
+                .shape
                 .or(probe.map(|probe| (probe.height.get(), probe.width.get())));
 
-            let data_type = common::data_type_from_asset_v1_1_0(asset)
-                .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset))
-                .or(probe.map(|probe| probe.data_type));
+            let data_type = metadata.data_type.or(probe.map(|probe| probe.data_type));
             let Some(data_type) = data_type else {
                 continue;
             };
 
-            let epsg = common::epsg_code_from_asset_or_item(
-                asset,
-                item_epsg,
-                common::StacExtensionMajorVersion::V2,
-            )
-            // dataset keys, names and the `--epsg` filter use EPSG codes
-            .or(probe
-                .and_then(|probe| probe.spatial_reference)
-                .filter(|spatial_reference| {
-                    *spatial_reference.authority() == SpatialReferenceAuthority::Epsg
-                })
-                .map(SpatialReference::code));
+            let epsg = metadata
+                .epsg
+                // dataset keys, names and the `--epsg` filter use EPSG codes
+                .or(probe
+                    .and_then(|probe| probe.spatial_reference)
+                    .filter(|spatial_reference| {
+                        *spatial_reference.authority() == SpatialReferenceAuthority::Epsg
+                    })
+                    .map(SpatialReference::code));
             let Some(epsg) = epsg else {
                 continue;
             };
@@ -936,18 +935,9 @@ async fn probe_netcdf_sample_assets(
     for item in &items_response.items {
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
         for (asset_key, asset) in &item.assets {
-            let lacks_metadata = common::data_type_from_asset_v1_1_0(asset)
-                .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset))
-                .is_none()
-                || common::epsg_code_from_asset_or_item(
-                    asset,
-                    item_epsg,
-                    common::StacExtensionMajorVersion::V2,
-                )
-                .is_none()
-                || common::geo_transform_from_asset_or_item(asset, item).is_none()
-                || common::proj_shape_from_asset_or_item(asset, item).is_none();
-            if common::is_netcdf_media_type(asset.r#type.as_deref()) && lacks_metadata {
+            if common::AssetGridMetadata::from_asset_or_item(asset, item, item_epsg)
+                .needs_header_probe(asset)
+            {
                 sample_hrefs
                     .entry(asset_key.clone())
                     .or_insert_with(|| asset.href.clone());

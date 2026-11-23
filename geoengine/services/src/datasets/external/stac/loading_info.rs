@@ -673,21 +673,15 @@ impl StacMultiBandMetaData {
         files: &mut Vec<(NonZeroU32, TileFile)>,
         unprobed_assets: &mut Vec<UnprobedAsset>,
     ) -> Result<()> {
-        let data_type = common::data_type_from_asset_v1_1_0_fallback(asset);
-        let asset_epsg = common::epsg_code_from_asset_or_item(
-            asset,
-            item.epsg,
-            common::StacExtensionMajorVersion::V2,
-        );
-        let geo_transform = common::geo_transform_from_asset_or_item(asset, item.item);
-        let shape = common::proj_shape_from_asset_or_item(asset, item.item);
+        let metadata = common::AssetGridMetadata::from_asset_or_item(asset, item.item, item.epsg);
+        let common::AssetGridMetadata {
+            data_type,
+            epsg: asset_epsg,
+            geo_transform,
+            shape,
+        } = metadata;
 
-        if common::is_netcdf_media_type(asset.r#type.as_deref())
-            && (data_type.is_none()
-                || asset_epsg.is_none()
-                || geo_transform.is_none()
-                || shape.is_none())
-        {
+        if metadata.needs_header_probe(asset) {
             // complete the missing metadata from the file header, unless the known metadata
             // already excludes the asset from this dataset
             if data_type.is_none_or(|data_type| data_type == self.dataset.data_type)
