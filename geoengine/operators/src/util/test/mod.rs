@@ -15,6 +15,7 @@ use geoengine_datatypes::{
     },
     util::test::assert_eq_two_list_of_tiles_u8,
 };
+use geoengine_expression::ExpressionDependencies;
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -37,7 +38,7 @@ pub fn test_ort_environment() -> OrtEnvironment {
     TEST_ORT_ENVIRONMENT.clone()
 }
 
-/// Compiling the expression dependencies takes a while, but tests create many contexts.
+/// Tests create many contexts, but they can share the compiled expressions.
 /// Only for tests: the server creates one [`ExpressionEnvironment`] per application and passes it on.
 static TEST_EXPRESSION_ENVIRONMENT: LazyLock<ExpressionEnvironment> =
     LazyLock::new(|| ExpressionEnvironment::new(test_expression_cache_config()));
@@ -50,6 +51,7 @@ pub fn test_expression_cache_config() -> ExpressionCacheConfig {
         max_cache_size_in_bytes: 1024 * 1024 * 1024,
         max_concurrent_compilations: const { NonZeroUsize::new(8).expect("8 is not zero") },
         workspace_path: std::env::temp_dir(),
+        dependencies_path: ExpressionDependencies::default_dependencies_dir().to_path_buf(),
     }
 }
 

@@ -13,12 +13,29 @@ pub enum ExpressionExecutionError {
     #[snafu(display("Cannot create workspace for dependencies"))]
     DepsWorkspace { source: std::io::Error },
 
-    #[snafu(display("Cannot build dependencies"))]
-    DepsBuild {
-        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::config::Config`].
-        /// This is a debug print.
-        debug: String,
+    #[snafu(display(
+        "Cannot find the expression dependencies in {}; set `[expression] dependencies_path` to the directory built with this binary",
+        path.display()
+    ))]
+    DepsMissing {
+        source: std::io::Error,
+        path: std::path::PathBuf,
     },
+
+    #[snafu(display(
+        "The expression dependencies in {} were built for another binary (fingerprint {actual} instead of {expected})",
+        path.display()
+    ))]
+    DepsMismatch {
+        path: std::path::PathBuf,
+        expected: String,
+        actual: String,
+    },
+
+    #[snafu(display(
+        "The expressions must be compiled with `{expected}`, with which their dependencies were built, but `rustc -V` returned `{actual}`"
+    ))]
+    RustcMismatch { expected: String, actual: String },
 
     #[snafu(display("Cannot store source code in temporary file"))]
     CannotGenerateSourceCodeFile { source: std::io::Error },

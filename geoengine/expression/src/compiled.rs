@@ -154,6 +154,8 @@ fn compile_file(
 
     let mut command = Command::new("rustc");
     command
+        // the workspace's toolchain file selects the `rustc` that built the dependencies
+        .current_dir(dependencies.workspace_path())
         .args(["--edition", "2024"])
         .args(["--crate-type", "cdylib"])
         .args(["-C", "opt-level=3"])
@@ -193,7 +195,11 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn it_compiles_hello_world() {
-        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
+        let dependencies = ExpressionDependencies::new(
+            &std::env::temp_dir(),
+            ExpressionDependencies::default_dependencies_dir(),
+        )
+        .unwrap();
 
         let source_code = quote! {
             extern crate geo;
@@ -234,7 +240,11 @@ mod tests {
     fn it_compiles_an_expression() {
         use geo::{point, polygon};
 
-        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
+        let dependencies = ExpressionDependencies::new(
+            &std::env::temp_dir(),
+            ExpressionDependencies::default_dependencies_dir(),
+        )
+        .unwrap();
 
         let ast = ExpressionParser::new(
             &[
@@ -279,7 +289,11 @@ mod tests {
 
     #[test]
     fn it_compiles_rust_keywords_aliases_and_shadowed_parameters() {
-        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
+        let dependencies = ExpressionDependencies::new(
+            &std::env::temp_dir(),
+            ExpressionDependencies::default_dependencies_dir(),
+        )
+        .unwrap();
 
         let ast = ExpressionParser::new(
             &[
