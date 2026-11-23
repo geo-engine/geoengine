@@ -796,25 +796,21 @@ impl StacMultiBandMetaData {
             .map(|asset| asset.file_path.clone())
             .collect::<std::collections::BTreeSet<_>>();
 
+        // stops at the first failed probe, without waiting for the others and their retries
         let probes = futures::stream::iter(file_paths)
             .map(|file_path| async move {
-                let probe = self
-                    .asset_prober
+                self.asset_prober
                     .probe(
                         file_path.clone(),
                         self.s3_config.as_ref(),
                         self.cache_ttl_secs,
                     )
-                    .await;
-                (file_path, probe)
+                    .await
+                    .map(|probe| (file_path, probe))
             })
             .buffer_unordered(self.max_concurrent_asset_probes.get())
-            .collect::<std::collections::HashMap<_, _>>()
-            .await;
-        let probes = probes
-            .into_iter()
-            .map(|(file_path, probe)| probe.map(|probe| (file_path, probe)))
-            .collect::<std::result::Result<std::collections::HashMap<_, _>, _>>()
+            .try_collect::<std::collections::HashMap<_, _>>()
+            .await
             .map_err(|error| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(error),
             })?;
