@@ -62,6 +62,8 @@ pub(crate) struct StacQueryCache {
     max_footprint_searches: usize,
     /// the steps with items per search box and chunk, from the aggregation of the calendar
     aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
+    /// the temporal extent of the provider's collection, `None` if it has none
+    collection_time: Cache<(), Option<TimeInterval>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -145,6 +147,22 @@ impl StacQueryCache {
         self.cache.invalidate_all();
         self.cache.run_pending_tasks().await;
         self.aggregations.invalidate_all();
+        self.collection_time.invalidate_all();
+    }
+
+    /// The temporal extent of the collection, fetched once for concurrent callers and kept like a
+    /// search result. A failed fetch (`None`) is not kept, so a later call asks again.
+    pub(crate) async fn get_or_fetch_collection_time(
+        &self,
+        fetch: impl Future<Output = Option<Option<TimeInterval>>>,
+    ) -> Option<TimeInterval> {
+        if !self.stores_results() {
+            return fetch.await.flatten();
+        }
+        self.collection_time
+            .optionally_get_with((), fetch)
+            .await
+            .flatten()
     }
 
     /// A cache of the given size, for tests and benches: the planning values are fixed so that
@@ -165,6 +183,7 @@ impl StacQueryCache {
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
             aggregations: aggregation_cache(1_000, ttl),
+            collection_time: Cache::builder().max_capacity(1).time_to_live(ttl).build(),
         }
     }
 
