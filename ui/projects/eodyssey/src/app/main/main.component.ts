@@ -3,6 +3,8 @@ import {
     ChangeDetectionStrategy,
     Component,
     ElementRef,
+    DestroyRef,
+    afterRenderEffect,
     afterNextRender,
     booleanAttribute,
     computed,
@@ -22,6 +24,7 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
+import {unByKey} from 'ol/Observable';
 import {Layer, LayersService, Time, UserService, UUID} from '@geoengine/common';
 import {
     FootprintsService,
@@ -33,6 +36,7 @@ import {
     TMSId,
     WGS_84,
 } from '@geoengine/core';
+import {mapExtentMaxResolution} from './map-extent';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -106,7 +110,7 @@ export class MainComponent {
         if (onMap) {
             return {
                 ...onMap,
-                minTileMatrixIndex: this.eodysseyLayerService.appliedMinTileMatrixIndex(),
+                maxMapExtent: this.eodysseyLayerService.appliedMaxMapExtent(),
                 isVisible: true,
             };
         }
@@ -115,24 +119,21 @@ export class MainComponent {
             preset && {
                 dataConnectorId: preset.connectorId,
                 layerId: preset.layerId,
-                minTileMatrixIndex: this.eodysseyLayerService.selectedMinTileMatrixIndex(),
+                maxMapExtent: this.eodysseyLayerService.selectedMaxMapExtent(),
                 isVisible: false,
             }
         );
     });
     /** Shared, so the panel can tell why the imagery does not show. */
     readonly zoomRequired = this.eodysseyLayerService.zoomRequired;
-    /**
-     * The coarsest matrix level at which the data availability of a date is shown, also before the tiles load. Measured on CODE-DE for one
-     * date and a cold view with its margin: level 5 needs 12 catalog searches in 1.9 s, level 4 28 in 4.7 s, level 3 48; the server refuses
-     * more than its `max_footprint_searches` (50).
-     */
-    readonly COARSEST_AVAILABILITY_LEVEL = 4;
-    /** Matrix levels before the tiles load at which the data availability is shown. */
-    readonly availabilityLevelsOut = computed(() =>
-        Math.max(0, (this.tileLayer()?.minTileMatrixIndex ?? 0) - this.COARSEST_AVAILABILITY_LEVEL),
+    private readonly mapSize = signal<readonly number[]>([0, 0]);
+    private readonly mapRotation = signal(0);
+    private readonly destroyRef = inject(DestroyRef);
+    /** The exclusive map resolution cutoff shared by imagery and footprint polygons. */
+    readonly maxResolution = computed(() =>
+        mapExtentMaxResolution(this.tileLayer()?.maxMapExtent, this.mapSize(), this.mapRotation()),
     );
-    /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
+    /** Loadability at the raster's exact cutoff, also when the imagery is hidden. */
     readonly tilesLoadable = signal(false);
     /**
      * One notice at the top of the map: why it shows nothing, or that the app moved the date, each with its way out. A bar at
@@ -236,7 +237,9 @@ export class MainComponent {
             );
         });
         // without a limit, the coverage of a date zoomed out would search the catalog over a large area
-        effect(() => this.footprintsService.overlayBlocked.set(!this.tilesLoadable()));
+        effect(() => this.footprintsService.overlayBlocked.set(!this.tileLayer() || !this.tilesLoadable()));
+        // OpenLayers checks this same exclusive cutoff in every frame, including during zoom animations.
+        effect(() => this.footprintsService.overlayLayer.setMaxResolution(this.maxResolution()));
 
         // The step of the selected data source until it is applied, because the project keeps the step of the applied one.
         effect(() => {
@@ -245,6 +248,20 @@ export class MainComponent {
             this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
         });
 
+        afterRenderEffect({
+            read: (onCleanup) => {
+                // The container replaces its placeholder map when the project arrives.
+                // A new view signals that we must observe the current map instance again.
+                const view = this.mapService.view();
+                const map = this.mapComponent().getMap();
+                const updateSize = (): void => this.mapSize.set([...(map.getSize() ?? [0, 0])]);
+                const updateRotation = (): void => this.mapRotation.set(view.getRotation());
+                updateSize();
+                updateRotation();
+                const listeners = [map.on('change:size', updateSize), view.on('change:rotation', updateRotation)];
+                onCleanup(() => unByKey(listeners));
+            },
+        });
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
@@ -263,6 +280,7 @@ export class MainComponent {
                 this.onToolbarResize();
                 const topToolbarObserver = new ResizeObserver(() => this.onToolbarResize());
                 topToolbarObserver.observe(this.topToolbar().nativeElement);
+                this.destroyRef.onDestroy(() => topToolbarObserver.disconnect());
             },
         });
     }

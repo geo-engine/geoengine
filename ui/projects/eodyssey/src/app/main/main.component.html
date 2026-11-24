@@ -115,12 +115,10 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="tileMatrixSet()"
-                        [minTileMatrixIndex]="activeLayer.minTileMatrixIndex"
-                        [minTileMatrixSetId]="'CustomWebMercator'"
+                        [maxResolution]="maxResolution()"
                         [isVisible]="activeLayer.isVisible"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"
-                        [tilesLoadableLevelsOut]="availabilityLevelsOut()"
                         (tilesLoadable)="tilesLoadable.set($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }

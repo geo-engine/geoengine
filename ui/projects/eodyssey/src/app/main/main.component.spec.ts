@@ -7,6 +7,9 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
+import OlMap from 'ol/Map';
+import View from 'ol/View';
+import OlLayerVector from 'ol/layer/Vector';
 import {of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, Mock, vi} from 'vitest';
 import {LayersService, SpatialReference, Time, UserService} from '@geoengine/common';
@@ -26,6 +29,8 @@ import {EOdysseyLayerService} from '../layers/layers.service';
 // Keep the real toolbar and bindings; the map and its HTTP requests are tested in core.
 describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
+    let map: OlMap;
+    let view: View;
 
     beforeEach(async () => {
         vi.stubGlobal(
@@ -34,17 +39,23 @@ describe('EOdyssey debug reprojection', () => {
                 observe(): void {
                     /* No layout observer is needed for this toolbar test. */
                 }
+                unobserve(): void { /* No observer to remove. */ }
                 disconnect(): void {
                     /* No observer to disconnect. */
                 }
             },
         );
+        view = new View({projection: 'EPSG:3857'});
+        map = new OlMap({view});
+        map.setSize([1000, 700]);
+        const activeView = signal(view);
         await TestBed.configureTestingModule({
             imports: [MainComponent],
             providers: [
                 provideRouter([]),
                 {provide: AppConfig, useValue: DEFAULT_CORE_CONFIG},
-                {provide: MapService, useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn()}},
+                {provide: MapService, useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn(), view: activeView,
+                    setView: (next: View): void => activeView.set(next)}},
                 {
                     provide: ProjectService,
                     useValue: {
@@ -67,6 +78,7 @@ describe('EOdyssey debug reprojection', () => {
                     provide: FootprintsService,
                     useValue: {
                         layer: signal(undefined),
+                        overlayLayer: new OlLayerVector(),
                         overlayBlocked: signal(false),
                         timeStepOverride: signal(undefined),
                         overlayVisible: signal(false),
@@ -85,8 +97,8 @@ describe('EOdyssey debug reprojection', () => {
                     useValue: {
                         mapTileLayer: vi.fn().mockReturnValue({dataConnectorId: 'data', layerId: 'layer'}),
                         catalogueLoading: vi.fn().mockReturnValue(false),
-                        appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
-                        selectedMinTileMatrixIndex: vi.fn().mockReturnValue(6),
+                        appliedMaxMapExtent: signal({width: 1000000, height: 1400000}),
+                        selectedMaxMapExtent: signal({width: 500000, height: 700000}),
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
                         appliedDataSource: vi.fn().mockReturnValue(undefined),
@@ -110,10 +122,12 @@ describe('EOdyssey debug reprojection', () => {
         // The empty map element stands in for the queried map component during layout setup.
         vi.spyOn(fixture.componentInstance, 'mapComponent').mockReturnValue({
             dataOverlayLayer: signal(undefined),
+            getMap: (): OlMap => map,
         } as unknown as MapContainerComponent);
     });
 
     afterEach(() => {
+        map.dispose();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
     });
@@ -145,8 +159,7 @@ describe('EOdyssey debug reprojection', () => {
         selectFrontend();
         expect(tms()).toBe('Custom');
         const layerProperties = fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties;
-        expect(layerProperties['minTileMatrixIndex']).toBe(4);
-        expect(layerProperties['minTileMatrixSetId']).toBe('CustomWebMercator');
+        expect(layerProperties['maxResolution']).toBe(1000);
         expect(fixture.componentInstance.spatialReference()?.srsString).toBe('EPSG:3857');
         expect(fixture.componentInstance.mapTileLayer()).toBe(layer);
         expect(fixture.componentInstance.currentTime()).toBe(time);
@@ -154,6 +167,43 @@ describe('EOdyssey debug reprojection', () => {
         (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('mat-button-toggle:first-child button')!.click();
         fixture.detectChanges();
         expect(tms()).toBe('CustomWebMercator');
+    });
+
+    it('updates the resolution cutoff when the map is resized or rotated', () => {
+        fixture.detectChanges();
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxResolution()).toBe(1000);
+        map.setSize([2000, 700]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxResolution()).toBe(500);
+        map.setSize([1000, 700]);
+        view.setRotation(Math.PI / 2);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxResolution()).toBeCloseTo(1400);
+    });
+
+    it('starts observing the real map after asynchronous project initialization replaces the placeholder', async () => {
+        map.setSize(undefined);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.maxResolution()).toBe(0);
+
+        const placeholder = map;
+        view = new View({projection: 'EPSG:3857'});
+        map = new OlMap({view});
+        // The real map can already be laid out before the parent subscribes to it.
+        map.setSize([1000, 700]);
+        TestBed.inject(MapService).setView(view);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.maxResolution()).toBe(1000);
+
+        placeholder.setSize([5000, 5000]);
+        expect(fixture.componentInstance.maxResolution()).toBe(1000);
+        placeholder.dispose();
+        map.setSize([2000, 700]);
+        fixture.detectChanges();
+        expect(fixture.componentInstance.maxResolution()).toBe(500);
     });
 
     it('returns to backend reprojection when debug is removed or false', () => {
@@ -178,7 +228,8 @@ describe('EOdyssey debug reprojection', () => {
         const tileLayer = fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer'));
         expect(tileLayer.properties['dataLayerId']).toBe('preset');
         expect(tileLayer.properties['isVisible']).toBe(false);
-        expect(tileLayer.properties['minTileMatrixIndex']).toBe(6);
+        expect(fixture.componentInstance.maxResolution()).toBe(500);
+        expect(tileLayer.properties['tilesLoadableLevelsOut']).toBeUndefined();
 
         const overlayBlocked = TestBed.inject(FootprintsService).overlayBlocked;
         // until the layer knows its zoom limit
