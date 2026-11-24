@@ -3,7 +3,7 @@
 //! several bands of a tile, and several time steps of a single tile, like a time slider.
 //!
 //! The group `resampling` queries the raster at another resolution, as the server wraps it for a
-//! WMS `GetMap` request (`WrapWithProjectionAndResample`). The resolutions come from the request
+//! WMS `GetMap` request (`AdaptToGrid`). The resolutions come from the request
 //! with non-square pixels of #1436 (0.176° × 0.088° on the 0.1° NDVI): `mixed` is coarser in x and
 //! finer in y, `coarser` and `finer` are the square resolutions of its two axes. The `_tile` cases
 //! query the one output tile that contains 10°E 50°N, so all three return the same number of
