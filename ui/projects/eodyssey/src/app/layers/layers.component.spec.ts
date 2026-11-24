@@ -160,6 +160,7 @@ describe('LayersComponent', () => {
                         dateWithData: vi.fn(),
                         dateBeyondLoaded: vi.fn(),
                         stepsAround: vi.fn().mockReturnValue([]),
+                        selectedOutsideData: signal(undefined),
                         timeRange: signal(undefined),
                         datesReachTimeRange: vi.fn().mockReturnValue(false),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
@@ -351,6 +352,7 @@ describe('LayersComponent', () => {
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
             stepsAround: Mock;
+            selectedOutsideData: WritableSignal<{direction: 1 | -1; step: {time: {start: number; end: number}}} | undefined>;
             isLoading: WritableSignal<boolean>;
             datesStale: WritableSignal<boolean>;
             overlayVisible: WritableSignal<boolean>;
@@ -458,6 +460,24 @@ describe('LayersComponent', () => {
             fixture.detectChanges();
             expect(element.querySelector('.strip-loading')).toBeNull();
             expect(element.querySelector('.strip-stale')).toBeNull();
+        });
+
+        it('says that the data has no date there where the selected one lies after its last date', async () => {
+            const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().selectedOutsideData.set({direction: 1, step: day(2, 'empty')});
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            // the last dates of the data, none of them selected
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip .tick-selected')).toBeNull();
+            expect(element.querySelector('.dates-outside')?.textContent).toContain('The last date of the data is 02.04.2026');
+            expect(element.querySelector('.dates-of')).toBeNull();
         });
 
         it('marks the date of today in the strip', async () => {

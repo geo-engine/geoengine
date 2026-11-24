@@ -353,6 +353,19 @@ export class FootprintsService {
      */
     readonly overlayTooLarge = computed(() => this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false));
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
+    /**
+     * The selected time lies after (1) or before (-1) all time steps of the data, e.g. after switching to a source whose data
+     * ends earlier, with the nearest step there. The dates of a window are those of the data within it, so outside of them
+     * there are none.
+     */
+    readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
+        const steps = this.steps();
+        const time = this.time()?.start.valueOf();
+        if (this.isLoading() || !steps.length || time === undefined) return undefined;
+        if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
+        if (time < steps[0].time.start) return {direction: -1, step: steps[0]};
+        return undefined;
+    });
     readonly hasError = computed(
         () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
     );
@@ -466,10 +479,17 @@ export class FootprintsService {
         return direction === 1 ? steps[steps.length - 1].time.end >= timeRange.end : steps[0].time.start <= timeRange.start;
     }
 
-    /** At most `count` loaded time steps around the selected time, e.g. for a strip of dates. */
+    /**
+     * At most `count` loaded time steps around the selected time, e.g. for a strip of dates. The nearest ones where the
+     * selected time lies outside the dates of the data, see `selectedOutsideData`.
+     */
     stepsAround(count: number): TimeStepFootprint[] {
         const time = this.time();
-        return time ? stepsAround(this.steps(), time.start.valueOf(), count) : [];
+        if (!time) return [];
+        const timeMs = time.start.valueOf();
+        // a part of the dates that loads first may end before the selected time, which the rest then reaches
+        if (this.isLoading() && !stepAt(this.steps(), timeMs)) return [];
+        return stepsAround(this.steps(), timeMs, count);
     }
 
     /** The graph and the metadata of a layer. They do not change while the page is open, so they are asked for once. */

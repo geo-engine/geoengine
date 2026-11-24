@@ -494,6 +494,39 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
+        it('shows the last dates of the data, without one selected, where the selected date lies after them', async () => {
+            answerDates([
+                day(-4, TimeStepFootprintStatus.Data),
+                day(-3, TimeStepFootprintStatus.Empty),
+                day(-2, TimeStepFootprintStatus.Data),
+            ]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.stepsAround(2).map((step) => step.time.start)).toEqual([Date.UTC(2026, 3, -3), Date.UTC(2026, 3, -2)]);
+            expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-2, TimeStepFootprintStatus.Data)});
+        });
+
+        it('shows no dates before the selected one while the part of the dates with it still loads', async () => {
+            let answerRest: (footprints: RasterFootprints) => void = () => undefined;
+            getFootprints.mockImplementation((_id, query) => {
+                if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve(FOOTPRINTS);
+                // the first part, the month the window starts in, ends before the selected date
+                if (getFootprints.mock.calls.length === 1)
+                    return Promise.resolve({...FOOTPRINTS, steps: [day(-2, TimeStepFootprintStatus.Data)]});
+                return new Promise((resolve) => (answerRest = resolve));
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.stepsAround(15)).toEqual([]);
+            expect(service.selectedOutsideData()).toBeUndefined();
+            answerRest({...FOOTPRINTS, steps: [day(1, TimeStepFootprintStatus.Data)]});
+            await settle();
+            expect(service.stepsAround(15)).toHaveLength(2);
+        });
+
         it('finds no date with data beyond the loaded window', async () => {
             answerDates([day(1, TimeStepFootprintStatus.Data)]);
             const service = createService();

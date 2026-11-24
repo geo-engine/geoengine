@@ -145,7 +145,9 @@ function formatDate(timeMs: number): string {
                             <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
                         }
                     </div>
-                    @if (eodysseyLayerService.selectedPreset(); as preset) {
+                    @if (outsideData(); as outside) {
+                        <p class="catalogue-message dates-outside" role="status">{{ outside }}</p>
+                    } @else if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes in this view for {{ preset.displayName }}</p>
                     }
                 }
@@ -731,6 +733,15 @@ export class LayersComponent {
             case undefined:
                 return footprints.overlayLoading() ? {kind: 'unknown', text: 'Checking this view…'} : undefined;
         }
+    });
+
+    /** Why the strip shows no selected date: the data has no dates there, e.g. after switching to a source that ends earlier. */
+    readonly outsideData = computed(() => {
+        const outside = this.footprintsService.selectedOutsideData();
+        if (!outside) return undefined;
+        return outside.direction === 1
+            ? `No data on this date. The last date of the data is ${formatDate(outside.step.time.start)}.`
+            : `No data on this date. The first date of the data is ${formatDate(outside.step.time.start)}.`;
     });
 
     /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
