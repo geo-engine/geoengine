@@ -80,9 +80,7 @@ impl StacClient {
                 .start()
                 .as_date_time()?
                 .to_datetime_string_with_millis(),
-            closed_end(range)
-                .as_date_time()?
-                .to_datetime_string_with_millis(),
+            closed_end(range)?,
         );
         let request = self.get(aggregate_url).query(&[
             ("bbox", format_stac_wgs84_bbox(bbox)),

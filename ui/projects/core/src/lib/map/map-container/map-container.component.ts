@@ -15,6 +15,7 @@ import {
     viewChild,
     viewChildren,
     signal,
+    untracked,
 } from '@angular/core';
 import {toObservable} from '@angular/core/rxjs-interop';
 import {MatGridList, MatGridListModule, MatGridTile} from '@angular/material/grid-list';
@@ -156,20 +157,26 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
             }),
         ];
 
+        // `projection$` emits at once, so a redraw would run inside the effect and track the layers and their
+        // visibility it reads: untracked, so each effect only reruns for what it names
         effect(() => {
             this.basemapService.basemap();
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.backgroundLayerSource = undefined; // reset source to force recreation
-                this.redrawLayers(projection);
-            });
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.backgroundLayerSource = undefined; // reset source to force recreation
+                    this.redrawLayers(projection);
+                }),
+            );
         });
 
         effect(() => {
             this.overlayLayer();
             this.dataOverlayLayer();
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.redrawLayers(projection);
-            });
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.redrawLayers(projection);
+                }),
+            );
         });
 
         // A redraw adds only the visible layers, see `redrawLayers`, so one shown later needs a redraw. A hidden layer
@@ -177,9 +184,11 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
         effect(() => {
             const shown = this.mapLayersRaw().filter((layer) => layer.isVisible());
             if (shown.every((layer) => this.mapLayers.includes(layer))) return;
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.redrawLayers(projection);
-            });
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.redrawLayers(projection);
+                }),
+            );
         });
     }
 

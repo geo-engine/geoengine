@@ -1,4 +1,4 @@
-import {Component, signal, untracked} from '@angular/core';
+import {Component, signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
 import {defaults as defaultInteractions, DoubleClickZoom} from 'ol/interaction';
@@ -86,8 +86,8 @@ describe('MapContainerComponent', () => {
         const redraw = vi.spyOn(MapContainerComponent.prototype as any, 'redrawLayers').mockImplementation(function (
             this: MapContainerComponent,
         ) {
-            // untracked: the redraw must not be what makes the effect follow the visibility
-            this.mapLayers = untracked(() => this.mapLayersRaw().filter((mapLayer) => mapLayer.isVisible()));
+            // read tracked, like the real redraw: the effects must not follow what it reads
+            this.mapLayers = this.mapLayersRaw().filter((mapLayer) => mapLayer.isVisible());
         });
         const fixture = TestBed.createComponent(HostComponent);
         fixture.detectChanges();

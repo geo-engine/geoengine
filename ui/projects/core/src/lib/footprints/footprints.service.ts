@@ -86,6 +86,17 @@ function datesKeyOf(layer: FootprintLayer | undefined, timeStep: TimeStepDuratio
     return `${layer?.key}/${timeStep?.durationAmount} ${timeStep?.durationUnit}`;
 }
 
+/**
+ * Whether the requested `window` reaches `timeMs`. A window loads at least `windowSteps` steps from its start, see the
+ * loader, so one set at a month start reaches past its `end`.
+ */
+function windowReaches(window: TimeInterval, timeStep: TimeStepDuration, timeMs: number): boolean {
+    const minimalEnd = new Time(new Date(window.start))
+        .add(timeStep.durationAmount * windowSteps(timeStep.durationUnit, timeStep.durationAmount), timeStep.durationUnit)
+        .start.valueOf();
+    return window.start <= timeMs && timeMs < Math.max(window.end, minimalEnd);
+}
+
 /** The time `count` steps before `timeMs`. */
 function minusSteps(timeMs: number, timeStep: TimeStepDuration, count: number): number {
     return new Time(new Date(timeMs)).subtract(timeStep.durationAmount * count, timeStep.durationUnit).start.valueOf();
@@ -453,17 +464,24 @@ export class FootprintsService {
         effect(() => this.updateOverlay());
         // while the calendar is closed, the window follows the selected time and the layer with its time step, whose
         // steps around the time differ; the calendar header moves it when open
+        // the layer and time step the window was set for
+        let windowKey: string | undefined;
         effect(() => {
             const time = this.time();
             const timeStep = this.timeStep();
-            this.layer();
+            const key = datesKeyOf(this.layer(), timeStep);
             if (!time || this.calendarOpen() || !this.datesNeeded()) return;
             untracked(() => {
                 // from a month start a few steps before the time, so dates before it are loaded too
                 const before = timeStep ? minusSteps(time.start.valueOf(), timeStep, STEPS_BEFORE_SELECTED) : time.start.valueOf();
                 // a window of steps below a day spans a few days only, so from the month start it would not reach the time
                 const start = isShorterThanDay(timeStep?.durationUnit) ? before : monthStartOfTime(before);
-                if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
+                // the requested window decides, not the dates shown: while a window loads, those of the one before are
+                // kept and may hold the time, e.g. after picking a day of another month while the calendar closes
+                const window = this.window();
+                const reaches = !!window && !!timeStep && key === windowKey && windowReaches(window, timeStep, time.start.valueOf());
+                if (!reaches) this.window.set({start, end: start});
+                windowKey = key;
             });
         });
     }
