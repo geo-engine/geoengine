@@ -130,9 +130,7 @@ export class MainComponent {
     private readonly mapRotation = signal(0);
     private readonly destroyRef = inject(DestroyRef);
     /** The exclusive map resolution cutoff shared by imagery and footprint polygons. */
-    readonly maxResolution = computed(() =>
-        mapExtentMaxResolution(this.tileLayer()?.maxMapExtent, this.mapSize(), this.mapRotation()),
-    );
+    readonly maxResolution = computed(() => mapExtentMaxResolution(this.tileLayer()?.maxMapExtent, this.mapSize(), this.mapRotation()));
     /** Loadability at the raster's exact cutoff, also when the imagery is hidden. */
     readonly tilesLoadable = signal(false);
     /**

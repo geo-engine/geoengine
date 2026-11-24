@@ -7,9 +7,9 @@ import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
+import OlLayerVector from 'ol/layer/Vector';
 import OlMap from 'ol/Map';
 import View from 'ol/View';
-import OlLayerVector from 'ol/layer/Vector';
 import {of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, Mock, vi} from 'vitest';
 import {LayersService, SpatialReference, Time, UserService} from '@geoengine/common';
@@ -39,13 +39,15 @@ describe('EOdyssey debug reprojection', () => {
                 observe(): void {
                     /* No layout observer is needed for this toolbar test. */
                 }
-                unobserve(): void { /* No observer to remove. */ }
+                unobserve(): void {
+                    /* No observer to remove. */
+                }
                 disconnect(): void {
                     /* No observer to disconnect. */
                 }
             },
         );
-        view = new View({projection: 'EPSG:3857'});
+        view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 2000});
         map = new OlMap({view});
         map.setSize([1000, 700]);
         const activeView = signal(view);
@@ -54,8 +56,15 @@ describe('EOdyssey debug reprojection', () => {
             providers: [
                 provideRouter([]),
                 {provide: AppConfig, useValue: DEFAULT_CORE_CONFIG},
-                {provide: MapService, useValue: {registerMapComponent: vi.fn(), zoomTo: vi.fn(), view: activeView,
-                    setView: (next: View): void => activeView.set(next)}},
+                {
+                    provide: MapService,
+                    useValue: {
+                        registerMapComponent: vi.fn(),
+                        zoomTo: vi.fn(),
+                        view: activeView,
+                        setView: (next: View): void => activeView.set(next),
+                    },
+                },
                 {
                     provide: ProjectService,
                     useValue: {
@@ -189,7 +198,7 @@ describe('EOdyssey debug reprojection', () => {
         expect(fixture.componentInstance.maxResolution()).toBe(0);
 
         const placeholder = map;
-        view = new View({projection: 'EPSG:3857'});
+        view = new View({projection: 'EPSG:3857', center: [0, 0], resolution: 2000});
         map = new OlMap({view});
         // The real map can already be laid out before the parent subscribes to it.
         map.setSize([1000, 700]);
@@ -240,6 +249,38 @@ describe('EOdyssey debug reprojection', () => {
         tileLayer.triggerEventHandler('tilesLoadable', false);
         TestBed.tick();
         expect(overlayBlocked()).toBe(true);
+    });
+
+    it('gives imagery and footprint polygons the same exclusive cutoff, including before move end and after resizing', () => {
+        fixture.detectChanges();
+        fixture.detectChanges();
+        const overlay = TestBed.inject(FootprintsService).overlayLayer;
+        const rasterCutoff = (): number =>
+            fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['maxResolution'] as number;
+        expect(overlay.getMaxResolution()).toBe(rasterCutoff());
+        expect(rasterCutoff()).toBe(1000);
+        // No viewport publication is needed: OpenLayers applies the cutoff on each frame.
+        view.setResolution(999);
+        expect(overlay.isVisible(view)).toBe(true);
+        view.setResolution(1000);
+        expect(overlay.isVisible(view)).toBe(false);
+        view.setResolution(1001);
+        expect(overlay.isVisible(view)).toBe(false);
+
+        map.setSize([2000, 700]);
+        fixture.detectChanges();
+        expect(rasterCutoff()).toBe(500);
+        expect(overlay.getMaxResolution()).toBe(rasterCutoff());
+        view.setResolution(499);
+        expect(overlay.isVisible(view)).toBe(true);
+        view.setResolution(500);
+        expect(overlay.isVisible(view)).toBe(false);
+
+        fixture.componentRef.setInput('debug', true);
+        fixture.detectChanges();
+        selectFrontend();
+        expect(overlay.getMaxResolution()).toBe(rasterCutoff());
+        expect(rasterCutoff()).toBe(500);
     });
 
     it('gives the dates no layer of the previous data source while the presets of a new one load', () => {

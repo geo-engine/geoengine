@@ -266,32 +266,47 @@ export class FootprintsService {
         },
     });
 
+    /** The request disappears while zoomed out; temporal availability remains independent. */
+    private readonly overlayRequest = computed(() => {
+        const layer = this.layer();
+        const mapSpatialReference = this.mapSpatialReference();
+        const viewport = this.overlayViewport();
+        const time = this.time();
+        if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
+        return {layer, mapSpatialReference, viewport, time};
+    });
+    private overlayAbortController?: AbortController;
     /** The boxes of the selected time step alone, which the availability of the calendar window does not have. */
     private readonly overlayStepResource = resource({
-        params: () => {
-            const layer = this.layer();
-            const mapSpatialReference = this.mapSpatialReference();
-            const viewport = this.overlayViewport();
-            const time = this.time();
-            if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
-            return {layer, mapSpatialReference, viewport, time};
-        },
+        params: () => this.overlayRequest(),
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
-            const query = await this.queryOf(layer, mapSpatialReference, viewport);
-            if (!query) return undefined;
-            return await footprintsOrTooLarge(
-                this.processingGraphsService.getFootprints(
-                    query.processingGraphId,
-                    {
-                        spatialBounds: query.spatialBounds,
-                        timeInterval: time.asRequestString(),
-                        attributes: '0',
-                        limit: 1,
-                        precision: RasterFootprintsPrecision.Coverage,
-                    },
-                    abortSignal,
-                ),
-            );
+            this.overlayAbortController?.abort();
+            const controller = new AbortController();
+            this.overlayAbortController = controller;
+            const abort = (): void => controller.abort();
+            abortSignal.addEventListener('abort', abort, {once: true});
+            if (abortSignal.aborted) abort();
+            try {
+                const query = await this.queryOf(layer, mapSpatialReference, viewport);
+                controller.signal.throwIfAborted();
+                if (!query) return undefined;
+                return await footprintsOrTooLarge(
+                    this.processingGraphsService.getFootprints(
+                        query.processingGraphId,
+                        {
+                            spatialBounds: query.spatialBounds,
+                            timeInterval: time.asRequestString(),
+                            attributes: '0',
+                            limit: 1,
+                            precision: RasterFootprintsPrecision.Coverage,
+                        },
+                        controller.signal,
+                    ),
+                );
+            } finally {
+                abortSignal.removeEventListener('abort', abort);
+                if (this.overlayAbortController === controller) this.overlayAbortController = undefined;
+            }
         },
     });
 
@@ -483,6 +498,10 @@ export class FootprintsService {
     private overlayShows?: string;
 
     constructor() {
+        // A resource becoming idle discards its result but does not abort the ongoing request.
+        effect(() => {
+            if (!this.overlayRequest()) this.overlayAbortController?.abort();
+        });
         effect(() => this.updateOverlay());
         // while the calendar is closed, the window follows the selected time and the layer with its time step, whose
         // steps around the time differ; the calendar header moves it when open
@@ -634,6 +653,14 @@ export class FootprintsService {
 
     private updateOverlay(): void {
         const source = this.overlayLayer.getSource();
+
+        // A blocked viewport must never keep polygons of the previously allowed view.
+        if (this.overlayBlocked()) {
+            source?.clear();
+            this.overlayLayer.setOpacity(1);
+            this.overlayShows = undefined;
+            return;
+        }
 
         this.overlayStyleCache = undefined;
         // read here, so the boxes are drawn anew when the style changes

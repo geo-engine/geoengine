@@ -228,7 +228,11 @@ describe('LayersComponent', () => {
             optical: [
                 {
                     ...source,
-                    properties: [...(source.properties ?? []), ['edv:citation', 'Source citation'], ['edv:maxMapExtent', '{"width":1000000,"height":1400000}']],
+                    properties: [
+                        ...(source.properties ?? []),
+                        ['edv:citation', 'Source citation'],
+                        ['edv:maxMapExtent', '{"width":1000000,"height":1400000}'],
+                    ],
                 },
             ],
             radar: [
@@ -826,8 +830,8 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
-        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.selectedPreset()).toBeDefined();
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(eodysseyLayerService.selectedPreset()?.layerId);
         expect(eodysseyLayerService.appliedMaxMapExtent()).toBeUndefined();
     });
 
