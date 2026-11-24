@@ -152,7 +152,7 @@ describe('LayersComponent', () => {
                         overlayLight: signal(false),
                         tooLarge: signal(false),
                         hasError: signal(false),
-                        steps: signal([]),
+                        stepsOfSelection: signal([]),
                         calendarStartView: signal('month'),
                         time: signal(undefined),
                         datesNeeded: signal(false),
@@ -364,7 +364,7 @@ describe('LayersComponent', () => {
             selectedDateEmpty: WritableSignal<boolean>;
             timeRange: WritableSignal<{start: number; end: number} | undefined>;
             datesReachTimeRange: Mock;
-            steps: WritableSignal<unknown[]>;
+            stepsOfSelection: WritableSignal<unknown[]>;
             viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
@@ -592,7 +592,7 @@ describe('LayersComponent', () => {
         it('steps on where the loaded dates reach now but the data source cannot tell them', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 10, 20)));
             footprints().datesReachTimeRange.mockReturnValue(true);
-            footprints().steps.set(
+            footprints().stepsOfSelection.set(
                 [19, 20, 21, 22].map((d) => ({time: {start: Date.UTC(2026, 10, d), end: Date.UTC(2026, 10, d + 1)}, status: 'unknown'})),
             );
             const button = (name: string): HTMLButtonElement =>
@@ -604,7 +604,9 @@ describe('LayersComponent', () => {
             expect(button('backwards').disabled).toBe(false);
 
             // the steps after the selected one are known to be empty: there are no later dates
-            footprints().steps.update((steps) => steps.map((step, i) => (i < 2 ? step : {...(step as object), status: 'empty'})));
+            footprints().stepsOfSelection.update((steps) =>
+                steps.map((step, i) => (i < 2 ? step : {...(step as object), status: 'empty'})),
+            );
             fixture.detectChanges();
             expect(button('forward').textContent).toContain('No later dates');
             expect(button('backwards').disabled).toBe(false);

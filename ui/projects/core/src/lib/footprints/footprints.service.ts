@@ -320,6 +320,15 @@ export class FootprintsService {
         },
     });
     readonly steps = computed(() => this.footprints()?.steps ?? []);
+    /**
+     * The loaded steps, where they belong to the selected time: none while the open calendar shows a month without it,
+     * whose dates say nothing about the time. For what is shown next to the date, e.g. a strip and its buttons.
+     */
+    readonly stepsOfSelection = computed(() => {
+        const time = this.time()?.start.valueOf();
+        const steps = this.steps();
+        return this.calendarOpen() && time !== undefined && !stepAt(steps, time) ? [] : steps;
+    });
     /** The dates shown are those of an earlier view, kept while the ones of this view load. */
     readonly datesStale = computed(() => this.footprints() !== undefined && this.footprints() !== this.currentFootprints());
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
@@ -377,7 +386,7 @@ export class FootprintsService {
      * there are none.
      */
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const time = this.time()?.start.valueOf();
         if (this.isLoading() || !steps.length || time === undefined || stepAt(steps, time)) return undefined;
         if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
@@ -467,8 +476,8 @@ export class FootprintsService {
         const time = this.time();
         if (!time) return undefined;
         const now = time.start.valueOf();
-        const currentStart = stepAt(this.steps(), now)?.time.start ?? now;
-        const withData = this.steps().filter(
+        const currentStart = stepAt(this.stepsOfSelection(), now)?.time.start ?? now;
+        const withData = this.stepsOfSelection().filter(
             (step) =>
                 step.status === TimeStepFootprintStatus.Data && (direction === 1 ? step.time.start > now : step.time.start < currentStart),
         );
@@ -481,7 +490,7 @@ export class FootprintsService {
      * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
      */
     dateBeyondLoaded(direction: 1 | -1): Time | undefined {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
         if (this.datesReachTimeRange(direction)) return undefined;
@@ -492,7 +501,7 @@ export class FootprintsService {
 
     /** The loaded dates reach the start of the data (-1) or now (1), so there are no others in that direction, see `timeRange`. */
     datesReachTimeRange(direction: 1 | -1): boolean {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const timeRange = this.timeRange();
         if (!timeRange || !steps.length) return false;
         return direction === 1 ? steps[steps.length - 1].time.end >= timeRange.end : steps[0].time.start <= timeRange.start;
@@ -507,8 +516,8 @@ export class FootprintsService {
         if (!time) return [];
         const timeMs = time.start.valueOf();
         // a part of the dates that loads first may end before the selected time, which the rest then reaches
-        if (this.isLoading() && !stepAt(this.steps(), timeMs)) return [];
-        return stepsAround(this.steps(), timeMs, count);
+        if (this.isLoading() && !stepAt(this.stepsOfSelection(), timeMs)) return [];
+        return stepsAround(this.stepsOfSelection(), timeMs, count);
     }
 
     retryDates(): void {

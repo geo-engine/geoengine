@@ -910,7 +910,7 @@ export class LayersComponent {
         // loaded steps whose dates the data source cannot tell may have data, so they are stepped through
         const now = time.start.valueOf();
         const unknownBeyond = this.footprintsService
-            .steps()
+            .stepsOfSelection()
             .some(
                 (step) =>
                     step.status === TimeStepFootprintStatus.Unknown && (direction === 1 ? step.time.start > now : step.time.end <= now),

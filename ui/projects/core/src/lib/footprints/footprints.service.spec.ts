@@ -533,6 +533,33 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
+        it('tells nothing about the selected date from a month the open calendar shows without it', async () => {
+            // a step with data on every day that is asked for
+            getFootprints.mockImplementation((_id, query) => {
+                if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve(FOOTPRINTS);
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                const days = Array.from({length: Math.round((end - start) / 86_400_000)}, (_, i) => ({
+                    time: {start: start + i * 86_400_000, end: start + (i + 1) * 86_400_000},
+                    status: TimeStepFootprintStatus.Data,
+                    bounds: [],
+                }));
+                return Promise.resolve({...FOOTPRINTS, steps: days});
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.stepsAround(3)).toHaveLength(3);
+
+            // the calendar pages back to a month before the selected date
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2025, 0, 1), 'month');
+            await settle();
+            expect(service.steps().length).toBeGreaterThan(0);
+            expect(service.selectedOutsideData()).toBeUndefined();
+            expect(service.stepsAround(3)).toEqual([]);
+            expect(service.dateWithData(-1)).toBeUndefined();
+        });
+
         it('starts the window of steps below a day shortly before the selected time, not at the month start', async () => {
             const service = createService();
             service.timeStepOverride.set({durationAmount: 1, durationUnit: 'hours'});
