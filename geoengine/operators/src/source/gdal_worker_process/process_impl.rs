@@ -50,21 +50,6 @@ const GDAL_DATA_COVERAGE_STATUS_EMPTY: i32 = 0x04;
 const GDAL_RETRY_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
-/// The retry limits of this process, set once at the start of a worker.
-static WORKER_RETRY_CONFIG: OnceLock<WorkerRetryConfig> = OnceLock::new();
-
-/// Sets the limits for retrying failed GDAL opens and reads in this process. Only the first call
-/// takes effect; without one, the defaults apply.
-pub fn set_worker_retry_config(config: WorkerRetryConfig) {
-    if WORKER_RETRY_CONFIG.set(config).is_err() {
-        tracing::warn!("The GDAL retry limits of this process were already set");
-    }
-}
-
-fn worker_retry_config() -> WorkerRetryConfig {
-    WORKER_RETRY_CONFIG.get().copied().unwrap_or_default()
-}
-
 /// Returns a reference to the cached `gdalsource-process` path.
 /// The detection logic runs exactly once on the very first call.
 fn get_gdalsource_path() -> &'static Path {
@@ -144,7 +129,8 @@ pub struct WorkerConfig {
 
 /// Limits for retrying a failed GDAL open or read in a worker. They apply on top of the number
 /// of retries of a dataset (`GdalDatasetParameters::retry`), and a missing file or a denied
-/// access is never retried. `[gdal_process_pool.worker.retry]` in the settings.
+/// access is never retried. `[gdal_process_pool.worker.retry]` in the settings; a worker passes
+/// them to its [`GdalDatasetHolder`] at start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkerRetryConfig {
@@ -290,12 +276,14 @@ where
     Ok((client_sender, client_reciever))
 }
 
-/// A simple, single-entry cache for an open GDAL dataset tile.
+/// A simple, single-entry cache for an open GDAL dataset tile, together with the limits for
+/// retrying opens and reads of the worker that owns it.
 #[derive(Default)]
 pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
+    retry: WorkerRetryConfig,
 }
 
 struct PrevDatasetOpt {
@@ -303,11 +291,13 @@ struct PrevDatasetOpt {
 }
 
 impl GdalDatasetHolder {
-    pub fn new() -> Self {
+    /// An empty cache whose opens and reads are retried within `retry`.
+    pub fn new(retry: WorkerRetryConfig) -> Self {
         Self {
             params: None,
             dataset: None,
             thread_local: None,
+            retry,
         }
     }
 
@@ -469,16 +459,16 @@ impl GdalHandling {
     }
 
     /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
-    /// open and the read with backoff within the dataset's number of retries and the process'
-    /// [`WorkerRetryConfig`]. Remote paths clear their VSI cache on failure. A missing file or a
-    /// denied access is never retried.
+    /// open and the read with backoff within the dataset's number of retries and the
+    /// [`WorkerRetryConfig`] of `cache`. Remote paths clear their VSI cache on failure. A missing
+    /// file or a denied access is never retried.
     fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
     ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
-        let limits = Self::retry_limits(dataset_params, worker_retry_config());
+        let limits = Self::retry_limits(dataset_params, cache.retry);
         let dp = &dataset_params;
 
         // Wrap both OPEN and READ actions inside the retry loop
@@ -1296,7 +1286,7 @@ mod tests {
             retry: None,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&dataset_params).unwrap();
 
         let reader_payload =
@@ -1433,7 +1423,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
 
         let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,
@@ -1555,7 +1545,7 @@ mod tests {
 
         let start = Instant::now();
         let result = GdalHandling::load_raster_info_with_dataset_retry(
-            &mut GdalDatasetHolder::new(),
+            &mut GdalDatasetHolder::default(),
             &s3_mock_params(&server, "missing.tif"),
         );
 
@@ -1581,7 +1571,7 @@ mod tests {
 
         let start = Instant::now();
         let result = GdalHandling::load_raster_info_with_dataset_retry(
-            &mut GdalDatasetHolder::new(),
+            &mut GdalDatasetHolder::default(),
             &s3_mock_params(&server, "denied.tif"),
         );
 
@@ -1681,7 +1671,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
 
         let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,
@@ -1942,7 +1932,7 @@ mod tests {
             flip_y: true,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let reader_payload = GdalHandling::load_tile_data::<u8>(
@@ -2007,7 +1997,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let GridAndProperties { grid, properties } = GdalHandling::load_tile_data::<u8>(
@@ -2098,7 +2088,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&params).unwrap();
 
         let reader_payload =
@@ -2164,7 +2154,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&params).unwrap();
 
         GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice, None)
@@ -2238,7 +2228,7 @@ mod tests {
             .unwrap();
 
         let info = GdalHandling::load_raster_info_with_dataset_retry(
-            &mut GdalDatasetHolder::new(),
+            &mut GdalDatasetHolder::default(),
             &params,
         )
         .unwrap();
@@ -2247,7 +2237,7 @@ mod tests {
 
     #[test]
     fn it_reads_raster_info_without_pixels() {
-        let mut holder = GdalDatasetHolder::new();
+        let mut holder = GdalDatasetHolder::default();
 
         let info = GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &get_params())
             .expect("the NDVI fixture opens");
@@ -2267,7 +2257,7 @@ mod tests {
         params.file_path = test_data!("raster/netcdf_stac/s3_syn_v10_ndvi.nc").into();
 
         let info = GdalHandling::load_raster_info_with_dataset_retry(
-            &mut GdalDatasetHolder::new(),
+            &mut GdalDatasetHolder::default(),
             &params,
         )
         .expect("the NetCDF fixture opens");
@@ -2355,7 +2345,7 @@ mod tests {
     fn it_reads_the_levels_and_one_level_at_native_size() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
-        let mut holder = GdalDatasetHolder::new();
+        let mut holder = GdalDatasetHolder::default();
 
         let layout =
             GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &params).unwrap();
