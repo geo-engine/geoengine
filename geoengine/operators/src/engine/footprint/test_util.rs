@@ -13,8 +13,8 @@ use futures::TryStreamExt;
 use geoengine_datatypes::{
     primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval, TimeStep},
     raster::{
-        EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
-        RasterTile2D, RenameBands,
+        EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, GridSize,
+        RasterDataType, RasterTile2D, RenameBands,
     },
     spatial_reference::SpatialReference,
     util::test::TestDefault,
@@ -238,23 +238,45 @@ async fn checked_footprints_and_bounds(
         .unwrap();
     assert_ne!(tiles.len(), 0);
 
+    assert_data_within_footprints(&tiles, &footprints);
+
+    (footprints, bounds)
+}
+
+/// Checks that every valid pixel of `tiles` lies in the footprint of its time step: a footprint that is
+/// too tight would silently hide data, also by less than a tile.
+pub(crate) fn assert_data_within_footprints(tiles: &[RasterTile2D<u8>], footprints: &[Footprint]) {
     for tile in tiles.iter().filter(|tile| !tile.is_empty()) {
         let footprint = footprints
             .iter()
             .find(|footprint| footprint.time == tile.time)
             .expect("every time step of the data has a footprint");
-        assert!(
-            footprint
-                .bounds
-                .intersects(&tile.tile_information().global_pixel_bounds()),
-            "tile {:?} at {:?} is outside of {:?}",
-            tile.tile_position,
-            tile.time,
-            footprint.bounds
-        );
+        let upper_left = tile.tile_information().global_upper_left_pixel_idx();
+        let [y_min, x_min] = upper_left.inner();
+        let width = tile.tile_information().tile_size_in_pixels().axis_size_x();
+        let materialized = tile.clone().into_materialized_tile();
+        for (index, _) in materialized
+            .grid_array
+            .validity_mask
+            .data
+            .iter()
+            .enumerate()
+            .filter(|(_, valid)| **valid)
+        {
+            let pixel = [
+                y_min + (index / width) as isize,
+                x_min + (index % width) as isize,
+            ];
+            assert!(
+                footprint
+                    .bounds
+                    .intersects(&GridBoundingBox2D::new_unchecked(pixel, pixel)),
+                "pixel {pixel:?} at {:?} is outside of {:?}",
+                tile.time,
+                footprint.bounds
+            );
+        }
     }
-
-    (footprints, bounds)
 }
 
 /// All tiles of the operator, with footprint skipping off or on.

@@ -973,6 +973,99 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_has_footprints_that_reach_as_far_as_its_neighborhood() {
+        use crate::engine::footprint_test_util::assert_data_within_footprints;
+        use crate::engine::{
+            FootprintPrecision, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
+        };
+        use crate::mock::{MockRasterSource, MockRasterSourceParams};
+        use futures::TryStreamExt as _;
+        use geoengine_datatypes::primitives::CacheHint;
+        use geoengine_datatypes::raster::{EmptyGrid2D, GeoTransform, RasterDataType};
+        use geoengine_datatypes::spatial_reference::SpatialReference;
+
+        // tiles of 6 × 6 pixels in a row, of which the first has data: a neighborhood of 5 × 5
+        // carries it two pixels into the second, where the source has none; one pixel would not
+        // tell, since the boxes of a footprint are grown by one pixel anyway
+        let shape = GridShape2D::new_2d(6, 6);
+        let time = TimeInterval::new_unchecked(0, 5);
+        let data = (0..2)
+            .map(|x| RasterTile2D::<u8> {
+                time,
+                tile_position: [-1, x].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: if x == 0 {
+                    Grid2D::new(shape, vec![1; 36]).unwrap().into()
+                } else {
+                    EmptyGrid2D::new(shape).into()
+                },
+                properties: Default::default(),
+                cache_hint: CacheHint::max_duration(),
+            })
+            .collect();
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_irregular(Some(time)),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new([-6, 0], [-1, 11]).unwrap(),
+                    ),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .typed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = shape;
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [5, 5] },
+                // unlike a sum, it ignores neighbours without data, so data spreads
+                aggregate_function: AggregateFunctionParams::StandardDeviation,
+            },
+            sources: source.into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-6, 0], [-1, 11]).unwrap(),
+            time,
+            BandSelection::first(),
+        );
+
+        let footprints: Vec<_> = processor
+            .footprint_query(query.clone(), FootprintPrecision::Coverage, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let tiles: Vec<RasterTile2D<u8>> = processor
+            .raster_query(query, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        // the data reaches into the second tile
+        assert!(!tiles[1].is_empty());
+        assert_data_within_footprints(&tiles, &footprints);
+    }
+
+    #[tokio::test]
     async fn it_has_footprints_where_its_tiles_read_data() {
         use crate::engine::footprint_test_util::{
             assert_footprints_follow_the_data, one_of_four_tiles_source,
