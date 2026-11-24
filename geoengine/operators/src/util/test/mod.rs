@@ -50,7 +50,7 @@ pub fn test_expression_cache_config() -> ExpressionCacheConfig {
         sweep_interval: Duration::from_secs(30),
         max_cache_size_in_bytes: 1024 * 1024 * 1024,
         max_concurrent_compilations: const { NonZeroUsize::new(8).expect("8 is not zero") },
-        workspace_path: std::env::temp_dir(),
+        workspace_path: ExpressionDependencies::test_workspaces_dir().to_path_buf(),
         dependencies_path: ExpressionDependencies::default_dependencies_dir().to_path_buf(),
     }
 }

@@ -196,7 +196,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn it_compiles_hello_world() {
         let dependencies = ExpressionDependencies::new(
-            &std::env::temp_dir(),
+            ExpressionDependencies::test_workspaces_dir(),
             ExpressionDependencies::default_dependencies_dir(),
         )
         .unwrap();
@@ -241,7 +241,7 @@ mod tests {
         use geo::{point, polygon};
 
         let dependencies = ExpressionDependencies::new(
-            &std::env::temp_dir(),
+            ExpressionDependencies::test_workspaces_dir(),
             ExpressionDependencies::default_dependencies_dir(),
         )
         .unwrap();
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn it_compiles_rust_keywords_aliases_and_shadowed_parameters() {
         let dependencies = ExpressionDependencies::new(
-            &std::env::temp_dir(),
+            ExpressionDependencies::test_workspaces_dir(),
             ExpressionDependencies::default_dependencies_dir(),
         )
         .unwrap();

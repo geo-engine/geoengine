@@ -18,6 +18,8 @@ const RUST_TOOLCHAIN_TOML: &str = std::include_str!("../../rust-toolchain.toml")
 
 /// The libraries built by `build.rs`
 const DEFAULT_DEPENDENCIES_DIR: &str = env!("EXPRESSION_DEPS_DIR");
+/// Next to the dependencies in the build directory
+const TEST_WORKSPACES_DIR: &str = concat!(env!("OUT_DIR"), "/test-workspaces");
 /// Identifies the build of the dependencies, see `build.rs`
 const FINGERPRINT: &str = env!("EXPRESSION_DEPS_FINGERPRINT");
 /// Must match `FINGERPRINT_FILE` in `build.rs`
@@ -50,6 +52,12 @@ impl ExpressionDependencies {
     /// It is in the build directory, so a deployment copies it and passes its path to [`Self::new`].
     pub fn default_dependencies_dir() -> &'static Path {
         Path::new(DEFAULT_DEPENDENCIES_DIR)
+    }
+
+    /// The parent directory for the workspaces of tests.
+    /// It is in the build directory, so tests do not write into the system's temp directory.
+    pub fn test_workspaces_dir() -> &'static Path {
+        Path::new(TEST_WORKSPACES_DIR)
     }
 
     /// Creates the workspace in the `parent` directory, which is created if necessary.
@@ -218,7 +226,7 @@ mod tests {
     #[test]
     fn it_uses_the_prebuilt_dependencies() {
         let deps = ExpressionDependencies::new(
-            &std::env::temp_dir(),
+            ExpressionDependencies::test_workspaces_dir(),
             ExpressionDependencies::default_dependencies_dir(),
         )
         .unwrap();
