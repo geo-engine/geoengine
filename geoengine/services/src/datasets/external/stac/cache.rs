@@ -62,14 +62,19 @@ pub(crate) struct StacQueryCache {
     max_footprint_searches: usize,
     /// the steps with items per search box and chunk, from the aggregation of the calendar
     aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
-    /// the temporal extent of the provider's collection, `None` if it has none
+    /// the temporal extent of the provider's collection, or that asking for it failed
     collection_time: Cache<(), CollectionTime>,
 }
 
-/// The temporal extent of the provider's collection, `None` if it has none, or that asking failed.
+/// What the collection told about its temporal extent. Either way, `None` reaches the provider for
+/// a collection without time, so its datasets have open time bounds.
 #[derive(Clone, Copy, Debug)]
 enum CollectionTime {
+    /// The extent of the collection's answer, `None` if it is open at both ends or a time in it
+    /// cannot be read. Kept for `collection_time_ttl_secs`.
     Known(Option<TimeInterval>),
+    /// The request or its answer failed. Kept only for `collection_time_failure_ttl_secs`, so a
+    /// collection endpoint that fails does not delay every caller; then it is asked again.
     Failed,
 }
 
