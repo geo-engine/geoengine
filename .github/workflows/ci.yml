@@ -221,6 +221,11 @@ jobs:
             strip --strip-debug -o "$RUNNER_TEMP/geoengine-binaries/$bin" "geoengine/target/debug/$bin"
           done
           tar -cf "$RUNNER_TEMP/geoengine-binaries.tar" -C "$RUNNER_TEMP/geoengine-binaries" .
+          # the server reads the dependencies of the expressions from the build directory it was built in,
+          # so add them at their path below `target/debug/`, where the other jobs unpack the binaries
+          DEPS_DIR=$(just backend expression-deps-dir)
+          tar -rf "$RUNNER_TEMP/geoengine-binaries.tar" -C geoengine/target/debug \
+            "$(realpath --relative-to=geoengine/target/debug "$DEPS_DIR")"
       - name: Upload binaries
         id: upload-binaries
         uses: actions/upload-artifact@v7
