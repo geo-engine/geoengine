@@ -114,6 +114,19 @@ describe('footprints', () => {
         expect(stepsAround(days.slice(0, 2), 1, 5)).toHaveLength(2);
     });
 
+    it('finds a step of an instant at its instant', () => {
+        const instant = {time: {start: 5, end: 5}, status: TimeStepFootprintStatus.Data, bounds: []};
+        const after = {time: {start: 5, end: 9}, status: TimeStepFootprintStatus.Empty, bounds: []};
+        expect(stepAt([instant], 5)).toBe(instant);
+        expect(stepAt([instant], 6)).toBeUndefined();
+        expect(stepsAround([instant], 5, 3)).toEqual([instant]);
+        expect(stepAt([after], 5)).toBe(after);
+        // a day with an instant at its start can be picked
+        const midnight = Date.UTC(2026, 3, 1);
+        const day = {time: {start: midnight, end: midnight}, status: TimeStepFootprintStatus.Data, bounds: []};
+        expect(canPickDate([day], new Date(2026, 3, 1))).toBe(true);
+    });
+
     it('knows the month, the year or the page of years the calendar shows', () => {
         // the local fields of a calendar date count
         expect(visiblePeriod(new Date(2026, 2, 15), 'month')).toEqual({start: Date.UTC(2026, 2, 1), end: Date.UTC(2026, 3, 1)});

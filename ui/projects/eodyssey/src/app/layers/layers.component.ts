@@ -9,7 +9,14 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
-import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
+import {
+    CoreModule,
+    FootprintCalendarHeaderComponent,
+    FootprintsService,
+    ProjectService,
+    RasterLegendViewComponent,
+    stepContains,
+} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
@@ -767,7 +774,7 @@ export class LayersComponent {
                 date,
                 label: `${date}: ${scenes}${isToday ? ', today' : ''}`,
                 status: step.status,
-                isSelected: step.time.start <= now && now < step.time.end,
+                isSelected: stepContains(step, now),
                 isToday,
             };
         });
