@@ -2,7 +2,7 @@ import {computed, effect, inject, linkedSignal, resource, ResourceRef, Service, 
 import {unByKey} from 'ol/Observable';
 import {toLonLat} from 'ol/proj';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
-import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
+import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, timeStepDictTotimeStepDuration} from '@geoengine/common';
 import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
@@ -77,6 +77,14 @@ export class EOdysseyLayerService {
     readonly shown = linkedSignal<string | undefined, 'none' | 'preset'>({
         source: () => this.selectedDataSource()?.key,
         computation: () => 'preset',
+    });
+    /**
+     * The date a newly selected data source moved, because the date before lay outside its data: from where, to which time
+     * step start, and in which direction the data ended. Set by the panel, told on the map; another data source forgets it.
+     */
+    readonly dateMoved = linkedSignal<string | undefined, {from: Time; to: number; direction: 1 | -1} | undefined>({
+        source: () => this.selectedDataSource()?.key,
+        computation: () => undefined,
     });
     /** The map shows where the scenes of the date are, alone or over the imagery. Kept when the data source changes. */
     readonly availabilityShown = signal(false);
