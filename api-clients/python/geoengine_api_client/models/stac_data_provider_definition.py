@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.stac_grid import StacGrid
+from geoengine_api_client.models.stac_item_time import StacItemTime
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config
@@ -53,7 +54,9 @@ class StacDataProviderDefinition(BaseModel):
     max_concurrent_cell_searches: Optional[StrictInt] = Field(default=None, description="STAC searches one loading info request runs in parallel; omitted values use 8.", alias="maxConcurrentCellSearches")
     datetime_frequency_aggregation: Optional[StrictBool] = Field(default=None, description="Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the Copernicus Data Space cannot).  If set, the availability of a calendar comes from one aggregation over the view per chunk of time steps, at any zoom, instead of one search per grid cell and page, which is much faster. Days without items are stored as empty for the grid cells inside the view, so their map tiles need no search. Map tiles and the boxes of a date on the map still search. Omitted values do not use it.", alias="datetimeFrequencyAggregation")
     time_bounds: Optional[TimeInterval] = Field(default=None, description="The time of the datasets. Omitted values come from the temporal extent of the collection, so this is only needed where that is missing or wrong. Apps use it to ask no dates before the data starts.", alias="timeBounds")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid", "maxConcurrentCellSearches", "datetimeFrequencyAggregation", "timeBounds"]
+    item_time: Optional[StacItemTime] = Field(default=None, description="Which item time decides the layer time steps an item belongs to; omitted values use `datetime`.", alias="itemTime")
+    max_concurrent_asset_probes: Optional[Annotated[int, Field(le=65535, strict=True, ge=1)]] = Field(default=None, description="Asset file headers one STAC search reads in parallel to complete grid metadata the STAC items lack, as for `NetCDF` assets; omitted values use 8.", alias="maxConcurrentAssetProbes")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid", "maxConcurrentCellSearches", "datetimeFrequencyAggregation", "timeBounds", "itemTime", "maxConcurrentAssetProbes"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -162,6 +165,16 @@ class StacDataProviderDefinition(BaseModel):
         if self.time_bounds is None and "time_bounds" in self.model_fields_set:
             _dict['timeBounds'] = None
 
+        # set to None if item_time (nullable) is None
+        # and model_fields_set contains the field
+        if self.item_time is None and "item_time" in self.model_fields_set:
+            _dict['itemTime'] = None
+
+        # set to None if max_concurrent_asset_probes (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_concurrent_asset_probes is None and "max_concurrent_asset_probes" in self.model_fields_set:
+            _dict['maxConcurrentAssetProbes'] = None
+
         return _dict
 
     @classmethod
@@ -191,7 +204,9 @@ class StacDataProviderDefinition(BaseModel):
             "stacGrid": StacGrid.from_dict(obj["stacGrid"]) if obj.get("stacGrid") is not None else None,
             "maxConcurrentCellSearches": obj.get("maxConcurrentCellSearches"),
             "datetimeFrequencyAggregation": obj.get("datetimeFrequencyAggregation"),
-            "timeBounds": TimeInterval.from_dict(obj["timeBounds"]) if obj.get("timeBounds") is not None else None
+            "timeBounds": TimeInterval.from_dict(obj["timeBounds"]) if obj.get("timeBounds") is not None else None,
+            "itemTime": obj.get("itemTime"),
+            "maxConcurrentAssetProbes": obj.get("maxConcurrentAssetProbes")
         })
         return _obj
 
