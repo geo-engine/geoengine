@@ -317,8 +317,7 @@ export class EOdysseyLayerService {
             key,
             name: dataset.name,
             variants,
-            // read but not applied: selecting a data source keeps the date the user chose
-            defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
+            // no `edv:defaultTime`: selecting a data source keeps the date the user chose
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
             minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),

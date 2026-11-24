@@ -250,7 +250,6 @@ describe('LayersComponent', () => {
             key: 'sentinel',
             citation: 'Source citation',
             minTileMatrixIndex: 5,
-            defaultTime: 1775001600000,
         });
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
         expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');

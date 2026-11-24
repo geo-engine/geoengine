@@ -29,7 +29,6 @@ export interface DataSourceDefinition {
     key: string;
     name: string;
     variants: DataSourceVariant[];
-    defaultTime?: number;
     defaultTimeStep?: TimeStepDuration;
     citation: string;
     /** Conservative source minimum tile matrix index, used when the preset does not specify one. */
