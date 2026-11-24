@@ -48,20 +48,25 @@ impl StacClient {
 }
 
 /// The interval of `[start, end]`, or `None` if both ends are open or a time cannot be read.
+/// The end of a STAC extent is closed and that of a time interval is not, so a given end is one
+/// millisecond later: an item on the end lies within, and an extent of one instant is not empty.
 fn time_bounds([start, end]: &[Option<String>; 2]) -> Option<TimeInterval> {
     if start.is_none() && end.is_none() {
         return None;
     }
-    let instant = |time: &Option<String>, open: TimeInstance| match time {
+    let instant = |time: &Option<String>, open: TimeInstance, shift: i64| match time {
         None => Some(open),
-        Some(time) => {
-            TimeInstance::from_millis(DateTime::parse_from_rfc3339(time).ok()?.timestamp_millis())
-                .ok()
-        }
+        Some(time) => TimeInstance::from_millis(
+            DateTime::parse_from_rfc3339(time)
+                .ok()?
+                .timestamp_millis()
+                .checked_add(shift)?,
+        )
+        .ok(),
     };
     TimeInterval::new(
-        instant(start, TimeInstance::MIN)?,
-        instant(end, TimeInstance::MAX)?,
+        instant(start, TimeInstance::MIN, 0)?,
+        instant(end, TimeInstance::MAX, 1)?,
     )
     .ok()
 }
@@ -90,8 +95,23 @@ mod tests {
                 Some("2019-01-01T00:00:00Z".to_owned())
             ]),
             Some(
-                TimeInterval::new(time("2018-01-01T00:00:00Z"), time("2019-01-01T00:00:00Z"))
-                    .unwrap()
+                TimeInterval::new(
+                    time("2018-01-01T00:00:00Z"),
+                    time("2019-01-01T00:00:00.001Z")
+                )
+                .unwrap()
+            )
+        );
+        // an item on the end lies within, and an extent of one instant is not empty
+        let instant = Some("2020-05-01T00:00:00Z".to_owned());
+        assert_eq!(
+            time_bounds(&[instant.clone(), instant]),
+            Some(
+                TimeInterval::new(
+                    time("2020-05-01T00:00:00Z"),
+                    time("2020-05-01T00:00:00.001Z")
+                )
+                .unwrap()
             )
         );
         assert_eq!(time_bounds(&[None, None]), None);
