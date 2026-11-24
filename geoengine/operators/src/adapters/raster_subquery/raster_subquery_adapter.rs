@@ -96,6 +96,8 @@ enum StateInner<A, B, C, D> {
     },
     ReturnResult {
         result: Option<C>,
+        /// The TTL of the empty tile that is returned without a result.
+        empty_cache_ttl: CacheTtlSeconds,
         time: TimeInterval,
         tile: TileInformation,
         band: u32,
@@ -680,9 +682,25 @@ where
                         time,
                     });
                 }
-                // no query or no source data => produce an empty tile
+                // the source has data there, but not in this time step: empty as long as the footprint holds
+                Ok(Some(raster_query_rect))
+                    if raster_query_rect
+                        .spatial_bounds()
+                        .intersection(this.source_data_bounds)
+                        .is_some() =>
+                {
+                    this.state.set(StateInner::ReturnResult {
+                        result: None,
+                        empty_cache_ttl: *this.current_cache_ttl,
+                        band,
+                        tile,
+                        time,
+                    });
+                }
+                // no query or no source data => an empty tile, which no footprint decided
                 Ok(Some(_) | None) => this.state.set(StateInner::ReturnResult {
                     result: None,
+                    empty_cache_ttl: CacheTtlSeconds::max(),
                     band,
                     tile,
                     time,
@@ -783,6 +801,7 @@ where
                     result_tile.band = band;
                     this.state.set(StateInner::ReturnResult {
                         result: Some(result_tile),
+                        empty_cache_ttl: CacheTtlSeconds::max(),
                         time,
                         tile,
                         band,
@@ -801,17 +820,19 @@ where
         );
         // At this stage we are in ReturnResult state. Either from a running fold or because the tile query rect was not valid.
         // This block uses the check and project pattern as above.
-        let (tile, band, time, result) = if let StateInnerProjection::ReturnResult {
-            result,
-            time,
-            tile,
-            band,
-        } = this.state.as_mut().project()
-        {
-            (*tile, *band, *time, result.take())
-        } else {
-            unreachable!()
-        };
+        let (tile, band, time, result, empty_cache_ttl) =
+            if let StateInnerProjection::ReturnResult {
+                result,
+                empty_cache_ttl,
+                time,
+                tile,
+                band,
+            } = this.state.as_mut().project()
+            {
+                (*tile, *band, *time, result.take(), *empty_cache_ttl)
+            } else {
+                unreachable!()
+            };
         // In the next poll we need to produce a new tile (if nothing else happens)
         this.state.set(StateInner::ProgressTileBand { time });
 
@@ -821,7 +842,7 @@ where
                 tile,
                 band,
                 GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
-                (*this.current_cache_ttl).into(),
+                empty_cache_ttl.into(),
             )
         });
 

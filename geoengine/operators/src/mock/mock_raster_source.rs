@@ -300,13 +300,21 @@ where
                             .intersection(&query.spatial_bounds())
                     });
 
+                // the footprint holds as long as the tiles of its step
+                let cache_ttl = self
+                    .data
+                    .iter()
+                    .filter(|tile| tile.time == time)
+                    .map(|tile| tile.cache_hint.total_ttl_seconds())
+                    .min_by_key(|ttl| ttl.seconds())
+                    .unwrap_or_else(geoengine_datatypes::primitives::CacheTtlSeconds::max);
                 Ok(Footprint {
                     time,
                     bounds: FootprintBounds::from_boxes(
                         boxes,
                         ctx.footprint_boxes_per_step_limit(),
                     ),
-                    cache_ttl: geoengine_datatypes::primitives::CacheTtlSeconds::max(),
+                    cache_ttl,
                 })
             })
             .collect::<Vec<_>>();

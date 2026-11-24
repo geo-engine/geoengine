@@ -908,6 +908,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_caches_only_the_tiles_its_footprint_skipped_as_long_as_the_footprint() {
+        use crate::engine::footprint_test_util::{regular_time, source, tile};
+        use futures::TryStreamExt as _;
+        use geoengine_datatypes::primitives::CacheHint;
+
+        // two tiles of data, whose footprints hold for a minute; the second step has no data
+        let data = [(0, 0, true), (0, 1, false), (5, 0, false), (5, 1, false)]
+            .into_iter()
+            .map(|(start, x, has_data)| RasterTile2D {
+                cache_hint: CacheHint::seconds(60),
+                ..tile(start, x, 0, has_data)
+            })
+            .collect();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        query_ctx.footprint_skipping = true;
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: source(data, 1, regular_time()).into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+
+        // four tiles in a row, of which the last two lie beyond the data of the source
+        let tiles: Vec<RasterTile2D<u8>> = processor
+            .raster_query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new_min_max(-2, -1, 0, 7).unwrap(),
+                    TimeInterval::new_unchecked(0, 10),
+                    BandSelection::first(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let ttl = |start: i64, x: isize| {
+            tiles
+                .iter()
+                .find(|tile| tile.time.start().inner() == start && tile.tile_position.x() == x)
+                .unwrap()
+                .cache_hint
+                .total_ttl_seconds()
+                .seconds()
+        };
+        // skipped because the footprint of the step says so: kept as long as it holds
+        assert!(ttl(5, 0) <= 60);
+        // empty because there is no data of the source at all: no footprint decided that
+        assert!(ttl(0, 2) > 60);
+        assert!(ttl(5, 3) > 60);
+    }
+
+    #[tokio::test]
     async fn it_has_footprints_where_its_tiles_read_data() {
         use crate::engine::footprint_test_util::{
             assert_footprints_follow_the_data, one_of_four_tiles_source,
