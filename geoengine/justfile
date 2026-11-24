@@ -16,10 +16,11 @@ install:
 prefetch-build-downloads attempts="5" backoff="15":
     just common::retry {{ attempts }} {{ backoff }} cargo build --package ort-sys
 
-# Generate OpenAPI specification as JSON file. The file is generated in the current directory.
+# Generate OpenAPI specification as JSON file. The file is generated in the repository root.
+# Set `GEOENGINE_CLI` to the path of a pre-built `geoengine-cli` binary to skip building it, e.g., in CI.
 [group("build")]
 generate-openapi-spec: common::_clear
-    cargo run --bin geoengine-cli -- openapi > ../openapi.json
+    {{ env("GEOENGINE_CLI", "cargo run --bin geoengine-cli --") }} openapi > ../openapi.json
 
 # Run lints. Automatically fix issues where possible with `--fix`.
 [arg('fix', long='fix', value='true', help='Automatically apply fixes where possible.')]

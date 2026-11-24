@@ -672,6 +672,8 @@ pub mod stac_data_provider_definition;
 pub use self::stac_data_provider_definition::StacDataProviderDefinition;
 pub mod stac_grid;
 pub use self::stac_grid::StacGrid;
+pub mod stac_item_time;
+pub use self::stac_item_time::StacItemTime;
 pub mod stac_provider_authentication;
 pub use self::stac_provider_authentication::StacProviderAuthentication;
 pub mod stac_provider_dataset;

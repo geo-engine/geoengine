@@ -82,7 +82,7 @@
             "source-layer": "rivers_lake_centerlines_scale_rank",
             "paint": {
                 "line-color": "rgba(164, 192, 218, 1)",
-                "line-width": ["*", 5, ["get", "strokeweig"]]
+                "line-width": ["*", 5, ["coalesce", ["get", "strokeweig"], 0.1]]
             }
         },
         {
@@ -92,7 +92,7 @@
             "source-layer": "rivers_north_america",
             "paint": {
                 "line-color": "rgba(164, 192, 218, 1)",
-                "line-width": ["*", 5, ["get", "strokeweig"]]
+                "line-width": ["*", 5, ["coalesce", ["get", "strokeweig"], 0.1]]
             }
         },
         {
@@ -102,7 +102,7 @@
             "source-layer": "rivers_europe",
             "paint": {
                 "line-color": "rgba(164, 192, 218, 1)",
-                "line-width": ["*", 5, ["get", "strokeweig"]]
+                "line-width": ["*", 5, ["coalesce", ["get", "strokeweig"], 0.1]]
             }
         },
         {

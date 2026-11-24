@@ -57,6 +57,7 @@ type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHa
 #[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
+    #[snafu(display("{source}"))]
     IpcProcessError {
         source: IpcProcessError,
     },
@@ -329,6 +330,18 @@ pub struct GdalProcessPool {
     in_flight_tiles: DashMap<u64, InFlightRead, BuildHasherDefault<FxHasher>>,
     header_cache: HeaderCache,
     counters: PoolCounters,
+}
+
+/// Lets structs that hold the pool, such as `PostgresDb` and `StacDataProvider` in services,
+/// derive `Debug`. It prints only the request stats: a derived `Debug` would list every read in
+/// flight with its full request and lock each shard of `in_flight_tiles` while formatting, and
+/// the std derive cannot skip fields.
+impl std::fmt::Debug for GdalProcessPool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GdalProcessPool")
+            .field("request_stats", &self.request_stats())
+            .finish_non_exhaustive()
+    }
 }
 
 /// The default of `[gdal_process_pool] header_cache_entries`, for mock contexts and tests.
@@ -1495,6 +1508,8 @@ mod tests {
             data_type: geoengine_datatypes::raster::RasterDataType::U8,
             spatial_reference:
                 geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced,
+            geo_transform: None,
+            no_data_value: None,
             levels: vec![],
         };
 
