@@ -98,6 +98,48 @@ use tokio_postgres::NoTls;
 use tracing::debug;
 use tracing_actix_web::TracingLogger;
 
+/// A GDAL worker pool without workers, for tests that never read through GDAL. It works without a
+/// Tokio runtime; reads through it never finish.
+#[allow(clippy::missing_panics_doc)]
+pub fn gdal_process_pool_without_workers()
+-> Arc<geoengine_operators::source::gdal_worker_process::GdalProcessPool> {
+    use geoengine_operators::source::gdal_worker_process::{
+        DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, WorkerConfig,
+    };
+    // never driven, so the broker of the pool never runs
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    let runtime = RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("a current thread runtime builds")
+    });
+    GdalProcessPool::new_with_tokio_handle(
+        runtime.handle(),
+        0,
+        0,
+        0,
+        DEFAULT_HEADER_CACHE_ENTRIES,
+        WorkerConfig::default(),
+    )
+}
+
+/// A GDAL worker pool with `workers` workers and default settings, for tests that read through
+/// GDAL outside of an application context.
+pub fn gdal_process_pool_with_workers(
+    workers: usize,
+) -> Arc<geoengine_operators::source::gdal_worker_process::GdalProcessPool> {
+    use geoengine_operators::source::gdal_worker_process::{
+        DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, WorkerConfig,
+    };
+    GdalProcessPool::new(
+        workers,
+        workers,
+        workers,
+        DEFAULT_HEADER_CACHE_ENTRIES,
+        WorkerConfig::default(),
+    )
+}
+
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper(
     ctx: &<PostgresContext<NoTls> as ApplicationContext>::SessionContext,

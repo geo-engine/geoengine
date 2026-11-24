@@ -834,6 +834,12 @@ where
         &self.stac_request_registry
     }
 
+    fn gdal_process_pool(
+        &self,
+    ) -> &std::sync::Arc<geoengine_operators::source::gdal_worker_process::GdalProcessPool> {
+        &self.gdal_process_pool
+    }
+
     async fn add_layer_provider(
         &self,
         provider: TypedDataProviderDefinition,
@@ -960,6 +966,7 @@ where
                     session: self.session.clone(),
                     provider_registry: self.provider_registry.clone(),
                     stac_request_registry: self.stac_request_registry.clone(),
+                    gdal_process_pool: self.gdal_process_pool.clone(),
                 };
 
                 async move {

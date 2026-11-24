@@ -13,6 +13,7 @@ import type { StacProviderDataset } from './StacProviderDataset';
 import type { StacGrid } from './StacGrid';
 import type { StacProviderAuthentication } from './StacProviderAuthentication';
 import type { TimeDimension } from './TimeDimension';
+import type { StacItemTime } from './StacItemTime';
 /**
  *
  * @export
@@ -83,6 +84,16 @@ export interface StacDataProviderDefinition {
      * STAC searches one loading info request runs in parallel; omitted values use 8.
      */
     maxConcurrentCellSearches?: number | null;
+    /**
+     * Which item time decides the layer time steps an item belongs to; omitted values use
+     * `datetime`.
+     */
+    itemTime?: StacItemTime | null;
+    /**
+     * Asset file headers one STAC search reads in parallel to complete grid metadata the STAC
+     * items lack, as for `NetCDF` assets; omitted values use 8.
+     */
+    maxConcurrentAssetProbes?: number | null;
 }
 /**
  * @export

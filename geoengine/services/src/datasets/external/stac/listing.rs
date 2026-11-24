@@ -506,7 +506,7 @@ mod tests {
     use geoengine_operators::engine::SpatialGridDescriptor;
 
     fn sample_provider() -> StacDataProvider {
-        StacDataProvider::from_definition(StacDataProviderDefinition {
+        let definition = StacDataProviderDefinition {
             id: DataProviderId::new(),
             name: "Sentinel 2 L2A from STAC".to_owned(),
             description: String::new(),
@@ -539,12 +539,18 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
-        })
+            item_time: None,
+            max_concurrent_asset_probes: None,
+        };
+        StacDataProvider::from_definition(
+            definition,
+            crate::util::tests::gdal_process_pool_without_workers(),
+        )
         .unwrap()
     }
 
     fn sample_provider_with_projection_variants() -> StacDataProvider {
-        StacDataProvider::from_definition(StacDataProviderDefinition {
+        let definition = StacDataProviderDefinition {
             id: DataProviderId::new(),
             name: "Sentinel 2 L2A from STAC".to_owned(),
             description: String::new(),
@@ -614,7 +620,13 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
-        })
+            item_time: None,
+            max_concurrent_asset_probes: None,
+        };
+        StacDataProvider::from_definition(
+            definition,
+            crate::util::tests::gdal_process_pool_without_workers(),
+        )
         .unwrap()
     }
 
