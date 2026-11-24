@@ -5,11 +5,15 @@ _default:
 
 # Install dependencies such as llvm-cov.
 [group("install")]
-install:
-    cargo install --locked cargo-llvm-cov
+install: install-llvm-cov
     cargo install --locked cargo-edit
     cargo install --locked git-cliff
     cargo install --locked request-logging-proxy
+
+# Install only cargo-llvm-cov, which the tests with code coverage need.
+[group("install")]
+install-llvm-cov:
+    cargo install --locked cargo-llvm-cov
 
 # Run the build scripts that download files, with retries, since they try only once. `ort-sys` stores the ONNX Runtime binaries in `~/.cache/ort.pyke.io` (or `$ORT_CACHE_DIR`) and skips the download if they are there.
 [group("install")]
