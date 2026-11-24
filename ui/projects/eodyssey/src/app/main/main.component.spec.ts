@@ -51,6 +51,7 @@ describe('EOdyssey debug reprojection', () => {
                         getSpatialReferenceStream: vi.fn().mockReturnValue(of(new SpatialReference('EPSG:3857'))),
                         getSpatialReferenceOnce: vi.fn().mockReturnValue(of(new SpatialReference('EPSG:3857'))),
                         getTimeStream: vi.fn().mockReturnValue(of(new Time(new Date('2026-04-01T00:00:00Z')))),
+                        setTime: vi.fn().mockResolvedValue(undefined),
                     },
                 },
                 {
@@ -72,6 +73,11 @@ describe('EOdyssey debug reprojection', () => {
                         overlayTooLarge: signal(false),
                         selectedDateEmpty: signal(false),
                         overlayLoading: signal(false),
+                        selectedOutsideData: signal(undefined),
+                        datesStale: signal(false),
+                        timeStep: signal({durationAmount: 1, durationUnit: 'day'}),
+                        time: signal(new Time(Date.UTC(2026, 3, 10))),
+                        dateWithData: vi.fn(),
                     },
                 },
                 {
@@ -83,6 +89,7 @@ describe('EOdyssey debug reprojection', () => {
                         selectedMinTileMatrixIndex: vi.fn().mockReturnValue(6),
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
+                        appliedDataSource: vi.fn().mockReturnValue(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
                         zoomRequired: signal(false),
                     },
@@ -183,6 +190,15 @@ describe('EOdyssey debug reprojection', () => {
         expect(overlayBlocked()).toBe(true);
     });
 
+    it('gives the dates no layer of the previous data source while the presets of a new one load', () => {
+        const layers = TestBed.inject(EOdysseyLayerService) as unknown as {appliedDataSource: Mock; selectedDataSource: Mock};
+        // the map still shows the previous source, the new one has no preset yet
+        layers.appliedDataSource.mockReturnValue({key: 'previous'});
+        layers.selectedDataSource.mockReturnValue({key: 'new'});
+        fixture.detectChanges();
+        expect(TestBed.inject(FootprintsService).layer()).toBeUndefined();
+    });
+
     it('asks to zoom in on the map when the boxes of the coverage need too many catalog searches', () => {
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
@@ -210,6 +226,30 @@ describe('EOdyssey debug reprojection', () => {
 
         expect(isVisible()).toBe(true);
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
+    });
+
+    it('offers the nearest date with scenes where the date has none in the view, or the nearest date of the data', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const footprints = TestBed.inject(FootprintsService) as unknown as {
+            selectedDateEmpty: WritableSignal<boolean>;
+            selectedOutsideData: WritableSignal<unknown>;
+            dateWithData: Mock;
+        };
+        footprints.dateWithData.mockImplementation((direction: number) =>
+            direction === 1 ? new Time(Date.UTC(2026, 3, 13)) : new Time(Date.UTC(2026, 3, 8)),
+        );
+        footprints.selectedDateEmpty.set(true);
+        fixture.detectChanges();
+        const action = (): HTMLButtonElement | null => element.querySelector('.zoom-prompt .prompt-action');
+        expect(action()?.textContent).toContain('Show 08.04.2026');
+        action()?.click();
+        expect((TestBed.inject(ProjectService) as unknown as {setTime: Mock}).setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 8)));
+
+        footprints.selectedOutsideData.set({direction: 1, step: {time: {start: Date.UTC(2025, 11, 31), end: Date.UTC(2026, 0, 1)}}});
+        fixture.detectChanges();
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No data after 31.12.2025');
+        expect(action()?.textContent).toContain('Show 31.12.2025');
     });
 
     it('shows that it loads while the boxes of the date load, also before the tiles of the layer load', () => {

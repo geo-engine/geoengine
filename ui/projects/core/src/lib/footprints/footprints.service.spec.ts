@@ -422,6 +422,28 @@ describe('FootprintsService overlay', () => {
             expect(service.dateFilter(new Date(2026, 3, 11))).toBe(false);
         });
 
+        it('loads the last dates of data that ends before the selected date, so it can tell the nearest', async () => {
+            // the selected date is 1 April 2026, the data ends with 2025
+            dataTime = new Time(Date.UTC(2020, 0, 1), Date.UTC(2026, 0, 1));
+            getFootprints.mockImplementation(answerDays(100));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.steps().at(-1)?.time).toEqual({start: Date.UTC(2025, 11, 31), end: Date.UTC(2026, 0, 1)});
+            expect(service.selectedOutsideData()).toMatchObject({direction: 1, step: {time: {start: Date.UTC(2025, 11, 31)}}});
+        });
+
+        it('loads the first dates of data that starts after the selected date, so it can tell the nearest', async () => {
+            dataTime = new Time(Date.UTC(2026, 5, 1), Date.UTC(2030, 0, 1));
+            vi.setSystemTime(Date.UTC(2026, 8, 1));
+            getFootprints.mockImplementation(answerDays(100));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.steps()[0]?.time.start).toBe(Date.UTC(2026, 5, 1));
+            expect(service.selectedOutsideData()).toMatchObject({direction: -1, step: {time: {start: Date.UTC(2026, 5, 1)}}});
+        });
+
         it('asks for a window of 36 months of monthly data, not 100 steps', async () => {
             // now far after the window, so it does not end the window
             vi.setSystemTime(Date.UTC(2035, 0, 1));

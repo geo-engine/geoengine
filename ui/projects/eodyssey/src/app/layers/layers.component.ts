@@ -1,5 +1,5 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, resource, untracked} from '@angular/core';
+import {ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, linkedSignal, resource, untracked} from '@angular/core';
 import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatListModule} from '@angular/material/list';
@@ -24,8 +24,12 @@ import {EOdysseyLayerService} from './layers.service';
 /** The dates the strip below the date shows. */
 const STRIP_DATES = 15;
 
-function formatDate(timeMs: number): string {
-    return new Time(timeMs).start.format('DD.MM.YYYY');
+/** A date as precise as the time step of the data, e.g. "2024" for yearly data. Days without a time step. */
+export function formatDate(timeMs: number, unit?: string): string {
+    const formats: Record<string, string> = {year: 'YYYY', month: 'MM.YYYY', hour: 'DD.MM.YYYY HH:mm', minute: 'DD.MM.YYYY HH:mm'};
+    const singular = unit?.replace(/s$/, '');
+    const format = singular === 'second' || singular === 'millisecond' ? 'DD.MM.YYYY HH:mm:ss' : formats[singular ?? ''];
+    return new Time(timeMs).start.format(format ?? 'DD.MM.YYYY');
 }
 
 @Component({
@@ -155,7 +159,12 @@ function formatDate(timeMs: number): string {
                             <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
                         }
                     </div>
-                    @if (outsideData(); as outside) {
+                    @if (movedNote(); as moved) {
+                        <p class="catalogue-message dates-moved" role="status">
+                            {{ moved.text }}
+                            <button mat-button type="button" class="move-back" (click)="moveBack()">Back to {{ moved.back }}</button>
+                        </p>
+                    } @else if (outsideData(); as outside) {
                         <p class="catalogue-message dates-outside" role="status">{{ outside }}</p>
                     } @else if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes in this view for {{ preset.displayName }}</p>
@@ -239,6 +248,7 @@ function formatDate(timeMs: number): string {
                         [attr.aria-current]="preset === shownPreset() ? 'true' : null"
                         (click)="show(preset.key)"
                         [matTooltip]="preset.displayName"
+                        matTooltipPosition="right"
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
                         <span matListItemTitle>{{ preset.displayName }}</span>
@@ -714,7 +724,7 @@ export class LayersComponent {
     readonly currentTime = this.footprintsService.time;
     readonly formattedTime = computed<string>(() => {
         const time = this.currentTime();
-        return time ? formatDate(time.start.valueOf()) : '';
+        return time ? this.formatStep(time.start.valueOf()) : '';
     });
     /** The selected time as the date of the calendar. */
     readonly currentDate = computed<Date | undefined>(() => {
@@ -753,13 +763,46 @@ export class LayersComponent {
         }
     });
 
+    /**
+     * A newly selected data source moves a date outside of its data to its nearest date, once its dates are known, unless
+     * the date was changed meanwhile. Holds the time at the selection, undefined once done.
+     */
+    private readonly moveToDataPending = linkedSignal<string | undefined, {time?: number; silently: boolean} | undefined>({
+        source: () => this.eodysseyLayerService.selectedDataSource()?.key,
+        computation: (key, previous) =>
+            key === undefined
+                ? undefined
+                : // the first data source moves the start date without a note, since the user chose neither
+                  {time: untracked(this.currentTime)?.start.valueOf(), silently: previous?.source === undefined},
+    });
+    /** Where the date was moved from and to, see `moveToDataPending`. */
+    private readonly moved = linkedSignal<string | undefined, {from: Time; to: number; direction: 1 | -1} | undefined>({
+        source: () => this.eodysseyLayerService.selectedDataSource()?.key,
+        computation: () => undefined,
+    });
+    /** Says why the date moved and offers the date before, while the moved date is selected. */
+    readonly movedNote = computed(() => {
+        const moved = this.moved();
+        if (!moved || this.currentTime()?.start.valueOf() !== moved.to) return undefined;
+        const name = this.eodysseyLayerService.selectedDataSource()?.name ?? 'This data source';
+        const date = this.formatStep(moved.to);
+        return {
+            text:
+                moved.direction === 1
+                    ? `${name} has no data after ${date}, so the date moved there.`
+                    : `${name} has no data before ${date}, so the date moved there.`,
+            // the date the user had, of the previous source's time step, so as a day
+            back: formatDate(moved.from.start.valueOf()),
+        };
+    });
+
     /** Why the strip shows no selected date: the data has no dates there, e.g. after switching to a source that ends earlier. */
     readonly outsideData = computed(() => {
         const outside = this.footprintsService.selectedOutsideData();
         if (!outside) return undefined;
         return outside.direction === 1
-            ? `No data on this date. The last date of the data is ${formatDate(outside.step.time.start)}.`
-            : `No data on this date. The first date of the data is ${formatDate(outside.step.time.start)}.`;
+            ? `No data on this date. The last date of the data is ${this.formatStep(outside.step.time.start)}.`
+            : `No data on this date. The first date of the data is ${this.formatStep(outside.step.time.start)}.`;
     });
 
     /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
@@ -768,7 +811,7 @@ export class LayersComponent {
         // read once per change of the strip; a page left open past midnight moves it with the next change
         const today = Date.now();
         return this.footprintsService.stepsAround(STRIP_DATES).map((step) => {
-            const date = formatDate(step.time.start);
+            const date = this.formatStep(step.time.start);
             const scenes = {data: 'scenes', empty: 'no scenes', unknown: 'not known'}[step.status];
             const isToday = step.time.start <= today && today < step.time.end;
             return {
@@ -853,6 +896,33 @@ export class LayersComponent {
                 untracked(() => this.applySelectedPreset());
             }
         });
+        effect(() => {
+            const pending = this.moveToDataPending();
+            const footprints = this.footprintsService;
+            const time = this.currentTime();
+            // the dates of the new source: no layer is set while its presets load, see `MainComponent`
+            if (!pending || !time || !footprints.layer() || footprints.isLoading() || !footprints.stepsOfSelection().length) return;
+            const outside = footprints.selectedOutsideData();
+            untracked(() => {
+                this.moveToDataPending.set(undefined);
+                if (!outside || (pending.time !== undefined && pending.time !== time.start.valueOf())) return;
+                if (!pending.silently) this.moved.set({from: time, to: outside.step.time.start, direction: outside.direction});
+                void this.projectService.setTime(new Time(outside.step.time.start));
+            });
+        });
+    }
+
+    /** A date as precise as the time step of the data. */
+    private formatStep(timeMs: number): string {
+        return formatDate(timeMs, this.footprintsService.timeStep()?.durationUnit);
+    }
+
+    /** Selects the date again that the new data source moved, see `movedNote`. */
+    async moveBack(): Promise<void> {
+        const moved = this.moved();
+        if (!moved) return;
+        this.moved.set(undefined);
+        await this.projectService.setTime(moved.from);
     }
 
     /** Shows a preset, or no imagery. Then the default preset is selected, whose dates and availability the panel names. */
@@ -892,9 +962,15 @@ export class LayersComponent {
         const time = this.currentTime();
         const timeStep = this.footprintsService.timeStep();
         if (!time || !timeStep) return undefined;
+        // the presets, the metadata or the dates of a newly selected source load: until then there is nothing to go to
+        const footprints = this.footprintsService;
+        const datesPending =
+            !!footprints.layer() &&
+            (footprints.timeRange() === undefined || (footprints.isLoading() && footprints.stepsOfSelection().length === 0));
+        if (this.eodysseyLayerService.variantLoading() || datesPending) return {label: direction === 1 ? 'Later' : 'Earlier'};
 
         const withData = this.footprintsService.dateWithData(direction);
-        if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
+        if (withData) return {time: withData, label: this.formatStep(withData.start.valueOf())};
         const beyond = this.footprintsService.dateBeyondLoaded(direction);
         // the direction, since the date beyond the loaded ones is not known to have scenes
         if (beyond) return {time: beyond, label: direction === 1 ? 'Later' : 'Earlier'};

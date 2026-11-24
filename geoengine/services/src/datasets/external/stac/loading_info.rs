@@ -383,7 +383,10 @@ impl StacMultiBandMetaData {
 
         let mut known = KnownSteps::new();
         if query.detail.is_for_footprints() {
-            if one_step_request {
+            // Items with a time range are matched against the step a search asks for, so a search
+            // over several steps cannot tell them apart; such items are searched step by step, like
+            // a request of one step.
+            if one_step_request || self.item_time == StacItemTime::Range {
                 // the hits counted here are the ones used, even if the cache drops them meanwhile
                 known = self.cached_steps(&time_steps, &cell_bboxes).await;
                 self.reject_too_many_searches(
@@ -578,7 +581,7 @@ impl StacMultiBandMetaData {
     /// needs too many searches, and returns what is known of each cell and step. It also fills the
     /// cache for later requests.
     ///
-    /// Not called for a request of one time step. That has no window to prepare: it runs the
+    /// Not called for a request of one time step, nor for items with a time range. That has no window to prepare: it runs the
     /// searches the map tiles of that step run, with the same cache entries. It is only limited
     /// by the searches it still needs, see `cached_steps`.
     async fn prepare_window_search(
@@ -589,9 +592,7 @@ impl StacMultiBandMetaData {
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
         for_display: bool,
     ) -> geoengine_operators::util::Result<KnownSteps> {
-        // Items with a time range are matched against the step a search asks for, so a search over
-        // several steps cannot tell them apart; such items are searched step by step.
-        if !self.query_cache.stores_results() || self.item_time == StacItemTime::Range {
+        if !self.query_cache.stores_results() {
             // Without a cache the loading info searches every step of every cell, one by one.
             // These are the searches the limit has to count.
             self.reject_too_many_searches(number_of_steps * cell_bboxes.len(), for_display)?;
@@ -4403,6 +4404,59 @@ mod grid_request_tests {
         provider.item_time = StacItemTime::Range;
         let meta = metadata(&provider, 0).await;
 
+        let info = meta
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 1);
+        assert_eq!(starts.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn it_counts_only_the_missing_searches_of_items_with_a_time_range() {
+        let server = Server::run();
+        let starts = new_starts();
+        let bbox = "0.00000,0.00000,1.00000,1.00000";
+        let mut composite = item("composite", 0.);
+        composite["properties"] = json!({
+            "datetime": null,
+            "start_datetime": "2026-01-03T00:00:00Z",
+            "end_datetime": "2026-01-04T23:59:59Z",
+        });
+        for day in [
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+        ] {
+            expect_search_at(
+                &server,
+                bbox,
+                day,
+                vec![composite.clone()],
+                Duration::ZERO,
+                starts.clone(),
+            );
+        }
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.item_time = StacItemTime::Range;
+        provider.query_cache = Arc::new(
+            StacQueryCache::new(1024 * 1024, Duration::from_mins(1)).with_max_footprint_searches(1),
+        );
+        let meta = metadata(&provider, 0).await;
+        // the map loads both days, one search each, which fills the cache
+        for day in [3, 4] {
+            meta.first_part(query(bounds(0.1, 0.4), interval(day)))
+                .await
+                .unwrap();
+        }
+
+        // both steps are cached, so the window needs no search and stays within the limit
         let info = meta
             .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
             .await

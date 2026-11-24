@@ -55,9 +55,6 @@ pub(crate) fn result_bytes(result: &[StacTileFile]) -> usize {
 /// `PartialEq` comparisons, including fields containing floating-point data.
 pub(crate) struct StacQueryCache {
     cache: Cache<Key, Arc<Vec<StacTileFile>>>,
-    /// Distinguishes the datasets of this cache from those of other providers sharing `cache` and
-    /// `aggregations`, see [`StacQueryCache::dataset_id`].
-    owner: u64,
     datasets: Mutex<Vec<StacProviderDataset>>,
     max_bytes: usize,
     ttl: Duration,
@@ -155,70 +152,7 @@ fn aggregation_cache(entries: u64, ttl: Duration) -> Cache<AggregationKey, Arc<V
     Cache::builder()
         .max_capacity(entries)
         .time_to_live(ttl)
-        // a provider clears only its own entries
-        .support_invalidation_closures()
         .build()
-}
-
-fn result_cache(max_bytes: usize, ttl: Duration) -> Cache<Key, Arc<Vec<StacTileFile>>> {
-    Cache::builder()
-        .max_capacity(max_bytes as u64)
-        .time_to_live(ttl)
-        .weigher(|_key: &Key, result: &Arc<Vec<StacTileFile>>| {
-            u32::try_from(result_bytes(result.as_slice())).unwrap_or(u32::MAX)
-        })
-        .support_invalidation_closures()
-        .build()
-}
-
-/// The search results and aggregations of all STAC providers of a context, so that the limits of
-/// `[stac_cache]` hold in total and not per provider.
-#[derive(Clone)]
-pub(crate) struct SharedStacCaches {
-    cache: Cache<Key, Arc<Vec<StacTileFile>>>,
-    aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
-    next_owner: Arc<std::sync::atomic::AtomicU64>,
-}
-
-impl std::fmt::Debug for SharedStacCaches {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("SharedStacCaches")
-            .finish_non_exhaustive()
-    }
-}
-
-impl SharedStacCaches {
-    pub(crate) fn new(config: &StacCache) -> Self {
-        let ttl = Duration::from_secs(config.ttl_secs);
-        Self {
-            cache: result_cache(config.size_in_mb * 1024 * 1024, ttl),
-            aggregations: aggregation_cache(config.max_aggregations, ttl),
-            next_owner: Arc::default(),
-        }
-    }
-
-    /// The query cache of a new provider, which shares the results and aggregations with the
-    /// others but keeps them apart by its datasets.
-    pub(crate) fn query_cache(&self, config: &StacCache) -> StacQueryCache {
-        let ttl = Duration::from_secs(config.ttl_secs);
-        StacQueryCache {
-            cache: self.cache.clone(),
-            owner: self
-                .next_owner
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            datasets: Mutex::new(Vec::new()),
-            max_bytes: config.size_in_mb * 1024 * 1024,
-            ttl,
-            search_chunk_steps: config.search_chunk_steps,
-            max_footprint_searches: config.max_footprint_searches,
-            aggregations: self.aggregations.clone(),
-            collection_time: collection_time_cache(
-                Duration::from_secs(config.collection_time_ttl_secs),
-                Duration::from_secs(config.collection_time_failure_ttl_secs),
-            ),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -230,10 +164,24 @@ enum InitError {
 }
 
 impl StacQueryCache {
-    /// A cache of its own configured by `[stac_cache]`. The providers of a context share theirs,
-    /// see [`SharedStacCaches`].
+    /// A cache configured by `[stac_cache]`, which the context reads.
     pub(crate) fn from_config(config: &StacCache) -> Self {
-        SharedStacCaches::new(config).query_cache(config)
+        Self {
+            search_chunk_steps: config.search_chunk_steps,
+            max_footprint_searches: config.max_footprint_searches,
+            aggregations: aggregation_cache(
+                config.max_aggregations,
+                Duration::from_secs(config.ttl_secs),
+            ),
+            collection_time: collection_time_cache(
+                Duration::from_secs(config.collection_time_ttl_secs),
+                Duration::from_secs(config.collection_time_failure_ttl_secs),
+            ),
+            ..Self::new(
+                config.size_in_mb * 1024 * 1024,
+                Duration::from_secs(config.ttl_secs),
+            )
+        }
     }
 
     /// A cache for use without a context, e.g. in the harvester, configured by `[stac_cache]` of
@@ -244,18 +192,10 @@ impl StacQueryCache {
         Self::from_config(&config)
     }
 
-    /// Clears the entries of this provider, not those of the others sharing the caches.
     pub(crate) async fn clear(&self) {
-        let owner = self.owner;
-        // the caches are built with `support_invalidation_closures`
-        let _ = self
-            .cache
-            .invalidate_entries_if(move |key, _| key.dataset_id >> 32 == owner);
-        let _ = self
-            .aggregations
-            .invalidate_entries_if(move |key, _| key.dataset_id >> 32 == owner);
+        self.cache.invalidate_all();
         self.cache.run_pending_tasks().await;
-        self.aggregations.run_pending_tasks().await;
+        self.aggregations.invalidate_all();
         self.collection_time.invalidate_all();
     }
 
@@ -289,9 +229,15 @@ impl StacQueryCache {
     /// A cache of the given size, for tests and benches: the planning values are fixed so that
     /// they do not change with the settings. The server uses [`Self::from_config`].
     pub(crate) fn new(max_bytes: usize, ttl: Duration) -> Self {
+        let cache = Cache::builder()
+            .max_capacity(max_bytes as u64)
+            .time_to_live(ttl)
+            .weigher(|_key: &Key, result: &Arc<Vec<StacTileFile>>| {
+                u32::try_from(result_bytes(result.as_slice())).unwrap_or(u32::MAX)
+            })
+            .build();
         Self {
-            cache: result_cache(max_bytes, ttl),
-            owner: 0,
+            cache,
             datasets: Mutex::new(Vec::new()),
             max_bytes,
             ttl,
@@ -518,55 +464,26 @@ impl StacQueryCache {
         output
     }
 
-    /// The key of `dataset` in the caches: its position in this cache's registry in the lower 32
-    /// bits and the owner in the upper ones, so equal datasets of two providers stay apart.
     pub(crate) fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {
         let mut datasets = self
             .datasets
             .lock()
             .expect("STAC dataset registry mutex is not poisoned");
+        if let Some(id) = datasets.iter().position(|known| known == &dataset) {
+            return id as u64;
+        }
+
         // A registry position avoids deriving Eq or Hash for dataset fields
         // containing floats while keeping full PartialEq identity semantics.
-        let position = match datasets.iter().position(|known| known == &dataset) {
-            Some(position) => position,
-            None => {
-                datasets.push(dataset);
-                datasets.len() - 1
-            }
-        };
-        (self.owner << 32) | position as u64
+        let id = datasets.len() as u64;
+        datasets.push(dataset);
+        id
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{StacQueryCache, StacQueryCacheResult, StacTileFile, result_bytes};
-
-    #[tokio::test]
-    async fn it_shares_the_caches_of_providers_and_keeps_their_datasets_apart() {
-        use geoengine_datatypes::util::test::TestDefault;
-
-        let config = crate::config::StacCache::test_default();
-        let shared = super::SharedStacCaches::new(&config);
-        let (first, second) = (shared.query_cache(&config), shared.query_cache(&config));
-        let (cell, time) = (GridIdx2D::new([0, 0]), TimeInterval::new_unchecked(0, 10));
-
-        // equal datasets of two providers, e.g. of two collections, are not the same entry
-        let (first_id, second_id) = (
-            first.dataset_id(dataset("same")),
-            second.dataset_id(dataset("same")),
-        );
-        assert_ne!(first_id, second_id);
-        first.insert(dataset("same"), cell, time, Vec::new()).await;
-        second.insert(dataset("same"), cell, time, Vec::new()).await;
-        // one cache: the entry of the first provider is in that of the second
-        assert!(second.contains(first_id, cell, time));
-
-        // a provider clears only its own entries
-        first.clear().await;
-        assert!(!first.contains(first_id, cell, time));
-        assert!(second.contains(second_id, cell, time));
-    }
 
     #[tokio::test]
     async fn it_keeps_the_collection_time_without_a_result_cache_and_a_failure_briefly() {
