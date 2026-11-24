@@ -17,6 +17,14 @@ use serde::Deserialize;
 
 use super::StacProviderS3Config;
 
+/// The end of a time interval for the closed end `end_millis` of a STAC time range, like the
+/// temporal extent of a collection or `end_datetime` of an item. STAC ends are closed and those of
+/// time intervals are half-open, so it is one millisecond later: an item on the end lies within,
+/// and a range of one instant is not empty.
+pub fn half_open_end(end_millis: i64) -> Option<TimeInstance> {
+    TimeInstance::from_millis(end_millis.checked_add(1)?).ok()
+}
+
 /// STAC `fields` query parameter used to keep item responses small while including all
 /// metadata needed by the provider (loading info) and the harvester (discovery/mapping).
 ///
