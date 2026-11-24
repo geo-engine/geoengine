@@ -438,7 +438,7 @@ jobs:
       - name: Post to a Slack channel
         if: contains(needs.*.result, 'failure')
         id: slack
-        uses: slackapi/slack-github-action@v4.0.0
+        uses: slackapi/slack-github-action@v4.1.0
         with:
           channel-id: "geoengine-dev-core"
           slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
