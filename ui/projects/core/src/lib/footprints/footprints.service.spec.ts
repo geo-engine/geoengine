@@ -453,6 +453,21 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(1).map((step) => step.time.start)).toEqual([Date.UTC(2025, 10, 20)]);
         });
 
+        it('shows no dates of a window whose later page failed, and tells that it failed', async () => {
+            // the first page, the month the window starts in, answers; the next one fails
+            getFootprints.mockImplementation((id, query) => {
+                const [start] = (query.timeInterval ?? '').split('/').map((t) => Date.parse(t));
+                return start < Date.UTC(2026, 3, 1) ? answerDays(100)(id, query) : Promise.reject(new Error('rate limited'));
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.datesFailed()).toBe(true);
+            expect(service.isLoading()).toBe(false);
+            expect(service.steps()).toEqual([]);
+            expect(service.selectedOutsideData()).toBeUndefined();
+        });
+
         it('loads the last dates of data that ends before the selected date, so it can tell the nearest', async () => {
             // the selected date is 1 April 2026, the data ends with 2025
             dataTime = new Time(Date.UTC(2020, 0, 1), Date.UTC(2026, 0, 1));

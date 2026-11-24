@@ -302,6 +302,8 @@ export class FootprintsService {
     /** The dates of the current request, or the loaded part of them. */
     private readonly currentFootprints = computed(() => {
         if (this.footprintsResource.hasValue()) return this.footprintsResource.value();
+        // the pages of a load that failed later are not the dates of the window, see `datesFailed`
+        if (this.footprintsResource.status() === 'error') return undefined;
         // until the load of another layer starts and clears it, the partial answer is still that of the old layer
         const partial = this.partialFootprints();
         return partial?.key === this.datesKey() ? partial.footprints : undefined;
