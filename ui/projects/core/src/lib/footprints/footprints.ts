@@ -152,7 +152,9 @@ export function calendarHint(unit: string | undefined, view: MatCalendarView): s
 
 /** The footprints of consecutive requests of one window. */
 export function mergeFootprints(first: Footprints, second: Footprints): Footprints {
-    return {...first, steps: [...first.steps, ...second.steps], next: second.next, tooLarge: first.tooLarge || second.tooLarge};
+    // the steps of the requests before are not the whole window, so a window that is too large has none
+    if (first.tooLarge || second.tooLarge) return {...first, steps: [], next: null, tooLarge: true};
+    return {...first, steps: [...first.steps, ...second.steps], next: second.next, tooLarge: false};
 }
 
 /** Footprints, and whether answering them needs too many catalog searches; then they have no steps. */

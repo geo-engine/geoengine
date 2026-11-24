@@ -302,6 +302,8 @@ export class FootprintsService {
     /** The dates of the current request, or the loaded part of them. */
     private readonly currentFootprints = computed(() => {
         if (this.footprintsResource.hasValue()) return this.footprintsResource.value();
+        // the pages of a load that failed later are not the dates of the window, see `datesFailed`
+        if (this.footprintsResource.status() === 'error') return undefined;
         // until the load of another layer starts and clears it, the partial answer is still that of the old layer
         const partial = this.partialFootprints();
         return partial?.key === this.datesKey() ? partial.footprints : undefined;
@@ -602,7 +604,11 @@ export class FootprintsService {
     showDate(date: Date, view: MatCalendarView): void {
         if (this.calendarHint(view)) return;
         const period = visiblePeriod(date, view);
-        if (stepAt(this.steps(), period.start) && stepAt(this.steps(), period.end - 1)) return;
+        // there are no dates before the data or after now, so only the part of the period within them must be loaded
+        const timeRange = this.timeRange();
+        const start = Math.max(period.start, timeRange?.start ?? -Infinity);
+        const end = Math.min(period.end, timeRange?.end ?? Infinity);
+        if (start >= end || (stepAt(this.steps(), start) && stepAt(this.steps(), end - 1))) return;
         this.window.set(period);
     }
 

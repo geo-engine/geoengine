@@ -476,39 +476,48 @@ where
         }
         let parts = self.loading_info_parts(loading_info_query, ctx).await?;
 
+        let thread_pool = ctx.thread_pool().clone();
         Ok(parts
-            .map_ok(move |loading_info| {
-                let footprints = loading_info
-                    .time_steps()
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &time)| {
-                        // A provider may tell whether a step has data without its files. Then
-                        // the whole query is the box of a step with data.
-                        let bounds = match loading_info.has_data(i) {
-                            Some(true) => FootprintBounds::from_boxes([query_bounds], max_boxes),
-                            Some(false) => FootprintBounds::empty(),
-                            None => FootprintBounds::from_boxes(
-                                loading_info
-                                    .file_bounds(time, &bands)
-                                    .filter_map(|partition| {
-                                        geo_transform
-                                            .spatial_to_grid_bounds(&partition)
-                                            .intersection(&query_bounds)
-                                    }),
-                                max_boxes,
-                            ),
-                        };
-
-                        Ok(Footprint {
-                            time,
-                            bounds,
-                            cache_ttl: loading_info.cache_ttl(default_cache_ttl),
-                        })
-                    })
-                    .collect::<Vec<Result<Footprint>>>();
-                stream::iter(footprints)
+            .and_then(move |loading_info| {
+                let bands = bands.clone();
+                // merging the boxes of many files is CPU work, which runs on the thread pool, not
+                // on the async runtime
+                let task =
+                    crate::util::spawn_blocking_with_thread_pool(thread_pool.clone(), move || {
+                        loading_info
+                            .time_steps()
+                            .iter()
+                            .enumerate()
+                            .map(|(i, &time)| {
+                                // A provider may tell whether a step has data without its files.
+                                // Then the whole query is the box of a step with data.
+                                let bounds = match loading_info.has_data(i) {
+                                    Some(true) => {
+                                        FootprintBounds::from_boxes([query_bounds], max_boxes)
+                                    }
+                                    Some(false) => FootprintBounds::empty(),
+                                    None => FootprintBounds::from_boxes(
+                                        loading_info.file_bounds(time, &bands).filter_map(
+                                            |partition| {
+                                                geo_transform
+                                                    .spatial_to_grid_bounds(&partition)
+                                                    .intersection(&query_bounds)
+                                            },
+                                        ),
+                                        max_boxes,
+                                    ),
+                                };
+                                Ok(Footprint {
+                                    time,
+                                    bounds,
+                                    cache_ttl: loading_info.cache_ttl(default_cache_ttl),
+                                })
+                            })
+                            .collect::<Vec<Result<Footprint>>>()
+                    });
+                async move { Ok(task.await?) }
             })
+            .map_ok(stream::iter)
             .try_flatten()
             .boxed())
     }

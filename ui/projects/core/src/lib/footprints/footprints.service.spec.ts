@@ -453,6 +453,21 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(1).map((step) => step.time.start)).toEqual([Date.UTC(2025, 10, 20)]);
         });
 
+        it('shows no dates of a window whose later page failed, and tells that it failed', async () => {
+            // the first page, the month the window starts in, answers; the next one fails
+            getFootprints.mockImplementation((id, query) => {
+                const [start] = (query.timeInterval ?? '').split('/').map((t) => Date.parse(t));
+                return start < Date.UTC(2026, 3, 1) ? answerDays(100)(id, query) : Promise.reject(new Error('rate limited'));
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.datesFailed()).toBe(true);
+            expect(service.isLoading()).toBe(false);
+            expect(service.steps()).toEqual([]);
+            expect(service.selectedOutsideData()).toBeUndefined();
+        });
+
         it('loads the last dates of data that ends before the selected date, so it can tell the nearest', async () => {
             // the selected date is 1 April 2026, the data ends with 2025
             dataTime = new Time(Date.UTC(2020, 0, 1), Date.UTC(2026, 0, 1));
@@ -557,6 +572,22 @@ describe('FootprintsService overlay', () => {
 
         it('does not load the dates again when the calendar opens on dates the app shows already', async () => {
             answerDates(Array.from({length: 100}, (_, i) => day(1 + i, TimeStepFootprintStatus.Data)));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            const requests = getFootprints.mock.calls.length;
+
+            openCalendar(service);
+            await settle();
+
+            expect(getFootprints.mock.calls.length).toBe(requests);
+        });
+
+        it('does not load the dates again when the calendar opens on the month of today', async () => {
+            // today is 10 April 2026, the selected date the first of it
+            vi.setSystemTime(Date.UTC(2026, 3, 10));
+            // March 1, where the window starts, up to today
+            answerDates(Array.from({length: 41}, (_, i) => day(i - 30, TimeStepFootprintStatus.Data)));
             const service = createService();
             service.datesNeeded.set(true);
             await settle();

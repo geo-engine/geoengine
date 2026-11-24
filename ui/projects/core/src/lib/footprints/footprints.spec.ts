@@ -146,16 +146,19 @@ describe('footprints', () => {
         expect(calendarHint('hours', 'multi-year')).toBe('Select a year and a month to see the days with data.');
     });
 
-    it('merges the steps of two requests and keeps the later cursor', () => {
+    it('merges the steps of two requests and keeps the later cursor, and has none where one is too large', () => {
         const next = {start: 1, end: 2};
         const merged = mergeFootprints(
             {spatialReference: 'EPSG:4326', steps: [data], next: null, tooLarge: false},
-            {spatialReference: 'EPSG:4326', steps: [empty], next, tooLarge: true},
+            {spatialReference: 'EPSG:4326', steps: [empty], next, tooLarge: false},
         );
-
         expect(merged.steps).toEqual([data, empty]);
         expect(merged.next).toBe(next);
-        expect(merged.tooLarge).toBe(true);
+        expect(merged.tooLarge).toBe(false);
+
+        const tooLarge = mergeFootprints(merged, {spatialReference: 'EPSG:4326', steps: [], next: null, tooLarge: true});
+        expect(tooLarge.steps).toEqual([]);
+        expect(tooLarge.tooLarge).toBe(true);
     });
 
     it('turns the error of too many catalog searches into tooLarge and keeps other errors', async () => {
