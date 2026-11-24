@@ -453,6 +453,7 @@ fn output_bounds_of_source_box<P: CoordinateProjection>(
     source_geo_transform: &GeoTransform,
     geo_transform: &GeoTransform,
     projection: Option<&ApproxProjection<'_, P>>,
+    source_poles: &[Coordinate2D],
 ) -> Option<GridBoundingBox2D> {
     let [margin_y, margin_x] = source_margin;
     let area = source_geo_transform.grid_to_spatial_bounds(&GridBoundingBox2D::new_unchecked(
@@ -463,6 +464,15 @@ fn output_bounds_of_source_box<P: CoordinateProjection>(
     let (area, error_px) = match projection {
         None => (area, 0),
         Some(projection) => {
+            // around a pole the edges do not bound the interior: a box around the South Pole in a polar
+            // projection reaches -90° only inside, not on its edges
+            let contains = |pole: &Coordinate2D| {
+                (area.upper_left().x..=area.lower_right().x).contains(&pole.x)
+                    && (area.lower_right().y..=area.upper_left().y).contains(&pole.y)
+            };
+            if source_poles.iter().any(contains) {
+                return None;
+            }
             let corners = [
                 area.upper_left(),
                 area.upper_right(),
@@ -499,6 +509,18 @@ fn output_bounds_of_source_box<P: CoordinateProjection>(
 /// [`output_bounds_of_source_box`] for the boxes of one time step, as [`subquery_footprints`]
 /// takes it. `projection` is the spatial reference of the source, the one of the processor and
 /// the largest error of the projection in pixels (see [`ApproxProjection`]), if they differ.
+/// The North and South Pole in `srs`, as far as it can show them; a Mercator projection cannot.
+fn poles_in(srs: SpatialReference) -> Vec<Coordinate2D> {
+    with_projector(SpatialReference::epsg_4326(), srs, |projector| {
+        [Coordinate2D::new(0., 90.), Coordinate2D::new(0., -90.)]
+            .into_iter()
+            .filter_map(|pole| projector.project_coordinate(pole).ok())
+            .filter(|pole| pole.x.is_finite() && pole.y.is_finite())
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 pub fn source_box_mapping(
     source_margin: [isize; 2],
     source_geo_transform: GeoTransform,
@@ -506,7 +528,8 @@ pub fn source_box_mapping(
     projection: Option<(SpatialReference, SpatialReference, NonNegativeFiniteF64)>,
 ) -> impl Fn(&[GridBoundingBox2D]) -> Option<Vec<GridBoundingBox2D>> + Send {
     move |source_boxes: &[GridBoundingBox2D]| {
-        let map = |projection: Option<&ApproxProjection<'_, DefaultCoordinateProjector>>| {
+        let map = |projection: Option<&ApproxProjection<'_, DefaultCoordinateProjector>>,
+                   source_poles: &[Coordinate2D]| {
             source_boxes
                 .iter()
                 .map(|source_box| {
@@ -516,21 +539,28 @@ pub fn source_box_mapping(
                         &source_geo_transform,
                         &geo_transform,
                         projection,
+                        source_poles,
                     )
                 })
                 .collect()
         };
         match projection {
-            None => map(None),
+            None => map(None, &[]),
             // a projector cannot move between threads, so the thread's own one is used
-            Some((source_srs, srs, max_error_px)) => with_projector(source_srs, srs, |projector| {
-                map(Some(&ApproxProjection::new(
-                    projector,
-                    &geo_transform,
-                    max_error_px,
-                )))
-            })
-            .ok()?,
+            Some((source_srs, srs, max_error_px)) => {
+                let source_poles = poles_in(source_srs);
+                with_projector(source_srs, srs, |projector| {
+                    map(
+                        Some(&ApproxProjection::new(
+                            projector,
+                            &geo_transform,
+                            max_error_px,
+                        )),
+                        &source_poles,
+                    )
+                })
+                .ok()?
+            }
         }
     }
 }
@@ -912,5 +942,35 @@ where
             self,
             time_stream,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+
+    #[test]
+    fn it_maps_a_source_box_around_a_pole_to_the_whole_query() {
+        let south_polar = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3031);
+        // 1 km pixels from -2000 km to 2000 km around the South Pole, into a grid of 0.1°
+        let mapping = source_box_mapping(
+            [0, 0],
+            GeoTransform::new_unchecked((-2_000_000., 2_000_000.).into(), 1000., -1000.),
+            GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
+            Some((
+                south_polar,
+                SpatialReference::epsg_4326(),
+                NonNegativeFiniteF64::new(0.5).unwrap(),
+            )),
+        );
+
+        // the pole lies inside: its edges reach -77° to -81° only, the data reaches -90°
+        let around_the_pole = GridBoundingBox2D::new([1000, 1000], [2999, 2999]).unwrap();
+        assert_eq!(mapping(&[around_the_pole]), None);
+
+        // a box away from the pole keeps its bounds
+        let away = GridBoundingBox2D::new([0, 0], [99, 99]).unwrap();
+        assert!(mapping(&[away]).is_some());
     }
 }
