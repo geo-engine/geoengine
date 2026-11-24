@@ -83,6 +83,7 @@ describe('EOdyssey debug reprojection', () => {
                         selectedMinTileMatrixIndex: vi.fn().mockReturnValue(6),
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
+                        appliedDataSource: vi.fn().mockReturnValue(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
                         zoomRequired: signal(false),
                     },
@@ -181,6 +182,15 @@ describe('EOdyssey debug reprojection', () => {
         tileLayer.triggerEventHandler('tilesLoadable', false);
         TestBed.tick();
         expect(overlayBlocked()).toBe(true);
+    });
+
+    it('gives the dates no layer of the previous data source while the presets of a new one load', () => {
+        const layers = TestBed.inject(EOdysseyLayerService) as unknown as {appliedDataSource: Mock; selectedDataSource: Mock};
+        // the map still shows the previous source, the new one has no preset yet
+        layers.appliedDataSource.mockReturnValue({key: 'previous'});
+        layers.selectedDataSource.mockReturnValue({key: 'new'});
+        fixture.detectChanges();
+        expect(TestBed.inject(FootprintsService).layer()).toBeUndefined();
     });
 
     it('asks to zoom in on the map when the boxes of the coverage need too many catalog searches', () => {

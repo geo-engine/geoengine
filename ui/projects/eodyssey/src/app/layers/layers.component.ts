@@ -892,6 +892,9 @@ export class LayersComponent {
         const time = this.currentTime();
         const timeStep = this.footprintsService.timeStep();
         if (!time || !timeStep) return undefined;
+        // the dates of a newly selected source load: until then there is nothing to go to
+        const datesPending = this.footprintsService.isLoading() && this.footprintsService.stepsOfSelection().length === 0;
+        if (!this.footprintsService.layer() || datesPending) return {label: direction === 1 ? 'Later' : 'Earlier'};
 
         const withData = this.footprintsService.dateWithData(direction);
         if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};

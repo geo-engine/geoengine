@@ -153,6 +153,7 @@ describe('LayersComponent', () => {
                         tooLarge: signal(false),
                         hasError: signal(false),
                         stepsOfSelection: signal([]),
+                        layer: signal({key: 'provider/layer'}),
                         calendarStartView: signal('month'),
                         time: signal(undefined),
                         datesNeeded: signal(false),
@@ -610,6 +611,20 @@ describe('LayersComponent', () => {
             fixture.detectChanges();
             expect(button('forward').textContent).toContain('No later dates');
             expect(button('backwards').disabled).toBe(false);
+        });
+
+        it('goes nowhere while the dates of a newly selected source load', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().isLoading.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            expect(button('backwards').disabled).toBe(true);
+            expect(button('forward').disabled).toBe(true);
+            setTime.mockClear();
+            await fixture.componentInstance.timeBackwards();
+            expect(setTime).not.toHaveBeenCalled();
         });
 
         it('goes to the next date with data', async () => {
