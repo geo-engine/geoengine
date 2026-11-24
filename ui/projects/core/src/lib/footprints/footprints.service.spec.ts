@@ -533,6 +533,18 @@ describe('FootprintsService overlay', () => {
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
+        it('starts the window of steps below a day shortly before the selected time, not at the month start', async () => {
+            const service = createService();
+            service.timeStepOverride.set({durationAmount: 1, durationUnit: 'hours'});
+            service.datesNeeded.set(true);
+            await settle();
+            const starts = getFootprints.mock.calls
+                .filter(([, query]) => query.precision === RasterFootprintsPrecision.Availability)
+                .map(([, query]) => Date.parse((query.timeInterval ?? '').split('/')[0]));
+            // the selected time is the first of the month: seven hours before it, in the month before
+            expect(starts[0]).toBe(Date.UTC(2026, 2, 31, 17));
+        });
+
         it('shows the last dates of the data, without one selected, where the selected date lies after them', async () => {
             answerDates([
                 day(-4, TimeStepFootprintStatus.Data),

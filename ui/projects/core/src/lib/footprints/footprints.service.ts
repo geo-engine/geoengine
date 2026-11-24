@@ -28,6 +28,7 @@ import {
     cellClasses,
     Footprints,
     footprintsOrTooLarge,
+    isShorterThanDay,
     isShorterThanMonth,
     mergeFootprints,
     monthStartOfTime,
@@ -451,7 +452,8 @@ export class FootprintsService {
             untracked(() => {
                 // from a month start a few steps before the time, so dates before it are loaded too
                 const before = timeStep ? minusSteps(time.start.valueOf(), timeStep, STEPS_BEFORE_SELECTED) : time.start.valueOf();
-                const start = monthStartOfTime(before);
+                // a window of steps below a day spans a few days only, so from the month start it would not reach the time
+                const start = isShorterThanDay(timeStep?.durationUnit) ? before : monthStartOfTime(before);
                 if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
             });
         });
