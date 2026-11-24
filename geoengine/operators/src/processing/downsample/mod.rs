@@ -267,6 +267,7 @@ where
         );
         crate::adapters::subquery_footprints(
             &self.source,
+            self.result_descriptor(),
             query,
             tiling_grid.generate_data_tiling_strategy(),
             &self.sub_query(ctx),

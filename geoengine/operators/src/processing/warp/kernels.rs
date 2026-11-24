@@ -973,6 +973,7 @@ where
         );
         subquery_footprints(
             &self.source,
+            self.result_descriptor(),
             query,
             tiling_strategy,
             &sub_query,

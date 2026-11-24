@@ -559,6 +559,7 @@ where
         );
         crate::adapters::subquery_footprints(
             &self.source,
+            self.result_descriptor(),
             query,
             self.tiling_strategy(ctx),
             &self.sub_query(),

@@ -355,6 +355,7 @@ where
         );
         crate::adapters::subquery_footprints(
             &self.source,
+            self.result_descriptor(),
             query,
             tiling_grid.generate_data_tiling_strategy(),
             &NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone()),
@@ -843,6 +844,67 @@ mod tests {
             assert_eq!(tile.grid_array.inner_grid.data, data[i]);
             assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
+    }
+
+    #[tokio::test]
+    async fn it_visits_only_the_tiles_of_its_data_for_footprints_and_tells_nothing_beyond_the_limit()
+     {
+        use crate::engine::footprint_test_util::one_of_four_tiles_source;
+        use crate::engine::{Footprint, FootprintBounds, FootprintPrecision};
+        use futures::TryStreamExt as _;
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: one_of_four_tiles_source().into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+        // far more tiles than there are, of which the four of the data are visited
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new(
+                [-1_000_000_000, -1_000_000_000],
+                [1_000_000_000, 1_000_000_000],
+            )
+            .unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let footprints = async |query_ctx: &crate::engine::MockQueryContext| -> Vec<Footprint> {
+            processor
+                .footprint_query(query.clone(), FootprintPrecision::Coverage, query_ctx)
+                .await
+                .unwrap()
+                .try_collect()
+                .await
+                .unwrap()
+        };
+
+        query_ctx.footprint_tiles_limit = 4;
+        let within = footprints(&query_ctx).await;
+        assert_eq!(within.len(), 2);
+        assert!(!within[0].bounds.is_empty());
+        assert!(within[1].bounds.is_empty());
+
+        query_ctx.footprint_tiles_limit = 3;
+        let beyond = footprints(&query_ctx).await;
+        assert_eq!(beyond.len(), 2);
+        assert!(
+            beyond
+                .iter()
+                .all(|footprint| footprint.bounds == FootprintBounds::Unknown)
+        );
     }
 
     #[tokio::test]

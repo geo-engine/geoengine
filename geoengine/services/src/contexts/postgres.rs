@@ -63,6 +63,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     query_ctx_footprint_boxes_per_step_limit: usize,
+    query_ctx_footprint_tiles_limit: usize,
     query_ctx_footprint_skipping: bool,
     task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
@@ -174,6 +175,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_tiles_limit: get_config_element::<crate::config::QueryContext>()?
+                .footprint_tiles_limit,
             query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
                 .footprint_skipping,
             oidc_manager,
@@ -250,6 +253,8 @@ where
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_tiles_limit: get_config_element::<crate::config::QueryContext>()?
+                .footprint_tiles_limit,
             query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
                 .footprint_skipping,
             oidc_manager: oidc_db,
@@ -341,6 +346,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_tiles_limit: get_config_element::<crate::config::QueryContext>()?
+                .footprint_tiles_limit,
             query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
                 .footprint_skipping,
             oidc_manager: OidcManager::from(oidc_config),
@@ -613,6 +620,7 @@ where
             self.context.processing_runtime.clone(),
         )
         .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit)
+        .with_footprint_tiles_limit(self.context.query_ctx_footprint_tiles_limit)
         .with_footprint_skipping(self.context.query_ctx_footprint_skipping))
     }
 

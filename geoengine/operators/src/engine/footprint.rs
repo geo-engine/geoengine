@@ -15,6 +15,10 @@ use std::sync::Arc;
 /// stays cheap: it takes the product of the numbers of boxes.
 pub const DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT: usize = 64;
 
+/// The most output tiles whose source an operator visits for a footprint query if nothing else is
+/// configured, see `footprint_tiles_limit` of the query context.
+pub const DEFAULT_FOOTPRINT_TILES_LIMIT: usize = 10_000;
+
 /// Where a raster may contain data in one time step of a query, in the raster's pixel space.
 ///
 /// This is a superset of the valid pixels: a box can hold no-data, but outside of the boxes there

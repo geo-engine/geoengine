@@ -2,7 +2,7 @@ use super::ApproxProjection;
 use super::raster_subquery_reprojection::with_projector;
 use crate::engine::{
     Footprint, FootprintBounds, FootprintPrecision, QueryContext, RasterQueryProcessor,
-    unknown_footprints,
+    RasterResultDescriptor, unknown_footprints,
 };
 use crate::error;
 use crate::util::Result;
@@ -304,8 +304,15 @@ fn source_data_bounds<P: RasterQueryProcessor>(
     source: &P,
     tiling_strategy: TilingStrategy,
 ) -> GridBoundingBox2D {
-    source
-        .raster_result_descriptor()
+    descriptor_data_bounds(source.raster_result_descriptor(), tiling_strategy)
+}
+
+/// The pixel bounds of the data a raster of `descriptor` describes, on its tiling grid.
+fn descriptor_data_bounds(
+    descriptor: &RasterResultDescriptor,
+    tiling_strategy: TilingStrategy,
+) -> GridBoundingBox2D {
+    descriptor
         .spatial_grid_descriptor()
         .tiling_grid_definition(TilingSpecification::new(
             tiling_strategy.tile_size_in_pixels,
@@ -317,12 +324,16 @@ fn source_data_bounds<P: RasterQueryProcessor>(
 /// The footprints of a processor that builds its tiles with a [`RasterSubQueryAdapter`] over the
 /// time steps of `source` (see [`RasterSubQueryAdapter::with_source_time_steps`]).
 ///
-/// The source is asked where it has data in the area the tiles of `query` read. `output_bounds`
+/// The source is asked where it has data in the area the tiles of `query` read, which are those of
+/// the data of `output`, the result of the processor. Above `footprint_tiles_limit` of these tiles,
+/// each time step of the source may have data anywhere. `output_bounds`
 /// tells for the boxes of the source of one time step in which pixels of the processor their data
 /// can end up (see [`source_box_mapping`]), or `None` if it cannot tell; then data can be
 /// anywhere in the query.
+#[allow(clippy::too_many_arguments)]
 pub async fn subquery_footprints<'a, PixelType, RasterProcessor, SubQuery>(
     source: &'a RasterProcessor,
+    output: &RasterResultDescriptor,
     query: RasterQueryRectangle,
     tiling_strategy: TilingStrategy,
     sub_query: &SubQuery,
@@ -337,13 +348,38 @@ where
 {
     let query_bounds = query.spatial_bounds();
     let data_bounds = source_data_bounds(source, tiling_strategy);
-    // shortcut: this visits every tile of the query once, as skipping does for a data query; map the
-    // query bounds into the source instead if queries over very many tiles ask for footprints
-    let source_bounds = hull(
-        tile_source_bounds(sub_query, tiling_strategy, &query)?
+    // a tile outside the data of the output reads nothing, so only those within are visited
+    let visited = query_bounds.intersection(&descriptor_data_bounds(output, tiling_strategy));
+    if visited.is_some_and(|visited| {
+        tiling_strategy.num_tiles_intersecting_grid_bounds(visited)
+            > query_ctx.footprint_tiles_limit()
+    }) {
+        // too many tiles to visit: the data may be anywhere in each time step
+        let time_steps = source.time_query(query.time_interval(), query_ctx).await?;
+        return Ok(time_steps
+            .map_ok(|time| Footprint {
+                time,
+                bounds: FootprintBounds::Unknown,
+                cache_ttl: CacheTtlSeconds::max(),
+            })
+            .boxed());
+    }
+    let source_bounds = match visited {
+        Some(visited) => hull(
+            tile_source_bounds(
+                sub_query,
+                tiling_strategy,
+                &RasterQueryRectangle::new(
+                    visited,
+                    query.time_interval(),
+                    query.attributes().clone(),
+                ),
+            )?
             .into_iter()
             .map(|(_, source_bounds)| source_bounds),
-    )
+        ),
+        None => None,
+    }
     .and_then(|source_bounds| source_bounds.intersection(&data_bounds));
 
     let Some(source_bounds) = source_bounds else {

@@ -156,6 +156,7 @@ pub trait GeoEngineDb:
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     footprint_boxes_per_step_limit: usize,
+    footprint_tiles_limit: usize,
     footprint_skipping: bool,
     footprints_for_display: bool,
     tiling_specification: TilingSpecification,
@@ -187,6 +188,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: geoengine_operators::engine::DEFAULT_FOOTPRINT_TILES_LIMIT,
             footprint_skipping: false,
             footprints_for_display: false,
             tiling_specification,
@@ -223,6 +225,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: geoengine_operators::engine::DEFAULT_FOOTPRINT_TILES_LIMIT,
             footprint_skipping: false,
             footprints_for_display: false,
             tiling_specification,
@@ -250,6 +253,13 @@ impl QueryContextImpl {
         self
     }
 
+    /// Sets the most output tiles whose source an operator visits for a footprint query.
+    #[must_use]
+    pub fn with_footprint_tiles_limit(mut self, footprint_tiles_limit: usize) -> Self {
+        self.footprint_tiles_limit = footprint_tiles_limit;
+        self
+    }
+
     /// Sets whether operators skip the tiles where their source has no data.
     #[must_use]
     pub fn with_footprint_skipping(mut self, footprint_skipping: bool) -> Self {
@@ -273,6 +283,10 @@ impl QueryContext for QueryContextImpl {
 
     fn footprint_boxes_per_step_limit(&self) -> usize {
         self.footprint_boxes_per_step_limit
+    }
+
+    fn footprint_tiles_limit(&self) -> usize {
+        self.footprint_tiles_limit
     }
 
     fn footprint_skipping(&self) -> bool {

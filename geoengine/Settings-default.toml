@@ -63,6 +63,11 @@ multi_band_gdal_source_read_ahead = 16
 # The number of time steps has no limit here, because footprints are produced step by step. The
 # endpoint returns at most 100 time steps per request.
 footprint_boxes_per_step_limit = 64
+# Operators that read their source once per output tile (see `footprint_skipping`) find the area of the source a
+# footprint query covers by visiting each of its output tiles within their data. Above this many tiles, they answer
+# that each time step may have data anywhere instead, so a footprint query over a large area at a fine resolution
+# does not block the server. A whole screen is some 40 tiles.
+footprint_tiles_limit = 10000
 # Operators that query their source once per output tile (Warp, reprojection, neighborhood aggregate,
 # downsampling, interpolation) first ask the source where it has data and skip the tiles without. This saves the reads of
 # sparse data, e.g. satellite swaths. The footprint query takes the place of the time query that each of these
