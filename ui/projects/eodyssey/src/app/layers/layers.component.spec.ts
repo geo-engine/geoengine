@@ -164,7 +164,7 @@ describe('LayersComponent', () => {
                         selectedOutsideData: signal(undefined),
                         datesFailed: signal(false),
                         retryDates: vi.fn(),
-                        timeRange: signal(undefined),
+                        timeRange: signal({start: -Infinity, end: Infinity}),
                         datesReachTimeRange: vi.fn().mockReturnValue(false),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
@@ -666,6 +666,18 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).not.toHaveBeenCalled();
+
+            // the same until the metadata of the new layer tells the time of its data
+            footprints().isLoading.set(false);
+            footprints().timeRange.set(undefined);
+            fixture.detectChanges();
+            expect(button('forward').disabled).toBe(true);
+
+            // a source without presets has no dates, so the buttons step by the time step
+            (footprints() as unknown as {layer: WritableSignal<unknown>}).layer.set(undefined);
+            fixture.detectChanges();
+            expect(button('forward').disabled).toBe(false);
+            expect(button('forward').textContent).toContain('1 month on');
         });
 
         it('goes to the next date with data', async () => {

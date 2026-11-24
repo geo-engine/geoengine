@@ -182,17 +182,12 @@ export class MainComponent {
     readonly mapImageLoading = signal(false);
 
     constructor() {
-        // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map,
-        // but only of the selected data source: while the presets of a new one load, the map still shows the previous
-        // one, whose dates must not stand for the new one.
+        // The selected preset, so availability is shown before the visualization is applied. None while the presets of a
+        // newly selected source or variant load: the layer on the map is still the previous one, whose dates must not stand
+        // for the new one.
         effect(() => {
             const preset = this.eodysseyLayerService.selectedPreset();
-            const isSelectedSource = this.eodysseyLayerService.appliedDataSource() === this.eodysseyLayerService.selectedDataSource();
-            const layer = preset
-                ? {dataConnectorId: preset.connectorId, layerId: preset.layerId}
-                : isSelectedSource
-                  ? this.eodysseyLayerService.mapTileLayer()
-                  : undefined;
+            const layer = preset && {dataConnectorId: preset.connectorId, layerId: preset.layerId};
             this.footprintsService.layer.set(
                 layer && {
                     key: `${layer.dataConnectorId}/${layer.layerId}`,
