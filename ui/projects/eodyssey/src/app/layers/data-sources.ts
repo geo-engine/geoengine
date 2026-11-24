@@ -1,5 +1,6 @@
 import type {TimeStepDuration} from '@geoengine/common';
 import type {GeographicCoverage} from './coverage';
+import type {ViewportPixelBudget} from './viewport-pixel-budget';
 
 export interface VisualizationPreset {
     key: string;
@@ -8,8 +9,7 @@ export interface VisualizationPreset {
     connectorId: string;
     layerId: string;
     order: number;
-    /** Minimum matrix index derived for this preset's processing graph and grid. */
-    minTileMatrixIndex?: number;
+    viewportPixelBudget: ViewportPixelBudget;
 }
 export interface DataSourceVariant {
     key: string;
@@ -18,6 +18,8 @@ export interface DataSourceVariant {
     coverage?: GeographicCoverage;
     /** The region collection containing this variant's preset layers. */
     collectionId: string;
+    /** Nearest collection default, used when a preset has no edv:loadingCost property. */
+    loadingCost?: string;
 }
 export interface DataSourceCategory {
     /** Layer collection id; categories do not carry data-source metadata. */
@@ -32,8 +34,6 @@ export interface DataSourceDefinition {
     defaultTime?: number;
     defaultTimeStep?: TimeStepDuration;
     citation: string;
-    /** Conservative source minimum tile matrix index, used when the preset does not specify one. */
-    minTileMatrixIndex?: number;
 }
 export interface DataSourceLayer {
     dataConnectorId: string;

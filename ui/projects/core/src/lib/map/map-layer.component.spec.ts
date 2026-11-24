@@ -194,6 +194,57 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(0);
     });
 
+    it('enforces a viewport cutoff between views using the same source matrix', async () => {
+        fixture.componentRef.setInput('minTileMatrixIndex', 0);
+        fixture.componentRef.setInput('maxViewResolution', 650);
+        await setResolution(600);
+        source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
+        const grid = source.getTileGrid()!;
+        expect(grid.getZForResolution(600)).toBe(grid.getZForResolution(700));
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        await setResolution(700);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        await setResolution(650);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+        await setResolution(649);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
+    });
+
+    it('reports a zero viewport cutoff as blocked without requesting imagery', async () => {
+        fixture.componentRef.setInput('minTileMatrixIndex', 0);
+        fixture.componentRef.setInput('maxViewResolution', 0);
+        await setResolution(600);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+        source.getTile(5, 0, 0, 1, getProjection('EPSG:3857')!).load();
+        expect(tileRequests).toHaveLength(0);
+        fixture.componentRef.setInput('maxViewResolution', 650);
+        await setResolution(600);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
+    });
+
+    it('updates the viewport cutoff without recreating metadata and aborts existing requests', async () => {
+        await setResolution(600);
+        const tile = source.getTile(5, 0, 0, 1, getProjection('EPSG:3857')!);
+        tile.load();
+        expect(tileRequests).toHaveLength(1);
+        fixture.componentRef.setInput('maxViewResolution', 550);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(tileRequests[0].aborted).toBe(true);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(fixture.componentInstance.mapLayer.getSource()).toBe(source);
+        fixture.componentRef.setInput('maxViewResolution', undefined);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(1000);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        expect(fixture.componentInstance.mapLayer.getSource()).toBe(source);
+    });
+
     it('uses the source matrix resolution as the exclusive cutoff and excludes coarser source tiles', async () => {
         await setResolution(1000.01);
         expect(zoomRequired).toHaveBeenLastCalledWith(true);

@@ -8,6 +8,35 @@ import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from
 import {MapService, ProjectService} from '@geoengine/core';
 import {LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
+import {AppConfig, DEFAULT_VIEWPORT_LIMITS} from '../app-config.service';
+
+const loadingCostFixture = {
+    tileMatrixSet: 'CustomWebMercator',
+    crs: 'EPSG:3857',
+    matrices: [
+        {
+            id: '0',
+            cellSize: 1000,
+            tileWidth: 512,
+            tileHeight: 512,
+            matrixWidth: 10,
+            matrixHeight: 10,
+            pointOfOrigin: [0, 0],
+            sourcePixels: 10,
+        },
+    ],
+    searchGrids: [
+        {
+            datasetId: 'one',
+            projection: 'EPSG:3857',
+            projString: 'EPSG:3857',
+            extent: [0, -5120000, 5120000, 0],
+            cellSize: 512000,
+            columns: 10,
+            rows: 10,
+        },
+    ],
+};
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
@@ -55,22 +84,26 @@ describe('LayersComponent', () => {
             items: [
                 {
                     type: 'layer',
+
                     name: 'Default',
                     id: {providerId: 'provider', layerId: 'vv'},
                     description: '',
                     properties: [
                         ['edv:presetKey', 'Default'],
                         ['edv:order', '10'],
+                        ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                     ],
                 },
                 {
                     type: 'layer',
+
                     name: 'Alternate',
                     id: {providerId: 'provider', layerId: 'alternate'},
                     description: '',
                     properties: [
                         ['edv:presetKey', 'Alternate'],
                         ['edv:order', '20'],
+                        ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                     ],
                 },
             ],
@@ -146,6 +179,7 @@ describe('LayersComponent', () => {
                     provide: LayersService,
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerProcessingGraphId, getProcessingGraphIdMetadata},
                 },
+                {provide: AppConfig, useValue: {VIEWPORT_LIMITS: {...DEFAULT_VIEWPORT_LIMITS}}},
                 EOdysseyLayerService,
                 MapService,
                 {
@@ -180,7 +214,7 @@ describe('LayersComponent', () => {
             optical: [
                 {
                     ...source,
-                    properties: [...(source.properties ?? []), ['edv:citation', 'Source citation'], ['edv:minTileMatrixIndex', '5']],
+                    properties: [...(source.properties ?? []), ['edv:citation', 'Source citation']],
                 },
             ],
             radar: [
@@ -214,7 +248,6 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.selectedDataSource()).toMatchObject({
             key: 'sentinel',
             citation: 'Source citation',
-            minTileMatrixIndex: 5,
             defaultTime: 1775001600000,
         });
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
@@ -222,7 +255,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.canApplyPreset()).toBe(true);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('radarRegion');
         fixture.componentInstance.applySelectedPreset();
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
+
         expect(setTime).toHaveBeenCalled();
         await fixture.whenStable();
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
@@ -264,7 +297,14 @@ describe('LayersComponent', () => {
         const pages: Record<string, unknown[]> = {
             ...Object.fromEntries(Object.entries(listings).map(([key, page]) => [key, page.items])),
             edv: [...Array.from({length: 20}, (_, index) => collection(`Category ${index}`)), collection('Imagery')],
-            Imagery: [...Array.from({length: 20}, (_, index) => ({type: 'layer', name: String(index)})), ...listings.edv.items],
+            Imagery: [
+                ...Array.from({length: 20}, (_, index) => ({
+                    type: 'layer',
+                    name: String(index),
+                    properties: [['edv:loadingCost', JSON.stringify(loadingCostFixture)]],
+                })),
+                ...listings.edv.items,
+            ],
         };
         getLayerCollectionItems.mockImplementation((_provider, key, offset = 0, limit = 20) =>
             Promise.resolve({items: (pages[key] ?? []).slice(offset, offset + limit)}),
@@ -305,137 +345,218 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('reads each source minimum tile matrix index and changes the applied limit only on Apply', async () => {
-        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
-        getLayerCollectionItems.mockImplementation((_provider, collection) => {
-            if (collection === 'edv') {
-                return Promise.resolve({
-                    items: [
-                        {...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', '4']]},
-                        {
-                            ...dataset,
-                            name: 'Z Other source',
-                            id: {...dataset.id, collectionId: 'other-dataset'},
-                            properties: [
-                                ['edv:dataset', 'other'],
-                                ['edv:minTileMatrixIndex', '5'],
-                            ],
-                        },
-                    ],
-                });
-            }
-            if (collection === 'other-dataset') {
-                return Promise.resolve({
-                    items: [
-                        {
-                            type: 'collection',
-                            name: 'Global',
-                            description: '',
-                            id: {providerId: 'provider', collectionId: 'other-region'},
-                            properties: [['edv:crs', 'EPSG:4326']],
-                        },
-                    ],
-                });
-            }
-            if (collection === 'other-region') {
-                return Promise.resolve({
-                    items: [{...(listings.region.items[0] as CollectionItem), id: {providerId: 'provider', layerId: 'other-layer'}}],
-                });
-            }
-            return Promise.resolve(listings[collection] ?? {items: []});
+    function mockCostProperties(collectionCosts: Record<string, string>, layerCosts: Record<string, string> = {}): void {
+        mockCategorizedCatalogue();
+        const original = getLayerCollectionItems.getMockImplementation()!;
+        getLayerCollectionItems.mockImplementation(async (provider, collection, offset, limit) => {
+            const page = await original(provider, collection, offset, limit);
+            return {
+                items: page.items.map((item) => {
+                    const entry = item as CollectionItem;
+                    const properties = (entry.properties ?? []).filter(([key]) => key !== 'edv:loadingCost');
+                    const value = entry.type === 'layer' ? layerCosts[entry.id.layerId] : collectionCosts[entry.id.collectionId];
+                    if (value !== undefined) properties.push(['edv:loadingCost', value]);
+                    return {...entry, properties};
+                }),
+            };
         });
+    }
+
+    it.each(['edv', 'optical', 'dataset', 'region'])('inherits a loading-cost model from collection %s', async (collection) => {
+        const model = {...loadingCostFixture, matrices: [{...loadingCostFixture.matrices[0], sourcePixels: 777}]};
+        mockCostProperties({[collection]: JSON.stringify(model)});
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(4);
-        expect(eodysseyLayerService.appliedDataSource()).toBeUndefined();
-        eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
-        eodysseyLayerService.setSelectedDataSource('other');
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(5);
-        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
-        eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(5);
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
-        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('other-layer');
+        expect(eodysseyLayerService.variantError()).toBeUndefined();
+        expect(eodysseyLayerService.currentPresets()).toHaveLength(2);
+        for (const preset of eodysseyLayerService.currentPresets()) expect(preset.viewportPixelBudget.matrices[0].sourcePixels).toBe(777);
     });
 
-    it.each([0, 2, undefined])(
-        'uses preset limit %j before the source fallback and changes it only on Apply',
-        async (minTileMatrixIndex) => {
-            const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
-            getLayerCollectionItems.mockImplementation((_provider, collection) => {
-                if (collection === 'edv') {
-                    return Promise.resolve({
-                        items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', '9']]}],
-                    });
-                }
-                if (collection === 'region') {
-                    return Promise.resolve({
-                        items: listings.region.items.map((item, index) => {
-                            const preset = item as Extract<CollectionItem, {type: 'layer'}>;
-                            const value = index === 0 ? minTileMatrixIndex : 6;
-                            return {
-                                ...preset,
-                                properties: [
-                                    ...(preset.properties ?? []),
-                                    ...(value === undefined ? [] : [['edv:minTileMatrixIndex', String(value)]]),
-                                ],
-                            };
-                        }),
-                    });
-                }
-                return Promise.resolve(listings[collection] ?? {items: []});
-            });
-            fixture.detectChanges();
-            await fixture.whenStable();
-            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
-            eodysseyLayerService.applySelectedPreset();
-            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
-            eodysseyLayerService.setSelectedPreset('Alternate');
-            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
-            eodysseyLayerService.applySelectedPreset();
-            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(6);
-        },
-    );
+    it('uses the nearest collection default and lets layer properties override it', async () => {
+        const model = (sourcePixels: number): string =>
+            JSON.stringify({...loadingCostFixture, matrices: [{...loadingCostFixture.matrices[0], sourcePixels}]});
+        mockCostProperties({edv: model(10), optical: model(20), dataset: model(30), region: model(40)}, {vv: model(55)});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.currentPresets().find((p) => p.key === 'Default')?.viewportPixelBudget.matrices[0].sourcePixels).toBe(
+            55,
+        );
+        expect(eodysseyLayerService.currentPresets().find((p) => p.key === 'Alternate')?.viewportPixelBudget.matrices[0].sourcePixels).toBe(
+            40,
+        );
+    });
 
-    it('reports invalid preset tile matrix index metadata instead of using the source fallback', async () => {
+    it('fails closed for an invalid layer override even when its collection default is valid', async () => {
+        mockCostProperties({region: JSON.stringify(loadingCostFixture)}, {vv: 'not-json'});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:loadingCost property');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+    });
+
+    it('does not parse an unused collection default when every layer overrides it', async () => {
+        const model = JSON.stringify(loadingCostFixture);
+        mockCostProperties({edv: 'not-json'}, {vv: model, alternate: model});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toBeUndefined();
+        expect(eodysseyLayerService.currentPresets()).toHaveLength(2);
+    });
+
+    it('applies the complete viewport model only on Apply', async () => {
+        const limits = {maxSourcePixels: 100, maxStacSearches: 64};
+        TestBed.inject(AppConfig).VIEWPORT_LIMITS.MAX_SOURCE_PIXELS = 100;
+        const budget = {
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [0, -5120000, 5120000, 0],
+                    cellSize: 512000,
+                    columns: 10,
+                    rows: 10,
+                },
+            ],
+            matrices: [
+                {
+                    id: '0',
+                    cellSize: 1000,
+                    tileWidth: 512,
+                    tileHeight: 512,
+                    matrixWidth: 10,
+                    matrixHeight: 10,
+                    sourcePixels: 10,
+                    pointOfOrigin: [0, 0],
+                },
+            ],
+        };
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
                 collection === 'region'
                     ? {
-                          items: listings.region.items.map((item) => ({
-                              ...(item as CollectionItem),
-                              properties: [
-                                  ['edv:presetKey', 'invalid'],
-                                  ['edv:minTileMatrixIndex', '-1'],
-                              ],
-                          })),
+                          items: listings.region.items.map((item, index) => {
+                              const preset = item as Extract<CollectionItem, {type: 'layer'}>;
+                              return {
+                                  ...preset,
+
+                                  properties: [
+                                      ...(preset.properties ?? []),
+                                      [
+                                          'edv:loadingCost',
+                                          JSON.stringify({
+                                              ...budget,
+                                              matrices: budget.matrices.map((m) => ({...m, sourcePixels: index === 0 ? 10 : 20})),
+                                          }),
+                                      ],
+                                  ],
+                              };
+                          }),
                       }
                     : (listings[collection] ?? {items: []}),
             ),
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:minTileMatrixIndex');
-        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toBeUndefined();
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...budget, ...limits});
+
+        eodysseyLayerService.setSelectedPreset('Alternate');
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...budget, ...limits});
+
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({
+            ...budget,
+            ...limits,
+            matrices: [{...budget.matrices[0], sourcePixels: 20}],
+        });
     });
 
-    it.each(['', '-1', '4.5', '256', 'NaN', 'Infinity'])('reports invalid tile matrix index metadata %j', async (value) => {
-        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+    it.each([true, false])('uses frontend limits and fails closed for missing preset costs (model present: %s)', async (withModel) => {
+        const limits = {maxSourcePixels: 100, maxStacSearches: 64};
+        TestBed.inject(AppConfig).VIEWPORT_LIMITS.MAX_SOURCE_PIXELS = 100;
+        const model = {
+            tileMatrixSet: 'CustomWebMercator',
+            crs: 'EPSG:3857',
+            matrices: [
+                {
+                    id: '0',
+                    cellSize: 1000,
+                    tileWidth: 512,
+                    tileHeight: 512,
+                    matrixWidth: 10,
+                    matrixHeight: 10,
+                    pointOfOrigin: [0, 0],
+                    sourcePixels: 10,
+                },
+            ],
+            searchGrids: [
+                {
+                    datasetId: 'one',
+                    projection: 'EPSG:3857',
+                    projString: 'EPSG:3857',
+                    extent: [0, -5120000, 5120000, 0],
+                    cellSize: 512000,
+                    columns: 10,
+                    rows: 10,
+                },
+            ],
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection) => {
+            if (collection === 'region')
+                return Promise.resolve({
+                    items: [
+                        {
+                            ...(listings.region.items[0] as CollectionItem),
+
+                            properties: [
+                                ['edv:presetKey', 'Default'],
+                                ...((withModel ? model : undefined) === undefined
+                                    ? []
+                                    : [['edv:loadingCost', JSON.stringify(withModel ? model : undefined)]]),
+                            ],
+                        },
+                    ],
+                });
+            return Promise.resolve(listings[collection] ?? {items: []});
+        });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        if (withModel) {
+            eodysseyLayerService.applySelectedPreset();
+            expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...model, ...limits});
+        } else {
+            expect(eodysseyLayerService.variantError()).toContain('Missing edv:loadingCost property');
+            expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        }
+    });
+
+    it('reports invalid viewport metadata instead of silently removing the viewport guard', async () => {
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
-                collection === 'edv'
-                    ? {items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', value]]}]}
+                collection === 'region'
+                    ? {
+                          items: [
+                              {
+                                  ...(listings.region.items[0] as CollectionItem),
+
+                                  properties: [
+                                      ['edv:presetKey', 'invalid'],
+                                      ['edv:loadingCost', JSON.stringify({})],
+                                  ],
+                              },
+                          ],
+                      }
                     : (listings[collection] ?? {items: []}),
             ),
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.catalogueError()).toContain('Invalid edv:minTileMatrixIndex');
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:loadingCost property');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
     it('waits for the replacement view center and removes the old view listener', async () => {
@@ -530,12 +651,14 @@ describe('LayersComponent', () => {
         });
         const presets = Array.from({length: 25}, (_, index) => ({
             type: 'layer',
+
             name: `Preset ${String(index + 1).padStart(2, '0')}`,
             id: {providerId: 'provider', layerId: `preset-${index + 1}`},
             description: '',
             properties: [
                 ['edv:presetKey', `preset-${index + 1}`],
                 ['edv:order', String(index + 1)],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         }));
         getLayerCollectionItems.mockImplementation((_provider, collection, offset = 0, limit = 20) => {
@@ -674,12 +797,14 @@ describe('LayersComponent', () => {
     it('defaults to True Color Image by catalogue order and preserves a manual choice', async () => {
         const preset = (key: string, name: string, order: number): unknown => ({
             type: 'layer',
+
             name,
             id: {providerId: 'provider', layerId: key},
             description: '',
             properties: [
                 ['edv:presetKey', key],
                 ['edv:order', String(order)],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
@@ -736,10 +861,14 @@ describe('LayersComponent', () => {
                 items: [
                     {
                         type: 'layer',
+
                         name: 'Other visualization',
                         id: {providerId: 'provider', layerId: 'other'},
                         description: '',
-                        properties: [['edv:presetKey', 'other']],
+                        properties: [
+                            ['edv:presetKey', 'other'],
+                            ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+                        ],
                     },
                 ],
             },
@@ -964,12 +1093,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
+
                             name: 'Red',
                             id: {providerId: 'data0', layerId: 'red32-0'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -978,12 +1109,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
+
                             name: 'Red',
                             id: {providerId: 'data0', layerId: 'red33-0'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1024,12 +1157,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
+
                             name: 'Red',
                             id: {providerId: 'data1', layerId: 'red32-1'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1038,12 +1173,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
+
                             name: 'Red',
                             id: {providerId: 'data1', layerId: 'red33-1'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1087,12 +1224,23 @@ describe('LayersComponent', () => {
         let resolve33!: (value: {items: unknown[]}) => void;
         const layer = (
             layerId: string,
-        ): {type: string; name: string; id: {providerId: string; layerId: string}; description: string; properties: string[][]} => ({
+        ): {
+            type: string;
+
+            name: string;
+            id: {providerId: string; layerId: string};
+            description: string;
+            properties: string[][];
+        } => ({
             type: 'layer',
+
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [['edv:presetKey', 'red_band']],
+            properties: [
+                ['edv:presetKey', 'red_band'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -1165,12 +1313,23 @@ describe('LayersComponent', () => {
         let variant33Attempts = 0;
         const makeLayer = (
             layerId: string,
-        ): {type: string; name: string; id: {providerId: string; layerId: string}; description: string; properties: string[][]} => ({
+        ): {
+            type: string;
+
+            name: string;
+            id: {providerId: string; layerId: string};
+            description: string;
+            properties: string[][];
+        } => ({
             type: 'layer',
+
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [['edv:presetKey', 'red_band']],
+            properties: [
+                ['edv:presetKey', 'red_band'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -1240,12 +1399,14 @@ describe('LayersComponent', () => {
     it('reconciles the selected preset when switching to a cached variant', async () => {
         const layer = (key: string, layerId: string): unknown => ({
             type: 'layer',
+
             name: key,
             id: {providerId: 'data', layerId},
             description: '',
             properties: [
                 ['edv:presetKey', key],
                 ['edv:order', key === 'red_band' ? '10' : '20'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
@@ -1333,10 +1494,14 @@ describe('LayersComponent', () => {
         });
         const layer = (id: string): unknown => ({
             type: 'layer',
+
             name: 'Red',
             id: {providerId: 'data', layerId: id},
             description: '',
-            properties: [['edv:presetKey', 'red']],
+            properties: [
+                ['edv:presetKey', 'red'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         const pages: Record<string, {items: unknown[]}> = {
             [LAYER_DB_ROOT_COLLECTION_ID]: {items: [collection('edv', 'EDV')]},

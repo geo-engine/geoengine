@@ -517,6 +517,10 @@ export class OlOgcApiMapTileLayerComponent
      * Ignored with a warning if that grid and the map use different projections.
      */
     readonly minTileMatrixIndex = input(0);
+    /** Optional exclusive cutoff in the map projection, e.g. derived from a viewport pixel budget.
+     * Updating this limit preserves the tile source and reuses visibility, cancellation and prompting.
+     */
+    readonly maxViewResolution = input<number>();
     /** Keep the map cutoff tied to this grid when imagery switches to a different tile matrix set. */
     readonly minTileMatrixSetId = input<TMSId>();
     readonly zoomRequired = output<boolean>();
@@ -641,6 +645,8 @@ export class OlOgcApiMapTileLayerComponent
 
     private readonly effectiveMaxResolution = computed(() => {
         const maxResolution = this.limitMaxResolution();
+        const viewLimit = this.maxViewResolution();
+        if (viewLimit !== undefined && (!(viewLimit >= 0) || (viewLimit !== Infinity && !Number.isFinite(viewLimit)))) return 0;
         const projection = this.limitProjection();
         if (
             maxResolution !== undefined &&
@@ -650,9 +656,9 @@ export class OlOgcApiMapTileLayerComponent
             !equivalent(projection, this.mapService.view().getProjection())
         ) {
             console.warn('Ignoring minTileMatrixIndex because the limit grid and view projections differ.');
-            return Infinity;
+            return viewLimit ?? Infinity;
         }
-        return maxResolution;
+        return maxResolution === undefined ? undefined : Math.min(maxResolution, viewLimit ?? Infinity);
     });
 
     constructor() {
@@ -675,7 +681,7 @@ export class OlOgcApiMapTileLayerComponent
             const maxResolution = this.effectiveMaxResolution();
             // The existing viewport stream emits at move end; canLoad gates queued requests live.
             const valid = maxResolution !== undefined && maxResolution > 0;
-            const blocked = valid && this.viewport().resolution >= maxResolution;
+            const blocked = (valid && this.viewport().resolution >= maxResolution) || this.maxViewResolution() === 0;
             this._mapLayer.setMaxResolution(maxResolution ?? 0);
             this._mapLayer.setVisible(this.isVisible());
             this.loader?.setEnabled(valid && this.isVisible() && !blocked);

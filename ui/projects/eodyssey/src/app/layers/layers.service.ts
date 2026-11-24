@@ -7,6 +7,8 @@ import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
+import {parseViewportPixelBudget} from './viewport-pixel-budget';
+import {AppConfig} from '../app-config.service';
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -14,6 +16,7 @@ import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVar
 @Service()
 export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
+    private readonly config = inject(AppConfig);
     private readonly mapService = inject(MapService);
 
     readonly selectedCategory = linkedSignal<DataSourceCategory[] | undefined, DataSourceCategory | undefined>({
@@ -73,10 +76,7 @@ export class EOdysseyLayerService {
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
-    readonly appliedMinTileMatrixIndex = computed(() => {
-        const applied = this.appliedVisualization();
-        return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
-    });
+    readonly appliedViewportPixelBudget = computed(() => this.appliedVisualization()?.preset.viewportPixelBudget);
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -244,9 +244,10 @@ export class EOdysseyLayerService {
     private async loadCatalogue(rootCollectionId: string): Promise<DataSourceCategory[]> {
         const edvCollection = await this.findItem(rootCollectionId, (item) => item.type === 'collection' && item.name === 'EDV');
         const edvCollectionId = edvCollection && getCollectionId(edvCollection);
-        if (!edvCollectionId) {
+        if (!edvCollection || !edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
+        const inheritedCost = getProperties(edvCollection).get('edv:loadingCost');
         const items = (await this.allItems(edvCollectionId)).filter(isCollection);
         // Keep existing deployments usable until their catalogue is bootstrapped with categories.
         const legacySources = items.filter((item) => getProperties(item).has('edv:dataset'));
@@ -256,11 +257,14 @@ export class EOdysseyLayerService {
                 .map(async (item): Promise<DataSourceCategory> => ({
                     key: item.id.collectionId,
                     name: item.name,
-                    sources: await this.loadSources((await this.allItems(item.id.collectionId)).filter(isCollection)),
+                    sources: await this.loadSources(
+                        (await this.allItems(item.id.collectionId)).filter(isCollection),
+                        getProperties(item).get('edv:loadingCost') ?? inheritedCost,
+                    ),
                 })),
         );
         if (legacySources.length) {
-            categories.push({key: edvCollectionId, name: 'Data Sources', sources: await this.loadSources(legacySources)});
+            categories.push({key: edvCollectionId, name: 'Data Sources', sources: await this.loadSources(legacySources, inheritedCost)});
         }
         requireUniqueKeys(
             categories.flatMap((category) => category.sources),
@@ -269,19 +273,25 @@ export class EOdysseyLayerService {
         return categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
-    private async loadSources(items: Extract<CollectionItem, {type: 'collection'}>[]): Promise<DataSourceDefinition[]> {
-        const sources = await Promise.all(items.map((item) => this.loadDataset(item)));
+    private async loadSources(
+        items: Extract<CollectionItem, {type: 'collection'}>[],
+        inheritedCost?: string,
+    ): Promise<DataSourceDefinition[]> {
+        const sources = await Promise.all(items.map((item) => this.loadDataset(item, inheritedCost)));
         requireUniqueKeys(sources, 'data source');
         return sources
             .filter((source) => source.variants.length > 0)
             .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
-    private async loadDataset(dataset: Extract<CollectionItem, {type: 'collection'}>): Promise<DataSourceDefinition> {
+    private async loadDataset(
+        dataset: Extract<CollectionItem, {type: 'collection'}>,
+        inheritedCost?: string,
+    ): Promise<DataSourceDefinition> {
         const metadata = getProperties(dataset);
         const key = requiredProperty(dataset, 'edv:dataset');
         const items = await this.allItems(dataset.id.collectionId);
-        const variants = items.filter(isCollection).map((item) => this.loadVariant(item));
+        const variants = items.filter(isCollection).map((item) => this.loadVariant(item, metadata.get('edv:loadingCost') ?? inheritedCost));
         requireUniqueKeys(variants, 'region in ' + dataset.name);
         variants.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
         const timeStep = metadata.get('edv:timeStep');
@@ -292,11 +302,10 @@ export class EOdysseyLayerService {
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
         };
     }
 
-    private loadVariant(item: Extract<CollectionItem, {type: 'collection'}>): DataSourceVariant {
+    private loadVariant(item: Extract<CollectionItem, {type: 'collection'}>, inheritedCost?: string): DataSourceVariant {
         const crs = requiredProperty(item, 'edv:crs');
         return {
             key: crs,
@@ -304,10 +313,11 @@ export class EOdysseyLayerService {
             crs,
             coverage: parseCoverage(getProperties(item).get('edv:coverage')),
             collectionId: item.id.collectionId,
+            loadingCost: getProperties(item).get('edv:loadingCost') ?? inheritedCost,
         };
     }
 
-    private createPreset(item: Extract<CollectionItem, {type: 'layer'}>): VisualizationPreset {
+    private createPreset(item: Extract<CollectionItem, {type: 'layer'}>, inheritedCost?: string): VisualizationPreset {
         const metadata = getProperties(item);
         return {
             key: requiredProperty(item, 'edv:presetKey'),
@@ -316,7 +326,11 @@ export class EOdysseyLayerService {
             connectorId: item.id.providerId,
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
+
+            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:loadingCost') ?? inheritedCost, {
+                maxSourcePixels: this.config.VIEWPORT_LIMITS.MAX_SOURCE_PIXELS,
+                maxStacSearches: this.config.VIEWPORT_LIMITS.MAX_STAC_SEARCHES,
+            }),
         };
     }
 
@@ -370,7 +384,7 @@ export class EOdysseyLayerService {
             const items = await this.allItems(variant.collectionId);
             const presets = items
                 .filter((item): item is Extract<CollectionItem, {type: 'layer'}> => item.type === 'layer')
-                .map((item) => this.createPreset(item));
+                .map((item) => this.createPreset(item, variant.loadingCost));
             requireUniqueKeys(presets, 'preset in ' + variant.name);
             presets.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
             if (generation !== this.variantLoadGeneration || epoch !== (this.variantLoadEpochs.get(key) ?? 0)) {
@@ -518,13 +532,4 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
     }
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseMinTileMatrixIndex(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined;
-    const parsed = Number(value);
-    if (!value.trim() || !Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-        throw new Error('Invalid edv:minTileMatrixIndex: ' + value);
-    }
-    return parsed;
 }

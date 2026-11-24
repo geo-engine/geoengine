@@ -115,8 +115,7 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="tileMatrixSet()"
-                        [minTileMatrixIndex]="minTileMatrixIndex()"
-                        [minTileMatrixSetId]="'CustomWebMercator'"
+                        [maxViewResolution]="maxViewResolution()"
                         [isVisible]="testIsVisible()"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"
@@ -128,7 +127,31 @@
         @if (mapTileLayer() && zoomRequired()) {
             <div class="zoom-prompt" role="status">
                 <mat-icon aria-hidden="true">zoom_in</mat-icon>
-                <span>Zoom in further to load the selected layer.</span>
+                <div class="zoom-details">
+                    <span>Zoom in further to load the selected layer.</span>
+                    @if (zoomDiagnostics(); as diagnostics) {
+                        <span>{{ diagnostics.reason }}</span>
+                        @if (diagnostics.current; as cost) {
+                            @if (diagnostics.limits; as limits) {
+                                <span>
+                                    Estimated pixels: {{ formatCount(cost.sourcePixels) }} / {{ formatCount(limits.maxSourcePixels) }} limit
+                                    ({{ cost.sourcePixels > limits.maxSourcePixels ? 'exceeded' : 'within limit' }})
+                                </span>
+                                <span>
+                                    STAC searches: {{ formatCount(cost.stacSearches) }} / {{ formatCount(limits.maxStacSearches) }} limit
+                                    ({{ cost.stacSearches > limits.maxStacSearches ? 'exceeded' : 'within limit' }})
+                                </span>
+                                @if (diagnostics.blocking; as blocking) {
+                                    <span>
+                                        Blocking view: pixels: {{ formatCount(blocking.sourcePixels) }} /
+                                        {{ formatCount(limits.maxSourcePixels) }} limit; STAC searches:
+                                        {{ formatCount(blocking.stacSearches) }} / {{ formatCount(limits.maxStacSearches) }} limit
+                                    </span>
+                                }
+                            }
+                        }
+                    }
+                </div>
             </div>
         }
 
