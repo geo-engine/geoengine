@@ -2,6 +2,8 @@ name: "Download Geo Engine Binaries"
 description: >
   Download the debug binaries (`geoengine-server`, `geoengine-cli`, `gdalsource-process`) that the `geoengine / build` job
   built in this workflow run, and unpack them into `geoengine/target/debug/`, where cargo would have put them.
+  This includes the dependencies of the expressions in `build/geoengine-expression-*/out/`, the path that the server
+  looks for them at, so a job must check out the repository at the same path as the build job.
 inputs:
   artifact-id:
     description: >

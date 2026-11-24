@@ -76,6 +76,18 @@ export-expression-deps destination mode="":
         echo "{{ destination }} already exists, it must not contain libraries of other builds" >&2
         exit 1
     fi
+    DEPS_DIR=$({{ just_executable() }} --justfile "{{ source_file() }}" expression-deps-dir {{ mode }})
+    mkdir -p "{{ destination }}"
+    cp -r "$DEPS_DIR/." "{{ destination }}"
+    echo "Copied the expression dependencies to {{ destination }}"
+
+# Print the directory with the dependencies of the expressions, which the build of the binaries produced.
+# The binaries use it when `[expression] dependencies_path` is empty. Use the same `mode` as for `build`.
+[arg('mode', pattern='|--release')]
+[group("build")]
+expression-deps-dir mode="":
+    #!/usr/bin/env bash
+    set -euo pipefail
     # the build script of the expression crate reports its output directory
     OUT_DIR=$(cargo build --locked --workspace --bins {{ mode }} --message-format=json \
         | jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("#geoengine-expression@"))) | .out_dir')
@@ -83,9 +95,7 @@ export-expression-deps destination mode="":
         echo "Cannot find the output directory of the expression crate: '$OUT_DIR'" >&2
         exit 1
     fi
-    mkdir -p "{{ destination }}"
-    cp -r "$OUT_DIR/expression-deps/." "{{ destination }}"
-    echo "Copied the expression dependencies to {{ destination }}"
+    echo "$OUT_DIR/expression-deps"
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
