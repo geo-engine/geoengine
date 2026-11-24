@@ -115,7 +115,6 @@
                             "node_modules/ol/ol.css",
                             "./node_modules/vis-timeline/dist/vis-timeline-graph2d.min.css"
                         ],
-                        "scripts": ["node_modules/vis-timeline/peer/esm/vis-timeline-graph2d.min.js"],
                         "extractLicenses": false,
                         "sourceMap": true,
                         "optimization": false,
@@ -244,7 +243,6 @@
                             "node_modules/ol/ol.css",
                             "./node_modules/vis-timeline/dist/vis-timeline-graph2d.min.css"
                         ],
-                        "scripts": ["node_modules/vis-timeline/peer/esm/vis-timeline-graph2d.min.js"],
                         "extractLicenses": false,
                         "sourceMap": true,
                         "optimization": false,

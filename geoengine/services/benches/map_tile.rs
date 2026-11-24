@@ -66,7 +66,7 @@ use geoengine_operators::{
         MultiBandGdalSourceParameters, TileFile,
     },
     util::{
-        WarpMethods, WrapWithProjectionAndResample,
+        AdaptToGrid, TargetGrid, WarpMethods,
         gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
         raster_stream_to_png::{default_colorizer_gradient, raster_stream_to_png_bytes},
     },
@@ -385,8 +385,16 @@ async fn render_tile(
             .initialize(ProcessingGraphOperatorPath::initialize_root(), exec_ctx)
             .await
             .unwrap();
-        WrapWithProjectionAndResample::new_create_result_descriptor(source, initialized)
-            .wrap_with_projection_and_resample(None, Some(resolution), crs, methods, exec_ctx)
+        AdaptToGrid::new_create_result_descriptor(source, initialized)
+            .adapt_to_grid(
+                TargetGrid {
+                    spatial_reference: crs,
+                    resolution: Some(resolution),
+                    origin: None,
+                },
+                methods,
+                exec_ctx,
+            )
             .await
             .unwrap()
     }

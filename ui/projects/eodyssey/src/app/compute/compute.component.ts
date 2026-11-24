@@ -64,23 +64,27 @@ import {LayerIdPair} from '../main/main.component';
             }
 
             @if (plotData(); as plotData) {
-                <geoengine-vega-viewer
-                    [chartData]="vegaPlotData(plotData)"
-                    [width]="plotWidthPx()"
-                    [height]="plotWidthPx()"
-                ></geoengine-vega-viewer>
-                <div class="histogram-buttons">
-                    <button
-                        type="button"
-                        class="histogram-button"
-                        mat-icon-button
-                        matTooltip="Maximize histogram"
-                        aria-label="Maximize histogram"
-                        (click)="openHistogramDialog(plotData)"
-                    >
-                        <mat-icon>fullscreen</mat-icon>
-                    </button>
-                </div>
+                @if (isEmptyHistogram(plotData)) {
+                    <p class="hint">There are no valid pixels in the selected box.</p>
+                } @else {
+                    <geoengine-vega-viewer
+                        [chartData]="vegaPlotData(plotData)"
+                        [width]="plotWidthPx()"
+                        [height]="plotWidthPx()"
+                    ></geoengine-vega-viewer>
+                    <div class="histogram-buttons">
+                        <button
+                            type="button"
+                            class="histogram-button"
+                            mat-icon-button
+                            matTooltip="Maximize histogram"
+                            aria-label="Maximize histogram"
+                            (click)="openHistogramDialog(plotData)"
+                        >
+                            <mat-icon>fullscreen</mat-icon>
+                        </button>
+                    </div>
+                }
             }
         </div>
     `,
@@ -144,7 +148,8 @@ export class ComputeComponent {
     private readonly eodysseyLayerService = inject(EOdysseyLayerService);
 
     readonly plotWidthPx = signal(0);
-    readonly spinnerWidthPx = computed(() => Math.round(this.plotWidthPx() / 2));
+    // the spinner renders an invalid SVG (negative `viewBox` and radius) for non-positive diameters
+    readonly spinnerWidthPx = computed(() => Math.max(MIN_SPINNER_WIDTH_PX, Math.round(this.plotWidthPx() / 2)));
     readonly hostElement = inject(ElementRef).nativeElement as HTMLElement;
 
     readonly selectedRasterLayer = this.eodysseyLayerService.mapTileLayer;
@@ -216,7 +221,7 @@ export class ComputeComponent {
                 const cardElement = this.hostElement.querySelector('div') as HTMLElement | undefined;
                 if (!cardElement) return;
 
-                this.plotWidthPx.set(getContentWidth(cardElement));
+                this.plotWidthPx.set(Math.max(0, getContentWidth(cardElement)));
             });
             resizeObserver.observe(this.hostElement);
         });
@@ -229,6 +234,19 @@ export class ComputeComponent {
     vegaPlotData(plotData: WrappedPlotOutput): VegaChartData {
         if (plotData.outputFormat !== PlotOutputFormat.JsonVega) throw new Error('Invalid plot data format');
         return plotData.data as VegaChartData;
+    }
+
+    /**
+     * A histogram without valid pixels has only buckets with a frequency of zero.
+     * Vega would render it with negative sizes, so we show a hint instead.
+     */
+    isEmptyHistogram(plotData: WrappedPlotOutput): boolean {
+        if (plotData.outputFormat !== PlotOutputFormat.JsonVega) return false;
+
+        const data = (this.vegaPlotData(plotData).vegaSpec as {data?: {values?: unknown}} | undefined)?.data;
+        if (!Array.isArray(data?.values)) return false;
+
+        return (data.values as Array<{Frequency?: unknown}>).every((bucket) => !bucket.Frequency);
     }
 
     openHistogramDialog(plotData: WrappedPlotOutput): void {
@@ -310,6 +328,8 @@ export class ComputeComponent {
         }
     }
 }
+
+const MIN_SPINNER_WIDTH_PX = 24;
 
 /**
  * Calculates the exact content width of an HTML element,

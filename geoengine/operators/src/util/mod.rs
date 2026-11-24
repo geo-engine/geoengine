@@ -1,3 +1,4 @@
+mod adapt_to_grid;
 mod async_util;
 pub mod gdal;
 mod gdal_config_options;
@@ -14,7 +15,6 @@ pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
 pub mod test;
-mod wrap_with_projection_and_resample;
 
 use crate::error::Error;
 use std::collections::HashSet;
@@ -26,7 +26,7 @@ pub use self::async_util::{
 };
 pub use self::gdal_config_options::{GdalConfigOptions, TemporaryGdalThreadLocalConfigOptions};
 pub use self::rayon::create_rayon_thread_pool;
-pub use wrap_with_projection_and_resample::{WarpMethods, WrapWithProjectionAndResample};
+pub use adapt_to_grid::{AdaptToGrid, TargetGrid, WarpMethods};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

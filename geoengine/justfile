@@ -5,21 +5,26 @@ _default:
 
 # Install dependencies such as llvm-cov.
 [group("install")]
-install:
-    cargo install --locked cargo-llvm-cov
+install: install-llvm-cov
     cargo install --locked cargo-edit
     cargo install --locked git-cliff
     cargo install --locked request-logging-proxy
+
+# Install only cargo-llvm-cov, which the tests with code coverage need.
+[group("install")]
+install-llvm-cov:
+    cargo install --locked cargo-llvm-cov
 
 # Run the build scripts that download files, with retries, since they try only once. `ort-sys` stores the ONNX Runtime binaries in `~/.cache/ort.pyke.io` (or `$ORT_CACHE_DIR`) and skips the download if they are there.
 [group("install")]
 prefetch-build-downloads attempts="5" backoff="15":
     just common::retry {{ attempts }} {{ backoff }} cargo build --package ort-sys
 
-# Generate OpenAPI specification as JSON file. The file is generated in the current directory.
+# Generate OpenAPI specification as JSON file. The file is generated in the repository root.
+# Set `GEOENGINE_CLI` to the path of a pre-built `geoengine-cli` binary to skip building it, e.g., in CI.
 [group("build")]
 generate-openapi-spec: common::_clear
-    cargo run --bin geoengine-cli -- openapi > ../openapi.json
+    {{ env("GEOENGINE_CLI", "cargo run --bin geoengine-cli --") }} openapi > ../openapi.json
 
 # Run lints. Automatically fix issues where possible with `--fix`.
 [arg('fix', long='fix', value='true', help='Automatically apply fixes where possible.')]
@@ -63,6 +68,38 @@ build mode="":
 [group("build")]
 build-gdalsource-process mode="":
     cargo build --workspace --bin gdalsource-process --locked {{ mode }} --verbose
+
+# Copy the dependencies of the expressions, which the build of the binaries produced, to a new directory, e.g. for a container image.
+# Point `[expression] dependencies_path` of these binaries to it. Use the same `mode` as for `build`.
+[arg('mode', pattern='|--release')]
+[group("build")]
+export-expression-deps destination mode="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -e "{{ destination }}" ]; then
+        echo "{{ destination }} already exists, it must not contain libraries of other builds" >&2
+        exit 1
+    fi
+    DEPS_DIR=$({{ just_executable() }} --justfile "{{ source_file() }}" expression-deps-dir {{ mode }})
+    mkdir -p "{{ destination }}"
+    cp -r "$DEPS_DIR/." "{{ destination }}"
+    echo "Copied the expression dependencies to {{ destination }}"
+
+# Print the directory with the dependencies of the expressions, which the build of the binaries produced.
+# The binaries use it when `[expression] dependencies_path` is empty. Use the same `mode` as for `build`.
+[arg('mode', pattern='|--release')]
+[group("build")]
+expression-deps-dir mode="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # the build script of the expression crate reports its output directory
+    OUT_DIR=$(cargo build --locked --workspace --bins {{ mode }} --message-format=json \
+        | jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("#geoengine-expression@"))) | .out_dir')
+    if [ -z "$OUT_DIR" ] || [ "$(echo "$OUT_DIR" | wc -l)" -ne 1 ]; then
+        echo "Cannot find the output directory of the expression crate: '$OUT_DIR'" >&2
+        exit 1
+    fi
+    echo "$OUT_DIR/expression-deps"
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
