@@ -307,8 +307,9 @@ impl
     }
 }
 
-/// The files of a span, split into its time steps. An item on the span's closed end belongs to the
-/// next step and is dropped here.
+/// The files of a span, split into its time steps by the step of each file. A search ends one
+/// millisecond before the span's end (see [`common::closed_end`]), so no file of the next step is
+/// among them.
 fn files_per_step(
     time_dimension: TimeDimension,
     span: TimeInterval,
@@ -616,7 +617,7 @@ impl StacMultiBandMetaData {
             let mut step_has_data = false;
             for (cell, _) in cell_bboxes {
                 let files = self.query_cache.get(dataset_id, *cell, *step).await?;
-                // an item on the closed end of a search belongs to the next step
+                // the files of this step, matched like in `files_per_step`
                 step_has_data |= files.iter().any(|file| {
                     file.file.time == *step
                         && file.file.spatial_partition.intersects(&spatial_bounds)
@@ -1012,7 +1013,7 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
     ) -> geoengine_operators::util::Result<Vec<(String, String)>> {
         let time_start = time_interval.start();
-        let time_end = time_interval.end();
+        let time_end = common::closed_end(time_interval);
 
         let query_params = vec![
             ("bbox".to_owned(), format_stac_wgs84_bbox(bbox)),
@@ -4384,8 +4385,8 @@ mod grid_request_tests {
         });
         // only single steps are searched: a window search would not be expected and fail
         for day in [
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
-            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
+            "2026-01-04T00:00:00.000Z/2026-01-04T23:59:59.999Z",
         ] {
             expect_search_at(
                 &server,
@@ -4427,8 +4428,8 @@ mod grid_request_tests {
             "end_datetime": "2026-01-04T23:59:59Z",
         });
         for day in [
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
-            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
+            "2026-01-04T00:00:00.000Z/2026-01-04T23:59:59.999Z",
         ] {
             expect_search_at(
                 &server,
@@ -4480,7 +4481,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             bbox,
-            "2026-01-06T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2026-01-06T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             vec![jan6],
             Duration::ZERO,
             starts.clone(),
@@ -4489,7 +4490,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             bbox,
-            "2025-12-08T00:00:00.000Z/2026-01-06T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-05T23:59:59.999Z",
             vec![item("jan3", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4538,7 +4539,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4567,24 +4568,24 @@ mod grid_request_tests {
         // one aggregation per chunk of 30 days: 2025-12-08, 2026-01-07 and 2026-02-06 up to 2026-03-08
         expect_aggregation(
             &server,
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         expect_aggregation(
             &server,
-            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
+            "2026-01-07T00:00:00.000Z/2026-02-05T23:59:59.999Z",
             &[],
         );
         expect_aggregation(
             &server,
-            "2026-02-06T00:00:00.000Z/2026-03-08T00:00:00.000Z",
+            "2026-02-06T00:00:00.000Z/2026-03-07T23:59:59.999Z",
             &[],
         );
         // only the one day with items is searched
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4635,7 +4636,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4643,7 +4644,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
+            "2026-01-07T00:00:00.000Z/2026-02-05T23:59:59.999Z",
             vec![],
             Duration::ZERO,
             starts.clone(),
@@ -4701,7 +4702,7 @@ mod grid_request_tests {
         let starts = new_starts();
         expect_aggregation(
             &server,
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         // only the day with items needs a search afterwards. A search for the other day would be
@@ -4709,7 +4710,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4759,7 +4760,7 @@ mod grid_request_tests {
         expect_aggregation_in(
             &server,
             "0.10000,0.00000,0.40000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             &["2026-01-05T00:00:00.000Z"],
         );
         let provider = provider(
@@ -4793,14 +4794,14 @@ mod grid_request_tests {
         expect_aggregation_in(
             &server,
             "0.10000,0.00000,0.40000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         // a day without items in the view may have items elsewhere in the cell: it is searched
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2026-01-04T00:00:00.000Z/2026-01-04T23:59:59.999Z",
             vec![],
             Duration::ZERO,
             starts.clone(),
@@ -4846,7 +4847,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2026-01-04T00:00:00.000Z/2026-01-04T23:59:59.999Z",
             vec![],
             Duration::ZERO,
             starts.clone(),
@@ -4881,7 +4882,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4913,7 +4914,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4946,7 +4947,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -4954,7 +4955,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            "2026-01-04T00:00:00.000Z/2026-01-04T23:59:59.999Z",
             vec![],
             Duration::ZERO,
             starts.clone(),
@@ -4990,13 +4991,13 @@ mod grid_request_tests {
         let starts = new_starts();
         expect_aggregation(
             &server,
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             &["2026-01-03T00:00:00.000Z"],
         );
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -5085,7 +5086,7 @@ mod grid_request_tests {
         expect_search_at(
             &server,
             "0.00000,0.00000,1.00000,1.00000",
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999Z",
             vec![item("found", 0.)],
             Duration::ZERO,
             starts.clone(),
@@ -5215,7 +5216,7 @@ mod grid_request_tests {
     async fn it_one_step_runs_only_the_counted_searches_when_a_cached_step_expires() {
         let server = Server::run();
         let starts = new_starts();
-        let day = "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z";
+        let day = "2026-01-03T00:00:00.000Z/2026-01-03T23:59:59.999Z";
         // the cell east of 1° is cached by the map tiles; a second search of it would be unexpected and fail
         expect_search_at(
             &server,
@@ -5670,10 +5671,7 @@ mod grid_request_tests {
             let mut asset = item(&format!("day{day}"), 0.);
             asset["properties"]["datetime"] = json!(format!("2026-01-{day:02}T12:00:00Z"));
             let response_starts = starts.clone();
-            let datetime = format!(
-                "2026-01-{day:02}T00:00:00.000Z/2026-01-{:02}T00:00:00.000Z",
-                day + 1
-            );
+            let datetime = format!("2026-01-{day:02}T00:00:00.000Z/2026-01-{day:02}T23:59:59.999Z");
             server.expect(
                 Expectation::matching(all_of![
                     request::method_path("GET", "/collections/test/items"),

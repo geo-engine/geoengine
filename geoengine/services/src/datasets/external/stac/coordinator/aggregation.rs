@@ -3,6 +3,7 @@
 //! One `datetime_frequency` request tells which times have items at all. A step without any
 //! item can then be stored as empty for every cell, and its search is skipped.
 use super::StacClient;
+use crate::datasets::external::stac::common::closed_end;
 use crate::util::{format_stac_wgs84_bbox, retry::RetryPolicy};
 use chrono::DateTime;
 use geoengine_datatypes::primitives::{
@@ -79,7 +80,9 @@ impl StacClient {
                 .start()
                 .as_date_time()?
                 .to_datetime_string_with_millis(),
-            range.end().as_date_time()?.to_datetime_string_with_millis(),
+            closed_end(range)
+                .as_date_time()?
+                .to_datetime_string_with_millis(),
         );
         let request = self.get(aggregate_url).query(&[
             ("bbox", format_stac_wgs84_bbox(bbox)),
