@@ -24,7 +24,7 @@ use geoengine_operators::{
         TypedRasterQueryProcessor,
     },
     util::{
-        WarpMethods, WrapWithProjectionAndResample,
+        AdaptToGrid, TargetGrid, WarpMethods,
         raster_stream_to_geotiff::{
             GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
             raster_stream_to_multiband_geotiff_bytes,
@@ -149,7 +149,7 @@ async fn load_on_grid<C: SessionContext>(
     query: &RasterGridQuery,
     encoding: impl FnOnce(&RasterResultDescriptor) -> RasterEncoding,
     execution_context: &C::ExecutionContext,
-) -> Result<(WrapWithProjectionAndResample, RasterEncoding)> {
+) -> Result<(AdaptToGrid, RasterEncoding)> {
     let operator = ctx
         .db()
         .load_processing_graph(&query.processing_graph)
@@ -168,16 +168,17 @@ async fn load_on_grid<C: SessionContext>(
             .await?;
         let encoding = encoding(initialized.result_descriptor());
 
-        let wrapped =
-            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-                .wrap_with_projection_and_resample(
-                    query.origin,
-                    query.resolution,
-                    query.crs,
-                    encoding.warp_methods()?,
-                    execution_context,
-                )
-                .await?;
+        let wrapped = AdaptToGrid::new_create_result_descriptor(operator, initialized)
+            .adapt_to_grid(
+                TargetGrid {
+                    spatial_reference: query.crs,
+                    resolution: query.resolution,
+                    origin: query.origin,
+                },
+                encoding.warp_methods()?,
+                execution_context,
+            )
+            .await?;
         Ok((wrapped, encoding))
     }
     .instrument(debug_span!("initialize"))

@@ -12,6 +12,7 @@ Inside this directory, drop the module prefix from the `just` recipes below (`ju
 - Format: `just python format-code`.
 - Test: `just python test [filter]`, where filter is passed to `pytest -k`.
   Tests in `tests/ge_test.py` **build the Rust server with cargo and launch a real Geo Engine instance**, so they need the backend toolchain and Postgres.
+  Set `GEOENGINE_TEST_SKIP_BUILD=true` to use pre-built binaries in `geoengine/target/<build type>/` instead (CI does this).
 - Build: `just python build`
 
 ## Conventions

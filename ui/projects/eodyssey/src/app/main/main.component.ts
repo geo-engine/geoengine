@@ -164,7 +164,7 @@ export class MainComponent {
             const mapImageWithCitation = await addCitationToMapImage(mapImage, citation);
             const link = document.createElement('a');
             link.href = mapImageWithCitation;
-            link.download = `${currentDate} ${currentLayer}.png`;
+            link.download = `${currentDate}_${currentLayer.replace(/[^\p{L}\p{N}._-]+/gu, '_')}.png`;
             link.click();
             link.remove();
         } finally {

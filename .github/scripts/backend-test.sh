@@ -8,7 +8,7 @@ function print_headline() {
 }
 
 print_headline "Install cargo-llvm-cov"
-just backend install
+just backend install-llvm-cov
 
 print_headline "Prefetch Build Downloads"
 just backend prefetch-build-downloads || exit 1

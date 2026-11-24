@@ -15,6 +15,12 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+# Cancel superseded runs of the same pull request. Every other run gets its own group, since GitHub would otherwise
+# drop pending runs of the same group, e.g., on `main`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   BENCH_UPLOAD_NAME: benchmark-results
@@ -23,7 +29,9 @@ env:
   # retry transient network failures when downloading dependencies
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
+  # `PIP_RETRIES` only retries failed connections, `PIP_RESUME_RETRIES` also resumes downloads that break off
   PIP_RETRIES: 10
+  PIP_RESUME_RETRIES: 10
   UV_HTTP_RETRIES: 10
   npm_config_fetch_retries: 5
   npm_config_fetch_retry_mintimeout: 20000
