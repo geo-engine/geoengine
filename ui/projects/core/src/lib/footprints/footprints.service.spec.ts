@@ -669,6 +669,27 @@ describe('FootprintsService overlay', () => {
             expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-2, TimeStepFootprintStatus.Data)});
         });
 
+        it('points after the data to its last date with scenes in the view, else to its last date', async () => {
+            answerDates([
+                day(-4, TimeStepFootprintStatus.Data),
+                day(-3, TimeStepFootprintStatus.Unknown),
+                day(-2, TimeStepFootprintStatus.Empty),
+            ]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            // a date the data source cannot tell may have scenes
+            expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-3, TimeStepFootprintStatus.Unknown)});
+        });
+
+        it('points after the data to its last date where no date of the view has scenes', async () => {
+            answerDates([day(-3, TimeStepFootprintStatus.Empty), day(-2, TimeStepFootprintStatus.Empty)]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-2, TimeStepFootprintStatus.Empty)});
+        });
+
         it('shows no dates before the selected one while the part of the dates with it still loads', async () => {
             let answerRest: (footprints: RasterFootprints) => void = () => undefined;
             getFootprints.mockImplementation((_id, query) => {
