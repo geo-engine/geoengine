@@ -79,18 +79,6 @@ impl SpatialGridDefinition {
         self.shift_bounds_relative_by_pixel_offset(-nearest_to_target)
     }
 
-    /// This method moves the origin to the coordinate of the grid edge nearest to the supplied new origin reference
-    pub fn with_moved_origin_to_nearest_grid_edge_with_distance(
-        &self,
-        new_origin_referece: Coordinate2D,
-    ) -> (Self, Coordinate2D) {
-        let distance = self
-            .geo_transform
-            .distance_to_nearest_pixel_edge(new_origin_referece);
-        let new_self = self.with_moved_origin_to_nearest_grid_edge(new_origin_referece);
-        (new_self, distance)
-    }
-
     /// Creates a new spatial grid with the self shape and pixel size but new origin.
     #[must_use]
     pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
@@ -132,15 +120,9 @@ impl SpatialGridDefinition {
             return None;
         }
 
-        let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
-            self.geo_transform.origin_coordinate,
-        );
-
-        if dist.x.abs() > self.geo_transform().x_pixel_size().get().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
-            || dist.y.abs() > self.geo_transform().y_pixel_size().get().abs() * 0.00001
-        {
-            return None;
-        }
+        // `is_compatible_grid` already checked that the origin of other is a pixel edge of self
+        let other_shift =
+            other.with_moved_origin_to_nearest_grid_edge(self.geo_transform.origin_coordinate);
 
         let intersection_bounds = self
             .grid_bounds()
@@ -551,6 +533,43 @@ mod tests {
                 geo_transform: GeoTransform::new_unchecked((-180.0, 90.).into(), 0.2, -0.2),
                 grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1799]).unwrap(),
             })
+        );
+    }
+
+    #[test]
+    fn it_intersects_grids_whose_pixel_sizes_differ_in_the_last_bit() {
+        // Sentinel-3 SYN NetCDF files: GDAL derives the pixel size from the coordinate vectors, so the files of
+        // different regions of the same 1/112 degree grid differ in the last bit of the pixel size
+        let europe = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(
+                (-10.995_535_714_293_83, 75.004_464_285_714_29).into(),
+                0.008_928_571_428_571,
+                -0.008_928_571_428_571,
+            ),
+            GridBoundingBox2D::new([0, 0], [7999, 15999]).unwrap(),
+        );
+        let asian_islands = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(
+                (92.004_464_285_701_19, 28.995_535_714_287_925).into(),
+                0.008_928_571_428_571_001,
+                -0.008_928_571_428_571,
+            ),
+            GridBoundingBox2D::new([0, 0], [1999, 1999]).unwrap(),
+        );
+
+        assert_eq!(
+            europe.intersection(&asian_islands),
+            Some(SpatialGridDefinition::new(
+                europe.geo_transform,
+                GridBoundingBox2D::new([5153, 11536], [7152, 13535]).unwrap(),
+            ))
+        );
+        assert_eq!(
+            asian_islands.intersection(&europe),
+            Some(SpatialGridDefinition::new(
+                asian_islands.geo_transform,
+                GridBoundingBox2D::new([0, 0], [1999, 1999]).unwrap(),
+            ))
         );
     }
 

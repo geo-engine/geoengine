@@ -29,7 +29,7 @@ use geoengine_operators::{
         TypedOperator, TypedRasterQueryProcessor,
     },
     util::{
-        WarpMethods, WrapWithProjectionAndResample,
+        AdaptToGrid, TargetGrid, WarpMethods,
         raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
     },
 };
@@ -293,18 +293,19 @@ pub async fn tile_on_grid<T>(
                 .as_option()
                 .ok_or(OgcApiError::MissingSpatialReference)?,
         };
-    let wrapped =
-        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized_operator)
-            .wrap_with_projection_and_resample(
-                Some(origin),
-                Some(tms_spec.spatial_resolution(query.tile_matrix)),
+    let wrapped = AdaptToGrid::new_create_result_descriptor(operator, initialized_operator)
+        .adapt_to_grid(
+            TargetGrid {
                 spatial_reference,
-                methods,
-                execution_context,
-            )
-            .instrument(debug_span!("initialize_warp"))
-            .await
-            .boxed_context(error::InitializingProcessingGraph)?;
+                resolution: Some(tms_spec.spatial_resolution(query.tile_matrix)),
+                origin: Some(origin),
+            },
+            methods,
+            execution_context,
+        )
+        .instrument(debug_span!("initialize_warp"))
+        .await
+        .boxed_context(error::InitializingProcessingGraph)?;
 
     let grid_bounds = tms_spec.tile_grid_bbox(
         &wrapped

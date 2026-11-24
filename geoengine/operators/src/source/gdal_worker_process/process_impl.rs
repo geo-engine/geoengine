@@ -1,14 +1,14 @@
 use super::{
-    GdalDatasetParameters, GdalMetadataMapping,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
         RasterInfo, level_of_factor,
     },
 };
-use crate::util::gdal::band_levels;
-use crate::{
-    source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
-    util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
+use crate::util::{
+    GdalConfigOptions,
+    gdal::{band_levels, gdal_open_ex_gdal_error, identify_spatial_reference},
+    retry::{RetryDecision, SyncRetryLimits, retry_sync},
 };
 use float_cmp::approx_eq;
 use gdal::{
@@ -23,7 +23,7 @@ use geoengine_datatypes::{
         GridSize, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
         RasterPropertiesEntryType,
     },
-    spatial_reference::{SpatialReference, SpatialReferenceOption},
+    spatial_reference::SpatialReferenceOption,
     util::helpers::equals_or_both_nan,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -36,7 +36,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::OnceLock,
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tracing::debug;
 
@@ -47,9 +47,8 @@ static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
 const GDAL_DATA_COVERAGE_STATUS_DATA: i32 = 0x02;
 const GDAL_DATA_COVERAGE_STATUS_EMPTY: i32 = 0x04;
 
-static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
-static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
-static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
+const GDAL_RETRY_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+const GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Returns a reference to the cached `gdalsource-process` path.
 /// The detection logic runs exactly once on the very first call.
@@ -124,6 +123,31 @@ pub struct WorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    #[serde(default)]
+    pub retry: WorkerRetryConfig,
+}
+
+/// Limits for retrying a failed GDAL open or read in a worker. They apply on top of the number
+/// of retries of a dataset (`GdalDatasetParameters::retry`), and a missing file or a denied
+/// access is never retried. `[gdal_process_pool.worker.retry]` in the settings; a worker passes
+/// them to its [`GdalDatasetHolder`] at start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkerRetryConfig {
+    /// The longest pause between two attempts. Pauses start at 1 s and double.
+    pub max_backoff_seconds: u64,
+    /// No retry starts if its pause would end later than this after the first attempt.
+    pub max_duration_seconds: u64,
+}
+
+impl Default for WorkerRetryConfig {
+    fn default() -> Self {
+        // as `Settings-default.toml`
+        Self {
+            max_backoff_seconds: 8,
+            max_duration_seconds: 180,
+        }
+    }
 }
 
 impl Default for WorkerConfig {
@@ -140,6 +164,7 @@ impl Default for WorkerConfig {
             ],
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
+            retry: WorkerRetryConfig::default(),
         }
     }
 }
@@ -253,12 +278,14 @@ where
     Ok((client_sender, client_reciever))
 }
 
-/// A simple, single-entry cache for an open GDAL dataset tile.
+/// A simple, single-entry cache for an open GDAL dataset tile, together with the limits for
+/// retrying opens and reads of the worker that owns it.
 #[derive(Default)]
 pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
+    retry: WorkerRetryConfig,
 }
 
 struct PrevDatasetOpt {
@@ -266,11 +293,13 @@ struct PrevDatasetOpt {
 }
 
 impl GdalDatasetHolder {
-    pub fn new() -> Self {
+    /// An empty cache whose opens and reads are retried within `retry`.
+    pub fn new(retry: WorkerRetryConfig) -> Self {
         Self {
             params: None,
             dataset: None,
             thread_local: None,
+            retry,
         }
     }
 
@@ -386,17 +415,6 @@ impl GdalDatasetHolder {
 pub struct GdalHandling;
 
 impl GdalHandling {
-    pub fn error_is_gdal_file_not_found(error: &GdalError) -> bool {
-        matches!(
-            error,
-            GdalError::NullPointer {
-                    method_name,
-                    msg
-                }
-             if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
-        )
-    }
-
     fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
         unsafe {
             if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
@@ -405,25 +423,60 @@ impl GdalHandling {
         }
     }
 
+    /// The limits of retrying `dataset_params` under `config`.
+    fn retry_limits(
+        dataset_params: &GdalDatasetParameters,
+        config: WorkerRetryConfig,
+    ) -> SyncRetryLimits {
+        SyncRetryLimits {
+            max_retries: dataset_params.max_retries().unwrap_or(0),
+            initial_delay: GDAL_RETRY_INITIAL_BACKOFF,
+            backoff_factor: GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
+            max_delay: Some(Duration::from_secs(config.max_backoff_seconds)),
+            max_duration: Some(Duration::from_secs(config.max_duration_seconds)),
+        }
+    }
+
+    /// Logs a failed attempt of [`Self::open_with_retry`]. A first attempt that is not retried
+    /// is only logged at debug level, since the caller handles its error.
+    fn log_retry_decision(
+        dataset_params: &GdalDatasetParameters,
+        limits: &SyncRetryLimits,
+        error: &IpcProcessError,
+        decision: RetryDecision,
+    ) {
+        let path = dataset_params.file_path.display();
+        let max_attempts = limits.max_retries.saturating_add(1);
+        match decision {
+            RetryDecision::RetryAfter { attempt, delay } => tracing::warn!(
+                "GDAL attempt {attempt}/{max_attempts} for {path} failed, retrying in {delay:?}: {error}"
+            ),
+            RetryDecision::GiveUp { attempt: 1, reason } => {
+                tracing::debug!("GDAL access to {path} failed ({reason:?}): {error}");
+            }
+            RetryDecision::GiveUp { attempt, reason } => tracing::warn!(
+                "GDAL attempt {attempt}/{max_attempts} for {path} failed, giving up ({reason:?}): {error}"
+            ),
+        }
+    }
+
     /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
-    /// open and the read with backoff. Remote paths clear their VSI cache on failure, and a
-    /// file that explicitly does not exist is never retried.
+    /// open and the read with backoff within the dataset's number of retries and the
+    /// [`WorkerRetryConfig`] of `cache`. Remote paths clear their VSI cache on failure. A missing
+    /// file or a denied access is never retried.
     fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
     ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
-        let max_retries = dataset_params.max_retries().unwrap_or(0);
+        let limits = Self::retry_limits(dataset_params, cache.retry);
         let dp = &dataset_params;
 
         // Wrap both OPEN and READ actions inside the retry loop
 
         retry_sync(
-            max_retries,
-            GDAL_RETRY_INITIAL_BACKOFF_MS,
-            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
-            Some(GDAL_RETRY_MAX_BACKOFF_MS),
+            &limits,
             || {
                 let ds = match cache.get_or_open(dp) {
                     Ok(dataset) => dataset,
@@ -441,8 +494,8 @@ impl GdalHandling {
                     }
                 })
             },
-            // If the file explicitly does not exist, do not waste time retrying
-            |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
+            IpcProcessError::is_permanent,
+            |error, decision| Self::log_retry_decision(dp, &limits, error, decision),
         )
     }
 
@@ -482,15 +535,22 @@ impl GdalHandling {
             })?;
             // GDAL reports a file without a CRS as an error
             let spatial_reference = match ds.spatial_ref() {
-                Ok(spatial_ref) => SpatialReference::try_from(spatial_ref)
+                Ok(spatial_ref) => identify_spatial_reference(spatial_ref)
                     .map_err(|e| IpcProcessError::IpcOther { msg: e.to_string() })?
                     .into(),
                 Err(_) => SpatialReferenceOption::Unreferenced,
             };
+            // GDAL reports a file without a geo transform as an error
+            let geo_transform = ds
+                .geo_transform()
+                .ok()
+                .and_then(|geo_transform| GdalDatasetGeoTransform::try_from(geo_transform).ok());
 
             Ok(RasterInfo {
                 data_type,
                 spatial_reference,
+                geo_transform,
+                no_data_value: band.no_data_value(),
                 levels: band_levels(&band)?,
             })
         })
@@ -858,6 +918,7 @@ mod tests {
             GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType, RasterPropertiesKey,
             SpatialGridDefinition, TileInformation,
         },
+        spatial_reference::SpatialReference,
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
@@ -1228,7 +1289,7 @@ mod tests {
             retry: None,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&dataset_params).unwrap();
 
         let reader_payload =
@@ -1365,7 +1426,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
 
         let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,
@@ -1413,6 +1474,153 @@ mod tests {
             Err(IpcProcessError::GdalError { .. }) => {}
             _ => panic!("expected GdalError error"),
         }
+    }
+
+    /// Parameters of `s3://bucket/{key}` on the S3 mock `server`, retried as often as STAC does.
+    fn s3_mock_params(server: &Server, key: &str) -> GdalDatasetParameters {
+        GdalDatasetParameters {
+            file_path: format!("s3://bucket/{key}").into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(
+                [
+                    ("AWS_S3_ENDPOINT", server.addr().to_string()),
+                    ("AWS_HTTPS", "NO".to_string()),
+                    ("AWS_VIRTUAL_HOSTING", "FALSE".to_string()),
+                    ("AWS_NO_SIGN_REQUEST", "YES".to_string()),
+                    ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif".to_string()),
+                    ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR".to_string()),
+                    ("GDAL_HTTP_NETRC", "NO".to_string()),
+                    ("GDAL_HTTP_MAX_RETRY", "0".to_string()),
+                ]
+                .map(|(name, value)| (name.to_string(), value))
+                .to_vec(),
+            ),
+            allow_alphaband_as_mask: true,
+            retry: Some(super::super::GdalRetryOptions { max_retries: 99 }),
+        }
+    }
+
+    /// An S3 error response as object stores send it.
+    fn s3_error(status: u16, code: &str) -> responders::ResponseBuilder<String> {
+        responders::status_code(status)
+            .insert_header("Content-Type", "application/xml")
+            .body(format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>{code}</Code><Message>{code}</Message></Error>"
+            ))
+    }
+
+    /// Answers the listings with which GDAL checks whether a missing object is a directory with
+    /// an empty listing, as S3 does.
+    fn expect_empty_s3_listings(server: &Server) {
+        server.expect(
+            Expectation::matching(request::path("/bucket/"))
+                .times(..)
+                .respond_with(
+                    responders::status_code(200)
+                        .insert_header("Content-Type", "application/xml")
+                        .body(
+                            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult><Name>bucket</Name><KeyCount>0</KeyCount><MaxKeys>100</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>",
+                        ),
+                ),
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_does_not_retry_a_missing_s3_object() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::path("/bucket/missing.tif"))
+                .times(1..)
+                .respond_with(s3_error(404, "NoSuchKey")),
+        );
+
+        expect_empty_s3_listings(&server);
+
+        let start = Instant::now();
+        let result = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::default(),
+            &s3_mock_params(&server, "missing.tif"),
+        );
+
+        let error = result.expect_err("the object does not exist");
+        assert!(error.is_file_not_found(), "{error:?}");
+        // a retry would pause for 1 s first
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_does_not_retry_a_denied_s3_object() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::path("/bucket/denied.tif"))
+                .times(1..)
+                .respond_with(s3_error(403, "AccessDenied")),
+        );
+
+        expect_empty_s3_listings(&server);
+
+        let start = Instant::now();
+        let result = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::default(),
+            &s3_mock_params(&server, "denied.tif"),
+        );
+
+        let error = result.expect_err("access is denied");
+        assert!(
+            matches!(
+                error,
+                IpcProcessError::GdalError {
+                    kind: IpcProcessGdalErrorKind::AccessDenied,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn it_limits_retries_by_the_worker_config() {
+        let params = GdalDatasetParameters {
+            retry: Some(super::super::GdalRetryOptions { max_retries: 99 }),
+            ..get_params()
+        };
+
+        let limits = GdalHandling::retry_limits(
+            &params,
+            WorkerRetryConfig {
+                max_backoff_seconds: 8,
+                max_duration_seconds: 180,
+            },
+        );
+
+        assert_eq!(
+            limits,
+            SyncRetryLimits {
+                max_retries: 99,
+                initial_delay: Duration::from_secs(1),
+                backoff_factor: 2.,
+                max_delay: Some(Duration::from_secs(8)),
+                max_duration: Some(Duration::from_secs(180)),
+            }
+        );
+        assert_eq!(
+            GdalHandling::retry_limits(&get_params(), WorkerRetryConfig::default()).max_retries,
+            0
+        );
     }
 
     #[test]
@@ -1466,7 +1674,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
 
         let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,
@@ -1587,7 +1795,7 @@ mod tests {
         // it failed, but not with file not found
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(!GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(!IpcProcessError::from(error).is_file_not_found());
         }
 
         // second fail doesn't even try, so still not "file not found", even though it should be now
@@ -1601,7 +1809,7 @@ mod tests {
 
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(!GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(!IpcProcessError::from(error).is_file_not_found());
         }
 
         GdalHandling::clear_gdal_vsi_cache_for_path(file_path.as_path());
@@ -1618,7 +1826,7 @@ mod tests {
         // now we get the file not found error
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(IpcProcessError::from(error).is_file_not_found());
         }
     }
 
@@ -1727,7 +1935,7 @@ mod tests {
             flip_y: true,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let reader_payload = GdalHandling::load_tile_data::<u8>(
@@ -1792,7 +2000,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let GridAndProperties { grid, properties } = GdalHandling::load_tile_data::<u8>(
@@ -1883,7 +2091,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&params).unwrap();
 
         let reader_payload =
@@ -1949,7 +2157,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetHolder::new();
+        let mut gdc = GdalDatasetHolder::default();
         let dataset = gdc.get_or_open(&params).unwrap();
 
         GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice, None)
@@ -2023,7 +2231,7 @@ mod tests {
             .unwrap();
 
         let info = GdalHandling::load_raster_info_with_dataset_retry(
-            &mut GdalDatasetHolder::new(),
+            &mut GdalDatasetHolder::default(),
             &params,
         )
         .unwrap();
@@ -2032,7 +2240,7 @@ mod tests {
 
     #[test]
     fn it_reads_raster_info_without_pixels() {
-        let mut holder = GdalDatasetHolder::new();
+        let mut holder = GdalDatasetHolder::default();
 
         let info = GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &get_params())
             .expect("the NDVI fixture opens");
@@ -2044,6 +2252,50 @@ mod tests {
         let mut missing = get_params();
         missing.file_path = test_data!("raster/does_not_exist.tif").into();
         assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
+    }
+
+    #[test]
+    fn it_reads_the_grid_and_crs_of_a_netcdf_header() {
+        let mut params = get_params();
+        params.file_path = test_data!("raster/netcdf_stac/s3_syn_v10_ndvi.nc").into();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::default(),
+            &params,
+        )
+        .expect("the NetCDF fixture opens");
+
+        assert_eq!(info.data_type, RasterDataType::U8);
+        // an unnamed geographic CRS on the WGS 84 ellipsoid
+        assert_eq!(info.spatial_reference, SpatialReference::epsg_4326().into());
+        assert_eq!(info.no_data_value, Some(255.));
+        assert_eq!((info.levels[0].size_x, info.levels[0].size_y), (16, 8));
+        let geo_transform = info.geo_transform.expect("the fixture has a geo transform");
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.x,
+            -10.995_535_714_285_715,
+            epsilon = 1e-12
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.y,
+            75.004_464_285_714_29,
+            epsilon = 1e-12
+        );
+        // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits
+        assert_approx_eq!(
+            f64,
+            geo_transform.x_pixel_size.get(),
+            0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.y_pixel_size.get(),
+            -0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
     }
 
     /// A 64x64 u16 `GeoTIFF` in 16x16 blocks. Its overviews (2, 4) hold 7, its full resolution 9.
@@ -2096,7 +2348,7 @@ mod tests {
     fn it_reads_the_levels_and_one_level_at_native_size() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
-        let mut holder = GdalDatasetHolder::new();
+        let mut holder = GdalDatasetHolder::default();
 
         let layout =
             GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &params).unwrap();

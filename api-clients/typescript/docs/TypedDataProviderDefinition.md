@@ -45,6 +45,8 @@ Name | Type
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
+`itemTime` | [StacItemTime](StacItemTime.md)
+`maxConcurrentAssetProbes` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -95,6 +97,8 @@ const example = {
   "cacheTtlSecs": null,
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
+  "itemTime": null,
+  "maxConcurrentAssetProbes": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,
