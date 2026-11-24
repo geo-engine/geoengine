@@ -199,6 +199,9 @@ jobs:
     permissions:
       contents: read
 
+    outputs:
+      binaries-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -219,6 +222,7 @@ jobs:
           done
           tar -cf "$RUNNER_TEMP/geoengine-binaries.tar" -C "$RUNNER_TEMP/geoengine-binaries" .
       - name: Upload binaries
+        id: upload-binaries
         uses: actions/upload-artifact@v7
         with:
           name: geoengine-binaries-debug-${{ github.run_id }}-${{ github.run_attempt }}
@@ -278,6 +282,8 @@ jobs:
           cache-targets: false
       - name: Download binaries
         uses: ./.github/actions/download-geoengine-binaries
+        with:
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Install dependencies for OGC validation
         run: |
           apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 -y install podman # required for ogc-validator
@@ -400,6 +406,8 @@ jobs:
         uses: actions/checkout@v7
       - name: Download Geo Engine binaries
         uses: ./.github/actions/download-geoengine-binaries
+        with:
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
         with:
@@ -687,6 +695,8 @@ jobs:
           cache-targets: false
       - name: Download Geo Engine binaries
         uses: ./.github/actions/download-geoengine-binaries
+        with:
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Prefetch OpenAPI Generator
         uses: ./.github/actions/prefetch-openapi-generator
       - name: Lint OpenAPI specification
