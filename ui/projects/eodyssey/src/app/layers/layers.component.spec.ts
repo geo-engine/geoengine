@@ -160,6 +160,9 @@ describe('LayersComponent', () => {
                         dateWithData: vi.fn(),
                         dateBeyondLoaded: vi.fn(),
                         stepsAround: vi.fn().mockReturnValue([]),
+                        selectedOutsideData: signal(undefined),
+                        datesFailed: signal(false),
+                        retryDates: vi.fn(),
                         timeRange: signal(undefined),
                         datesReachTimeRange: vi.fn().mockReturnValue(false),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
@@ -351,6 +354,9 @@ describe('LayersComponent', () => {
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
             stepsAround: Mock;
+            datesFailed: WritableSignal<boolean>;
+            retryDates: Mock;
+            selectedOutsideData: WritableSignal<{direction: 1 | -1; step: {time: {start: number; end: number}}} | undefined>;
             isLoading: WritableSignal<boolean>;
             datesStale: WritableSignal<boolean>;
             overlayVisible: WritableSignal<boolean>;
@@ -359,6 +365,7 @@ describe('LayersComponent', () => {
             selectedDateEmpty: WritableSignal<boolean>;
             timeRange: WritableSignal<{start: number; end: number} | undefined>;
             datesReachTimeRange: Mock;
+            steps: WritableSignal<unknown[]>;
             viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
@@ -383,6 +390,15 @@ describe('LayersComponent', () => {
             expect(status()).toContain('on 01.04.2026');
             expect(statusLine()).toBe('Scenes cover part of this view');
             expect(element.querySelector('.status-dot.status-part')).not.toBeNull();
+
+            // the imagery is on, but its tiles load only further in than the boxes
+            eodysseyLayerService.shown.set('preset');
+            eodysseyLayerService.zoomRequired.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view. Zoom in to load the imagery.');
+            eodysseyLayerService.zoomRequired.set(false);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view');
 
             footprints().viewCoverage.set('none');
             footprints().overlayLoading.set(true);
@@ -460,6 +476,34 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.strip-stale')).toBeNull();
         });
 
+        it('says that the data has no date there where the selected one lies after its last date', async () => {
+            const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().selectedOutsideData.set({direction: 1, step: day(2, 'empty')});
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            // the last dates of the data, none of them selected
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip .tick-selected')).toBeNull();
+            expect(element.querySelector('.dates-outside')?.textContent).toContain('The last date of the data is 02.04.2026');
+            expect(element.querySelector('.dates-of')).toBeNull();
+        });
+
+        it('says that the dates could not be loaded and loads them again on retry', async () => {
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().datesFailed.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('[role=alert] .catalogue-error')?.textContent).toContain('Could not load the dates');
+            element.querySelector<HTMLButtonElement>('.retry-dates')?.click();
+            expect(footprints().retryDates).toHaveBeenCalled();
+        });
+
         it('marks the date of today in the strip', async () => {
             const now = Date.now();
             const start = now - (now % 86_400_000);
@@ -523,6 +567,27 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).not.toHaveBeenCalled();
+        });
+
+        it('steps on where the loaded dates reach now but the data source cannot tell them', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 10, 20)));
+            footprints().datesReachTimeRange.mockReturnValue(true);
+            footprints().steps.set(
+                [19, 20, 21, 22].map((d) => ({time: {start: Date.UTC(2026, 10, d), end: Date.UTC(2026, 10, d + 1)}, status: 'unknown'})),
+            );
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(button('forward').disabled).toBe(false);
+            expect(button('forward').textContent).toContain('1 month on');
+            expect(button('backwards').disabled).toBe(false);
+
+            // the steps after the selected one are known to be empty: there are no later dates
+            footprints().steps.update((steps) => steps.map((step, i) => (i < 2 ? step : {...(step as object), status: 'empty'})));
+            fixture.detectChanges();
+            expect(button('forward').textContent).toContain('No later dates');
+            expect(button('backwards').disabled).toBe(false);
         });
 
         it('goes to the next date with data', async () => {

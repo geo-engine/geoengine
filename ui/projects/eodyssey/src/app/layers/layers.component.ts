@@ -7,6 +7,7 @@ import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
@@ -145,7 +146,9 @@ function formatDate(timeMs: number): string {
                             <mat-progress-bar class="strip-loading" mode="query" aria-label="Loading the dates"></mat-progress-bar>
                         }
                     </div>
-                    @if (eodysseyLayerService.selectedPreset(); as preset) {
+                    @if (outsideData(); as outside) {
+                        <p class="catalogue-message dates-outside" role="status">{{ outside }}</p>
+                    } @else if (eodysseyLayerService.selectedPreset(); as preset) {
                         <p class="catalogue-message dates-of">Dates with scenes in this view for {{ preset.displayName }}</p>
                     }
                 }
@@ -162,6 +165,12 @@ function formatDate(timeMs: number): string {
             </div>
             @if (footprintsService.tooLarge()) {
                 <p class="catalogue-message" role="status">Zoom in to see the dates with data.</p>
+            }
+            @if (footprintsService.datesFailed()) {
+                <div role="alert">
+                    <p class="catalogue-message catalogue-error">Could not load the dates of this view.</p>
+                    <button mat-stroked-button type="button" class="retry-dates" (click)="footprintsService.retryDates()">Retry</button>
+                </div>
             }
         </section>
         <mat-divider></mat-divider>
@@ -719,11 +728,13 @@ export class LayersComponent {
         if (footprints.overlayBlocked() || footprints.overlayTooLarge())
             return {kind: 'unknown', text: 'Zoom in to see where the scenes of this date are.'};
         if (footprints.hasError()) return {kind: 'unknown', text: 'Could not load the data availability.'};
+        // the boxes load some levels before the tiles, so the imagery may not show yet
+        const zoomIn = this.shownPreset() && this.eodysseyLayerService.zoomRequired() ? '. Zoom in to load the imagery.' : '';
         switch (footprints.viewCoverage()) {
             case 'full':
-                return {kind: 'full', text: 'Scenes cover this view'};
+                return {kind: 'full', text: `Scenes cover this view${zoomIn}`};
             case 'part':
-                return {kind: 'part', text: 'Scenes cover part of this view'};
+                return {kind: 'part', text: `Scenes cover part of this view${zoomIn}`};
             case 'none':
                 return {kind: 'none', text: 'No scenes in this view on this date'};
             case 'unknown':
@@ -731,6 +742,15 @@ export class LayersComponent {
             case undefined:
                 return footprints.overlayLoading() ? {kind: 'unknown', text: 'Checking this view…'} : undefined;
         }
+    });
+
+    /** Why the strip shows no selected date: the data has no dates there, e.g. after switching to a source that ends earlier. */
+    readonly outsideData = computed(() => {
+        const outside = this.footprintsService.selectedOutsideData();
+        if (!outside) return undefined;
+        return outside.direction === 1
+            ? `No data on this date. The last date of the data is ${formatDate(outside.step.time.start)}.`
+            : `No data on this date. The first date of the data is ${formatDate(outside.step.time.start)}.`;
     });
 
     /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
@@ -870,7 +890,15 @@ export class LayersComponent {
         const timeRange = this.footprintsService.timeRange();
         const outside =
             timeRange && (direction === 1 ? stepped.start.valueOf() >= timeRange.end : stepped.start.valueOf() < timeRange.start);
-        if (this.footprintsService.datesReachTimeRange(direction) || outside) {
+        // loaded steps whose dates the data source cannot tell may have data, so they are stepped through
+        const now = time.start.valueOf();
+        const unknownBeyond = this.footprintsService
+            .steps()
+            .some(
+                (step) =>
+                    step.status === TimeStepFootprintStatus.Unknown && (direction === 1 ? step.time.start > now : step.time.end <= now),
+            );
+        if ((this.footprintsService.datesReachTimeRange(direction) && !unknownBeyond) || outside) {
             return {label: direction === 1 ? 'No later dates' : 'No earlier dates'};
         }
         const amount = `${timeStep.durationAmount} ${timeStep.durationUnit}`;

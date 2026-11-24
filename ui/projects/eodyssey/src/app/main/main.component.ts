@@ -119,7 +119,8 @@ export class MainComponent {
             }
         );
     });
-    readonly zoomRequired = signal(false);
+    /** Shared, so the panel can tell why the imagery does not show. */
+    readonly zoomRequired = this.eodysseyLayerService.zoomRequired;
     /**
      * The coarsest matrix level at which the data availability of a date is shown, also before the tiles load. Measured on CODE-DE for one
      * date and a cold view with its margin: level 5 needs 12 catalog searches in 1.9 s, level 4 28 in 4.7 s, level 3 48; the server refuses

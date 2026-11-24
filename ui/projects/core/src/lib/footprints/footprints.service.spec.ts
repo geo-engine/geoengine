@@ -20,6 +20,7 @@ describe('FootprintsService overlay', () => {
             ) => Promise<RasterFootprints>
         >();
 
+    const getMetadata = vi.fn<(id: string) => Promise<unknown>>();
     let viewport: BehaviorSubject<unknown>;
     /** The time of the layer's data in its metadata. */
     let dataTime: Time | undefined;
@@ -31,6 +32,7 @@ describe('FootprintsService overlay', () => {
         dataTime = undefined;
         viewport = new BehaviorSubject<unknown>({extent: [0, 0, 1, 1], resolution: 1});
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
+        getMetadata.mockReset();
         registerLayer.mockReset().mockResolvedValue('graph');
         const metadata = (): RasterLayerMetadata =>
             Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
@@ -44,7 +46,7 @@ describe('FootprintsService overlay', () => {
                     provide: LayersService,
                     useValue: {
                         registerAndGetLayerProcessingGraphId: registerLayer,
-                        getProcessingGraphIdMetadata: vi.fn(() => Promise.resolve(metadata())),
+                        getProcessingGraphIdMetadata: getMetadata.mockImplementation(() => Promise.resolve(metadata())),
                     },
                 },
                 {provide: ProcessingGraphsService, useValue: {getFootprints}},
@@ -265,6 +267,27 @@ describe('FootprintsService overlay', () => {
         expect(service.hasError()).toBe(true);
         expect(() => service.tooLarge()).not.toThrow();
         expect(service.viewCoverage()).toBeUndefined();
+    });
+
+    it('loads the dates after the metadata of the layer failed once, and tells when the dates fail', async () => {
+        getMetadata.mockRejectedValueOnce(new Error('server error'));
+        const service = createService();
+        service.datesNeeded.set(true);
+        await settle();
+        // the dates asked for the graph again
+        expect(getMetadata).toHaveBeenCalledTimes(2);
+        expect(getFootprints).toHaveBeenCalled();
+        expect(service.datesFailed()).toBe(false);
+
+        getFootprints.mockRejectedValue(new Error('server error'));
+        viewport.next({extent: [5, 5, 6, 6], resolution: 1});
+        await settle();
+        expect(service.datesFailed()).toBe(true);
+
+        getFootprints.mockResolvedValue(FOOTPRINTS);
+        service.retryDates();
+        await settle();
+        expect(service.datesFailed()).toBe(false);
     });
 
     it("uses the time step the app sets instead of the project's", () => {
@@ -492,6 +515,39 @@ describe('FootprintsService overlay', () => {
             expect(service.dateBeyondLoaded(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 10));
             expect(service.dateBeyondLoaded(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -4));
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
+        });
+
+        it('shows the last dates of the data, without one selected, where the selected date lies after them', async () => {
+            answerDates([
+                day(-4, TimeStepFootprintStatus.Data),
+                day(-3, TimeStepFootprintStatus.Empty),
+                day(-2, TimeStepFootprintStatus.Data),
+            ]);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.stepsAround(2).map((step) => step.time.start)).toEqual([Date.UTC(2026, 3, -3), Date.UTC(2026, 3, -2)]);
+            expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-2, TimeStepFootprintStatus.Data)});
+        });
+
+        it('shows no dates before the selected one while the part of the dates with it still loads', async () => {
+            let answerRest: (footprints: RasterFootprints) => void = () => undefined;
+            getFootprints.mockImplementation((_id, query) => {
+                if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve(FOOTPRINTS);
+                // the first part, the month the window starts in, ends before the selected date
+                if (getFootprints.mock.calls.length === 1)
+                    return Promise.resolve({...FOOTPRINTS, steps: [day(-2, TimeStepFootprintStatus.Data)]});
+                return new Promise((resolve) => (answerRest = resolve));
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.stepsAround(15)).toEqual([]);
+            expect(service.selectedOutsideData()).toBeUndefined();
+            answerRest({...FOOTPRINTS, steps: [day(1, TimeStepFootprintStatus.Data)]});
+            await settle();
+            expect(service.stepsAround(15)).toHaveLength(2);
         });
 
         it('finds no date with data beyond the loaded window', async () => {

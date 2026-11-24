@@ -109,7 +109,8 @@ describe('footprints', () => {
         expect(starts(5)).toEqual([3, 4, 5, 6, 7]);
         expect(starts(0)).toEqual([0, 1, 2, 3, 4]);
         expect(starts(9)).toEqual([5, 6, 7, 8, 9]);
-        expect(starts(20)).toEqual([]);
+        expect(starts(20)).toEqual([5, 6, 7, 8, 9]);
+        expect(starts(-3)).toEqual([0, 1, 2, 3, 4]);
         expect(stepsAround(days.slice(0, 2), 1, 5)).toHaveLength(2);
     });
 

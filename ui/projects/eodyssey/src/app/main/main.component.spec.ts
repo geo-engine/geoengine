@@ -84,6 +84,7 @@ describe('EOdyssey debug reprojection', () => {
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
+                        zoomRequired: signal(false),
                     },
                 },
             ],

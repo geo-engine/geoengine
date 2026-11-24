@@ -80,6 +80,8 @@ export class EOdysseyLayerService {
     });
     /** The map shows where the scenes of the date are, alone or over the imagery. Kept when the data source changes. */
     readonly availabilityShown = signal(false);
+    /** The map does not load the tiles of the imagery at this zoom yet. Set by the map. */
+    readonly zoomRequired = signal(false);
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     /**

@@ -60,8 +60,14 @@ export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number):
     return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);
 }
 
-/** At most `count` consecutive time steps with the one at `timeMs` in their middle, where enough steps are on both sides. */
+/**
+ * At most `count` consecutive time steps with the one at `timeMs` in their middle, where enough steps are on both sides.
+ * The last or first `count` where `timeMs` lies after or before all steps, e.g. after the end of the data.
+ */
 export function stepsAround(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number, count: number): TimeStepFootprint[] {
+    if (!steps.length) return [];
+    if (timeMs >= steps[steps.length - 1].time.end) return steps.slice(-count);
+    if (timeMs < steps[0].time.start) return steps.slice(0, count);
     const index = steps.findIndex((step) => step.time.start <= timeMs && timeMs < step.time.end);
     if (index < 0) return [];
     const start = Math.max(0, Math.min(index - Math.floor(count / 2), steps.length - count));

@@ -152,7 +152,12 @@ export class FootprintsService {
         params: () => this.layer(),
         // open where the layer does not tell; never undefined, which a resource takes for no value
         loader: async ({params: layer}): Promise<TimeInterval> => {
-            const time = (await this.graphOf(layer)).metadata?.time;
+            // open after a failure too, so the dates still load: their request asks for the graph again and shows its failure
+            // shortcut: the dates of that layer are not clipped to the start of its data then, until the layer is set again
+            const time = await this.graphOf(layer).then(
+                (graph) => graph.metadata?.time,
+                () => undefined,
+            );
             return {start: time?.start.valueOf() ?? -Infinity, end: time?.end.valueOf() ?? Infinity};
         },
     });
@@ -353,6 +358,21 @@ export class FootprintsService {
      */
     readonly overlayTooLarge = computed(() => this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false));
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
+    /** The dates of the view could not be loaded, see `retryDates`. */
+    readonly datesFailed = computed(() => this.footprintsResource.status() === 'error');
+    /**
+     * The selected time lies after (1) or before (-1) all time steps of the data, e.g. after switching to a source whose data
+     * ends earlier, with the nearest step there. The dates of a window are those of the data within it, so outside of them
+     * there are none.
+     */
+    readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
+        const steps = this.steps();
+        const time = this.time()?.start.valueOf();
+        if (this.isLoading() || !steps.length || time === undefined) return undefined;
+        if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
+        if (time < steps[0].time.start) return {direction: -1, step: steps[0]};
+        return undefined;
+    });
     readonly hasError = computed(
         () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
     );
@@ -466,10 +486,21 @@ export class FootprintsService {
         return direction === 1 ? steps[steps.length - 1].time.end >= timeRange.end : steps[0].time.start <= timeRange.start;
     }
 
-    /** At most `count` loaded time steps around the selected time, e.g. for a strip of dates. */
+    /**
+     * At most `count` loaded time steps around the selected time, e.g. for a strip of dates. The nearest ones where the
+     * selected time lies outside the dates of the data, see `selectedOutsideData`.
+     */
     stepsAround(count: number): TimeStepFootprint[] {
         const time = this.time();
-        return time ? stepsAround(this.steps(), time.start.valueOf(), count) : [];
+        if (!time) return [];
+        const timeMs = time.start.valueOf();
+        // a part of the dates that loads first may end before the selected time, which the rest then reaches
+        if (this.isLoading() && !stepAt(this.steps(), timeMs)) return [];
+        return stepsAround(this.steps(), timeMs, count);
+    }
+
+    retryDates(): void {
+        this.footprintsResource.reload();
     }
 
     /** The graph and the metadata of a layer. They do not change while the page is open, so they are asked for once. */
