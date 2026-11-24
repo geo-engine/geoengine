@@ -7,11 +7,19 @@ use std::fmt::{Debug, Display};
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionExecutionError {
-    #[snafu(display("Cannot create temporary directory"))]
-    TempDir { source: std::io::Error },
+    /// The `path` is only in `Debug`, since `Display` is shown to users
+    #[snafu(display("Cannot create the expression workspace"))]
+    WorkspaceDir {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
 
-    #[snafu(display("Cannot create workspace for dependencies"))]
-    DepsWorkspace { source: std::io::Error },
+    /// The `path` is only in `Debug`, since `Display` is shown to users
+    #[snafu(display("Cannot set up the expression workspace"))]
+    Workspace {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
 
     #[snafu(display(
         "Cannot find the expression dependencies in {}; set `[expression] dependencies_path` to the directory built with this binary",

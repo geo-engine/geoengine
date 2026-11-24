@@ -60,23 +60,28 @@ impl ExpressionDependencies {
     /// Nobody but the owner of the server may write to it, since the server loads code from it.
     pub fn new(parent: &Path, dependencies: &Path) -> Result<Self> {
         // `rustc` runs in the workspace, so relative paths would point elsewhere
-        let parent = std::path::absolute(parent).context(error::TempDir)?;
+        let parent = std::path::absolute(parent).context(error::WorkspaceDir {
+            path: parent.to_path_buf(),
+        })?;
         let parent = parent.as_path();
         let dependencies = std::path::absolute(dependencies).context(error::DepsMissing {
             path: dependencies.to_path_buf(),
         })?;
         let dependencies = dependencies.as_path();
 
-        std::fs::create_dir_all(parent).context(error::TempDir)?;
+        std::fs::create_dir_all(parent).context(error::WorkspaceDir { path: parent })?;
 
         let workspace = tempfile::Builder::new()
             .prefix(WORKSPACE_PREFIX)
             // the server loads and runs the libraries in here, so nobody else may touch them
             .permissions(Permissions::from_mode(0o700))
             .tempdir_in(parent)
-            .context(error::TempDir)?;
+            .context(error::WorkspaceDir { path: parent })?;
+        let workspace_error = || error::Workspace {
+            path: workspace.path(),
+        };
 
-        let lock = Self::lock_workspace(workspace.path()).context(error::DepsWorkspace)?;
+        let lock = Self::lock_workspace(workspace.path()).context(workspace_error())?;
 
         remove_stale_workspaces(parent, MIN_STALE_AGE);
 
@@ -84,11 +89,11 @@ impl ExpressionDependencies {
         write_minimal_toolchain_file(
             &mut BufWriter::new(
                 File::create(workspace.path().join("rust-toolchain.toml"))
-                    .context(error::DepsWorkspace)?,
+                    .context(workspace_error())?,
             ),
             RUST_TOOLCHAIN_TOML,
         )
-        .context(error::DepsWorkspace)?;
+        .context(workspace_error())?;
 
         check_dependencies(dependencies)?;
         check_rustc_version(workspace.path())?;
