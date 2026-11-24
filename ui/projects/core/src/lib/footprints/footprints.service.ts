@@ -604,7 +604,11 @@ export class FootprintsService {
     showDate(date: Date, view: MatCalendarView): void {
         if (this.calendarHint(view)) return;
         const period = visiblePeriod(date, view);
-        if (stepAt(this.steps(), period.start) && stepAt(this.steps(), period.end - 1)) return;
+        // there are no dates before the data or after now, so only the part of the period within them must be loaded
+        const timeRange = this.timeRange();
+        const start = Math.max(period.start, timeRange?.start ?? -Infinity);
+        const end = Math.min(period.end, timeRange?.end ?? Infinity);
+        if (start >= end || (stepAt(this.steps(), start) && stepAt(this.steps(), end - 1))) return;
         this.window.set(period);
     }
 

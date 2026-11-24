@@ -583,6 +583,22 @@ describe('FootprintsService overlay', () => {
             expect(getFootprints.mock.calls.length).toBe(requests);
         });
 
+        it('does not load the dates again when the calendar opens on the month of today', async () => {
+            // today is 10 April 2026, the selected date the first of it
+            vi.setSystemTime(Date.UTC(2026, 3, 10));
+            // March 1, where the window starts, up to today
+            answerDates(Array.from({length: 41}, (_, i) => day(i - 30, TimeStepFootprintStatus.Data)));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            const requests = getFootprints.mock.calls.length;
+
+            openCalendar(service);
+            await settle();
+
+            expect(getFootprints.mock.calls.length).toBe(requests);
+        });
+
         it('offers only the dates with data in the calendar and finds the nearest ones around the selected time', async () => {
             answerDates(steps);
             const service = createService();
