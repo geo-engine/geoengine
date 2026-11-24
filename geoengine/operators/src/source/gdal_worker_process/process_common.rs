@@ -98,7 +98,7 @@ pub struct IpcChannelMessagePayload {
 impl IpcChannelMessagePayload {
     /// The pixels of the file a read covers, in full-resolution pixels, so that reads of different
     /// levels compare; `None` for header reads.
-    pub fn full_resolution_footprint(&self) -> Option<GridBoundingBox2D> {
+    pub fn full_resolution_read_bounds(&self) -> Option<GridBoundingBox2D> {
         let (read_advise, level_factor) = match &self.request {
             GdalRequest::Read {
                 read_advise,
