@@ -165,6 +165,12 @@ function formatDate(timeMs: number): string {
             @if (footprintsService.tooLarge()) {
                 <p class="catalogue-message" role="status">Zoom in to see the dates with data.</p>
             }
+            @if (footprintsService.datesFailed()) {
+                <div role="alert">
+                    <p class="catalogue-message catalogue-error">Could not load the dates of this view.</p>
+                    <button mat-stroked-button type="button" class="retry-dates" (click)="footprintsService.retryDates()">Retry</button>
+                </div>
+            }
         </section>
         <mat-divider></mat-divider>
         <section class="panel-section" aria-labelledby="availability-heading">

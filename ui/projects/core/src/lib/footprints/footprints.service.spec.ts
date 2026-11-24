@@ -20,6 +20,7 @@ describe('FootprintsService overlay', () => {
             ) => Promise<RasterFootprints>
         >();
 
+    const getMetadata = vi.fn<(id: string) => Promise<unknown>>();
     let viewport: BehaviorSubject<unknown>;
     /** The time of the layer's data in its metadata. */
     let dataTime: Time | undefined;
@@ -31,6 +32,7 @@ describe('FootprintsService overlay', () => {
         dataTime = undefined;
         viewport = new BehaviorSubject<unknown>({extent: [0, 0, 1, 1], resolution: 1});
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
+        getMetadata.mockReset();
         registerLayer.mockReset().mockResolvedValue('graph');
         const metadata = (): RasterLayerMetadata =>
             Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
@@ -44,7 +46,7 @@ describe('FootprintsService overlay', () => {
                     provide: LayersService,
                     useValue: {
                         registerAndGetLayerProcessingGraphId: registerLayer,
-                        getProcessingGraphIdMetadata: vi.fn(() => Promise.resolve(metadata())),
+                        getProcessingGraphIdMetadata: getMetadata.mockImplementation(() => Promise.resolve(metadata())),
                     },
                 },
                 {provide: ProcessingGraphsService, useValue: {getFootprints}},
@@ -265,6 +267,27 @@ describe('FootprintsService overlay', () => {
         expect(service.hasError()).toBe(true);
         expect(() => service.tooLarge()).not.toThrow();
         expect(service.viewCoverage()).toBeUndefined();
+    });
+
+    it('loads the dates after the metadata of the layer failed once, and tells when the dates fail', async () => {
+        getMetadata.mockRejectedValueOnce(new Error('server error'));
+        const service = createService();
+        service.datesNeeded.set(true);
+        await settle();
+        // the dates asked for the graph again
+        expect(getMetadata).toHaveBeenCalledTimes(2);
+        expect(getFootprints).toHaveBeenCalled();
+        expect(service.datesFailed()).toBe(false);
+
+        getFootprints.mockRejectedValue(new Error('server error'));
+        viewport.next({extent: [5, 5, 6, 6], resolution: 1});
+        await settle();
+        expect(service.datesFailed()).toBe(true);
+
+        getFootprints.mockResolvedValue(FOOTPRINTS);
+        service.retryDates();
+        await settle();
+        expect(service.datesFailed()).toBe(false);
     });
 
     it("uses the time step the app sets instead of the project's", () => {

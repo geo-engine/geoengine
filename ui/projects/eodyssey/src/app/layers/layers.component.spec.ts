@@ -161,6 +161,8 @@ describe('LayersComponent', () => {
                         dateBeyondLoaded: vi.fn(),
                         stepsAround: vi.fn().mockReturnValue([]),
                         selectedOutsideData: signal(undefined),
+                        datesFailed: signal(false),
+                        retryDates: vi.fn(),
                         timeRange: signal(undefined),
                         datesReachTimeRange: vi.fn().mockReturnValue(false),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
@@ -352,6 +354,8 @@ describe('LayersComponent', () => {
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
             stepsAround: Mock;
+            datesFailed: WritableSignal<boolean>;
+            retryDates: Mock;
             selectedOutsideData: WritableSignal<{direction: 1 | -1; step: {time: {start: number; end: number}}} | undefined>;
             isLoading: WritableSignal<boolean>;
             datesStale: WritableSignal<boolean>;
@@ -478,6 +482,16 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.date-strip .tick-selected')).toBeNull();
             expect(element.querySelector('.dates-outside')?.textContent).toContain('The last date of the data is 02.04.2026');
             expect(element.querySelector('.dates-of')).toBeNull();
+        });
+
+        it('says that the dates could not be loaded and loads them again on retry', async () => {
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().datesFailed.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('[role=alert] .catalogue-error')?.textContent).toContain('Could not load the dates');
+            element.querySelector<HTMLButtonElement>('.retry-dates')?.click();
+            expect(footprints().retryDates).toHaveBeenCalled();
         });
 
         it('marks the date of today in the strip', async () => {
