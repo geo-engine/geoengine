@@ -46,15 +46,16 @@ export class UserService {
     protected readonly session$ = new ReplaySubject<Session | undefined>(1);
     protected readonly backendStatus$ = new BehaviorSubject<BackendStatus>({available: false, initial: true});
     protected readonly backendInfo$ = new BehaviorSubject<ServerInfo | undefined>(undefined);
-    protected readonly sessionQuota = resource<Quota | undefined, {userApi: UserApi; refresh: void}>({
-        // update quota when session changes or update is triggered
-        params: () => ({
-            userApi: this.userApi(),
-            refresh: this.refreshSessionQuota$(),
-        }),
-        loader: async (): Promise<Quota | undefined> => {
+    protected readonly sessionQuota = resource<Quota | undefined, {userApi: UserApi; refresh: void} | undefined>({
+        // update quota when session changes or update is triggered; stay idle without a session to avoid a 401
+        params: () => {
+            const refresh = this.refreshSessionQuota$();
+            if (!this.sessionToken()) return undefined;
+            return {userApi: this.userApi(), refresh};
+        },
+        loader: async ({params: {userApi}}): Promise<Quota | undefined> => {
             try {
-                return Quota.fromDict(await this.userApi().quotaHandler());
+                return Quota.fromDict(await userApi.quotaHandler());
             } catch {
                 return undefined;
             }
@@ -88,7 +89,8 @@ export class UserService {
     });
 
     protected readonly roleDescriptions = resource({
-        params: () => this.userApi(),
+        // stay idle without a session to avoid a 401
+        params: () => (this.sessionToken() ? this.userApi() : undefined),
         loader: ({params: userApi}) => userApi.getRoleDescriptions().catch(() => undefined),
     });
     protected readonly roleDescriptions$ = toObservable(this.roleDescriptions.value.asReadonly());
