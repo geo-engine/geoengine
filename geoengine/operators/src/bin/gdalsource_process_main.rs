@@ -9,7 +9,7 @@ use geoengine_operators::source::gdal_worker_process::{
         GdalIpcBytePayload, GdalReadAdvise, GdalRequest, IpcChannelMessagePayload,
         IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
-    process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
+    process_impl::{GdalDatasetHolder, GdalHandling, WorkerRetryConfig, setup_client},
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -243,7 +243,7 @@ fn main() {
         set_gdal_process_global_options(opts);
     }
     reroute_gdal_logging();
-    run(token);
+    run(token, worker_config.retry);
 
     drop(runtime_guard);
     if let Some(provider) = provider
@@ -319,13 +319,13 @@ fn raster_type_dispatch(
     }
 }
 
-fn run(token: Token) {
+fn run(token: Token, retry: WorkerRetryConfig) {
     let (sender, receiver) = match setup_client::<WorkerRequest, WorkerResponse>(token) {
         Ok(pair) => pair,
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache = GdalDatasetHolder::new();
+    let mut dataset_cache = GdalDatasetHolder::new(retry);
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
