@@ -414,9 +414,9 @@ impl Default for CoordinatorMap {
 #[derive(Clone, Debug, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
-    /// The settings of `[stac_cache]`, which the contexts read, with the caches the providers
-    /// share. Without them (tests, harvester) providers get a standalone cache.
-    config: Option<(crate::config::StacCache, super::cache::SharedStacCaches)>,
+    /// The settings of `[stac_cache]`, which the contexts read. Without them (tests, harvester)
+    /// providers get a standalone cache.
+    config: Option<crate::config::StacCache>,
 }
 
 impl StacRequestRegistry {
@@ -428,8 +428,7 @@ impl StacRequestRegistry {
     /// Configures the registry and the caches of the providers that use it.
     #[must_use]
     pub fn with_config(mut self, config: crate::config::StacCache) -> Self {
-        let caches = super::cache::SharedStacCaches::new(&config);
-        self.config = Some((config, caches));
+        self.config = Some(config);
         self
     }
 
@@ -437,7 +436,7 @@ impl StacRequestRegistry {
     pub(super) fn new_query_cache(&self) -> super::cache::StacQueryCache {
         self.config.as_ref().map_or_else(
             super::cache::StacQueryCache::standalone,
-            |(config, caches)| caches.query_cache(config),
+            super::cache::StacQueryCache::from_config,
         )
     }
 
