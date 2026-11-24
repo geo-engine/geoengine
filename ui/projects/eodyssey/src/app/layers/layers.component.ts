@@ -24,8 +24,12 @@ import {EOdysseyLayerService} from './layers.service';
 /** The dates the strip below the date shows. */
 const STRIP_DATES = 15;
 
-export function formatDate(timeMs: number): string {
-    return new Time(timeMs).start.format('DD.MM.YYYY');
+/** A date as precise as the time step of the data, e.g. "2024" for yearly data. Days without a time step. */
+export function formatDate(timeMs: number, unit?: string): string {
+    const formats: Record<string, string> = {year: 'YYYY', month: 'MM.YYYY', hour: 'DD.MM.YYYY HH:mm', minute: 'DD.MM.YYYY HH:mm'};
+    const singular = unit?.replace(/s$/, '');
+    const format = singular === 'second' || singular === 'millisecond' ? 'DD.MM.YYYY HH:mm:ss' : formats[singular ?? ''];
+    return new Time(timeMs).start.format(format ?? 'DD.MM.YYYY');
 }
 
 @Component({
@@ -719,7 +723,7 @@ export class LayersComponent {
     readonly currentTime = this.footprintsService.time;
     readonly formattedTime = computed<string>(() => {
         const time = this.currentTime();
-        return time ? formatDate(time.start.valueOf()) : '';
+        return time ? this.formatStep(time.start.valueOf()) : '';
     });
     /** The selected time as the date of the calendar. */
     readonly currentDate = computed<Date | undefined>(() => {
@@ -780,12 +784,13 @@ export class LayersComponent {
         const moved = this.moved();
         if (!moved || this.currentTime()?.start.valueOf() !== moved.to) return undefined;
         const name = this.eodysseyLayerService.selectedDataSource()?.name ?? 'This data source';
-        const date = formatDate(moved.to);
+        const date = this.formatStep(moved.to);
         return {
             text:
                 moved.direction === 1
                     ? `${name} has no data after ${date}, so the date moved there.`
                     : `${name} has no data before ${date}, so the date moved there.`,
+            // the date the user had, of the previous source's time step, so as a day
             back: formatDate(moved.from.start.valueOf()),
         };
     });
@@ -795,8 +800,8 @@ export class LayersComponent {
         const outside = this.footprintsService.selectedOutsideData();
         if (!outside) return undefined;
         return outside.direction === 1
-            ? `No data on this date. The last date of the data is ${formatDate(outside.step.time.start)}.`
-            : `No data on this date. The first date of the data is ${formatDate(outside.step.time.start)}.`;
+            ? `No data on this date. The last date of the data is ${this.formatStep(outside.step.time.start)}.`
+            : `No data on this date. The first date of the data is ${this.formatStep(outside.step.time.start)}.`;
     });
 
     /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
@@ -805,7 +810,7 @@ export class LayersComponent {
         // read once per change of the strip; a page left open past midnight moves it with the next change
         const today = Date.now();
         return this.footprintsService.stepsAround(STRIP_DATES).map((step) => {
-            const date = formatDate(step.time.start);
+            const date = this.formatStep(step.time.start);
             const scenes = {data: 'scenes', empty: 'no scenes', unknown: 'not known'}[step.status];
             const isToday = step.time.start <= today && today < step.time.end;
             return {
@@ -906,6 +911,11 @@ export class LayersComponent {
         });
     }
 
+    /** A date as precise as the time step of the data. */
+    private formatStep(timeMs: number): string {
+        return formatDate(timeMs, this.footprintsService.timeStep()?.durationUnit);
+    }
+
     /** Selects the date again that the new data source moved, see `movedNote`. */
     async moveBack(): Promise<void> {
         const moved = this.moved();
@@ -959,7 +969,7 @@ export class LayersComponent {
         if (this.eodysseyLayerService.variantLoading() || datesPending) return {label: direction === 1 ? 'Later' : 'Earlier'};
 
         const withData = this.footprintsService.dateWithData(direction);
-        if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
+        if (withData) return {time: withData, label: this.formatStep(withData.start.valueOf())};
         const beyond = this.footprintsService.dateBeyondLoaded(direction);
         // the direction, since the date beyond the loaded ones is not known to have scenes
         if (beyond) return {time: beyond, label: direction === 1 ? 'Later' : 'Earlier'};

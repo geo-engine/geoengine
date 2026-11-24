@@ -75,6 +75,7 @@ describe('EOdyssey debug reprojection', () => {
                         overlayLoading: signal(false),
                         selectedOutsideData: signal(undefined),
                         datesStale: signal(false),
+                        timeStep: signal({durationAmount: 1, durationUnit: 'day'}),
                         time: signal(new Time(Date.UTC(2026, 3, 10))),
                         dateWithData: vi.fn(),
                     },

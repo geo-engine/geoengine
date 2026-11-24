@@ -141,7 +141,7 @@ export class MainComponent {
         // the data has no dates there at all, e.g. after "Back to" a date of another source
         const outside = footprints.selectedOutsideData();
         if (shown && outside) {
-            const date = formatDate(outside.step.time.start);
+            const date = formatDate(outside.step.time.start, footprints.timeStep()?.durationUnit);
             return {
                 icon: 'event_busy',
                 text: outside.direction === 1 ? `No data after ${date}.` : `No data before ${date}.`,
@@ -155,7 +155,10 @@ export class MainComponent {
             return {
                 icon: 'event_busy',
                 text: 'No scenes in this view on this date.',
-                action: nearest && {label: `Show ${formatDate(nearest.start.valueOf())}`, time: nearest},
+                action: nearest && {
+                    label: `Show ${formatDate(nearest.start.valueOf(), footprints.timeStep()?.durationUnit)}`,
+                    time: nearest,
+                },
             };
         }
         if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};

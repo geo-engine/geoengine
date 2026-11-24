@@ -8,8 +8,20 @@ import {beforeEach, describe, expect, it, type Mock, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {FootprintsService, MapService, ProjectService} from '@geoengine/core';
-import {LayersComponent} from './layers.component';
+import {formatDate, LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
+
+describe('formatDate', () => {
+    it('names a date as precisely as the time step of the data', () => {
+        const time = Date.UTC(2024, 3, 5, 6, 7, 8);
+        expect(formatDate(time)).toBe('05.04.2024');
+        expect(formatDate(time, 'years')).toBe('2024');
+        expect(formatDate(time, 'month')).toBe('04.2024');
+        expect(formatDate(time, 'days')).toBe('05.04.2024');
+        expect(formatDate(time, 'hour')).toBe('05.04.2024 06:07');
+        expect(formatDate(time, 'seconds')).toBe('05.04.2024 06:07:08');
+    });
+});
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
@@ -166,7 +178,7 @@ describe('LayersComponent', () => {
                         retryDates: vi.fn(),
                         timeRange: signal({start: -Infinity, end: Infinity}),
                         datesReachTimeRange: vi.fn().mockReturnValue(false),
-                        timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
+                        timeStep: signal({durationAmount: 1, durationUnit: 'day'}),
                         isLoading: signal(false),
                         datesStale: signal(false),
                         overlayLoading: signal(false),
@@ -591,8 +603,8 @@ describe('LayersComponent', () => {
             fixture.detectChanges();
             await fixture.whenStable();
             // the data source cannot tell its dates
-            expect(label('backwards')).toBe('1 month back');
-            expect(label('forward')).toBe('1 month on');
+            expect(label('backwards')).toBe('1 day back');
+            expect(label('forward')).toBe('1 day on');
 
             footprints().dateWithData.mockImplementation((direction: number) =>
                 direction === 1 ? new Time(Date.UTC(2026, 3, 17)) : undefined,
@@ -621,7 +633,7 @@ describe('LayersComponent', () => {
 
             // no dates are loaded, e.g. for a date before the data starts: stepping stays within the data's time
             footprints().datesReachTimeRange.mockReturnValue(false);
-            footprints().timeRange.set({start: Date.UTC(2026, 2, 15), end: Date.UTC(2026, 5, 1)});
+            footprints().timeRange.set({start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 5, 1)});
             fixture.detectChanges();
             expect(button('backwards').textContent).toContain('No earlier dates');
             expect(button('backwards').disabled).toBe(true);
@@ -642,7 +654,7 @@ describe('LayersComponent', () => {
             fixture.detectChanges();
             await fixture.whenStable();
             expect(button('forward').disabled).toBe(false);
-            expect(button('forward').textContent).toContain('1 month on');
+            expect(button('forward').textContent).toContain('1 day on');
             expect(button('backwards').disabled).toBe(false);
 
             // the steps after the selected one are known to be empty: there are no later dates
@@ -677,7 +689,7 @@ describe('LayersComponent', () => {
             (footprints() as unknown as {layer: WritableSignal<unknown>}).layer.set(undefined);
             fixture.detectChanges();
             expect(button('forward').disabled).toBe(false);
-            expect(button('forward').textContent).toContain('1 month on');
+            expect(button('forward').textContent).toContain('1 day on');
         });
 
         it('goes to the next date with data', async () => {
