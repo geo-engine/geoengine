@@ -99,13 +99,13 @@ impl IpcChannelMessagePayload {
     /// The pixels of the file a read covers, in full-resolution pixels, so that reads of different
     /// levels compare; `None` for header reads.
     pub fn full_resolution_footprint(&self) -> Option<GridBoundingBox2D> {
-        let GdalRequest::Read {
-            read_advise,
-            level_factor,
-            ..
-        } = &self.request
-        else {
-            return None;
+        let (read_advise, level_factor) = match &self.request {
+            GdalRequest::Read {
+                read_advise,
+                level_factor,
+                ..
+            } => (read_advise, level_factor),
+            GdalRequest::Header => return None,
         };
         // a resampled read (`None`) reads its window from the full resolution
         let factor = level_factor.map_or(1, |factor| factor.get() as isize);
