@@ -323,11 +323,11 @@ enabled = false
 endpoint = "http://127.0.0.1:4317"
 
 [gdal_process_pool.worker.byte_cache]
-# A cache of remote file bytes that all GDAL workers share: per remote file a sparse data file and
-# a map of its 64 KB chunks. Without it, each worker downloads what another worker already has,
-# e.g. the blocks of a finer level after zooming in. Every few seconds the server deletes the least
-# recently used files while the directory holds more than the size, down to 90% of it. 0 reads
-# without the cache.
+# A cache of remote file bytes that all GDAL workers share: per remote file one sparse file with
+# its cached 64 KB chunks and a map of them. Without it, each worker downloads what another worker
+# already has, e.g. the blocks of a finer level after zooming in. Every few seconds the server
+# deletes the least recently used files while the directory holds more than the size, down to 90%
+# of it. The server empties the cache when it starts. 0 reads without the cache.
 size_in_mb = 0
 # The most one remote file may take, so that reading a whole large file cannot empty the cache.
 max_file_percent = 25

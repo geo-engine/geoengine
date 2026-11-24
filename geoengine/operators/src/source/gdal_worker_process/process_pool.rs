@@ -346,6 +346,16 @@ pub struct GdalProcessPool {
     counters: PoolCounters,
     /// the directory of the workers' byte cache, if they have one
     byte_cache_directory: Option<std::path::PathBuf>,
+    /// the task that keeps the byte cache within its size, ended with the pool
+    byte_cache_sweeper: Option<tokio::task::AbortHandle>,
+}
+
+impl Drop for GdalProcessPool {
+    fn drop(&mut self) {
+        if let Some(sweeper) = &self.byte_cache_sweeper {
+            sweeper.abort();
+        }
+    }
 }
 
 /// The default of `[gdal_process_pool] header_cache_entries`, for mock contexts and tests.
@@ -492,9 +502,10 @@ impl GdalProcessPool {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
         let worker_config_clone = worker_config.clone();
-        if let Some(config) = worker_config.byte_cache.clone() {
-            handle.spawn(sweep_byte_cache(config));
-        }
+        let byte_cache_sweeper = worker_config
+            .byte_cache
+            .clone()
+            .map(|config| handle.spawn(sweep_byte_cache(config)).abort_handle());
 
         handle.spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
@@ -538,6 +549,7 @@ impl GdalProcessPool {
             header_cache: HeaderCache::new(header_cache_entries),
             counters: PoolCounters::default(),
             byte_cache_directory: worker_config.byte_cache.map(|config| config.directory),
+            byte_cache_sweeper,
         })
     }
 
@@ -1227,8 +1239,9 @@ impl BrokerState {
     }
 }
 
-/// Keeps the byte cache of the workers within its size, logging its size (target
-/// `gdal_byte_cache`). Runs as long as the server.
+/// Empties the byte cache of the workers, as its files are not synced to disk and may not have
+/// survived a crash of the machine, then keeps it within its size, logging its size (target
+/// `gdal_byte_cache`). Runs until its pool is dropped.
 async fn sweep_byte_cache(config: super::byte_cache::ByteCacheConfig) {
     if let Err(err) = super::byte_cache::create_directory(&config.directory) {
         tracing::error!(
@@ -1239,14 +1252,15 @@ async fn sweep_byte_cache(config: super::byte_cache::ByteCacheConfig) {
     }
     let mut interval = tokio::time::interval(BYTE_CACHE_SWEEP_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // the first tick is at once: delete everything
+    let mut size_bytes = 0;
     loop {
         interval.tick().await;
-        let c = config.clone();
-        match tokio::task::spawn_blocking(move || {
-            super::byte_cache::sweep(&c.directory, c.size_bytes)
-        })
-        .await
-        {
+        let directory = config.directory.clone();
+        let sweep =
+            tokio::task::spawn_blocking(move || super::byte_cache::sweep(&directory, size_bytes));
+        size_bytes = config.size_bytes;
+        match sweep.await {
             Ok(Ok((bytes, deleted))) => tracing::debug!(
                 target: "gdal_byte_cache",
                 bytes,
@@ -1796,6 +1810,7 @@ mod tests {
                 header_cache: HeaderCache::default(),
                 counters: PoolCounters::default(),
                 byte_cache_directory: None,
+                byte_cache_sweeper: None,
             },
             broker_rx,
         )
@@ -2018,15 +2033,13 @@ mod tests {
             },
         );
         std::fs::create_dir_all(&chunks).unwrap();
-        let stem = "0".repeat(64); // the cache names its files by a SHA-256
-        for ext in ["data", "map"] {
-            std::fs::write(chunks.join(format!("{stem}.{ext}")), [1_u8; 16]).unwrap();
-        }
+        // the cache names its files by a SHA-256
+        let file = chunks.join(format!("{}.cache", "0".repeat(64)));
+        std::fs::write(&file, [1_u8; 16]).unwrap();
 
         pool.clear_caches().await.unwrap();
 
-        assert!(!chunks.join(format!("{stem}.data")).exists());
-        assert!(!chunks.join(format!("{stem}.map")).exists());
+        assert!(!file.exists());
     }
 
     #[tokio::test]
@@ -2491,7 +2504,7 @@ mod tests {
     /// Windows of different levels are compared in full-resolution pixels: a coarser read of the
     /// same area is nearer than a full-resolution read with similar level coordinates elsewhere.
     #[test]
-    fn affinity_compares_windows_of_different_levels_in_full_resolution_pixels() {
+    fn it_compares_windows_of_different_levels_in_full_resolution_pixels() {
         let footprint = |req: Box<QueuedRequest>| {
             req.request
                 .0
@@ -2705,6 +2718,7 @@ mod tests {
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
             byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
         (pool, held_rx)
     }
@@ -2812,6 +2826,7 @@ mod tests {
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
             byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
 
         // Mock broker: respond to every Read with a fixed success result.
@@ -2866,6 +2881,7 @@ mod tests {
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
             byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
 
         // Mock broker: respond with a FileNotFound error.

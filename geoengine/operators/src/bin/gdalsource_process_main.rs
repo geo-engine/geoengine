@@ -332,11 +332,8 @@ fn run(token: Token, byte_cache: Option<&'static byte_cache::ByteCache>) {
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache = if byte_cache.is_some() {
-        GdalDatasetHolder::with_byte_cache()
-    } else {
-        GdalDatasetHolder::new()
-    };
+    let mut dataset_cache =
+        byte_cache.map_or_else(GdalDatasetHolder::new, GdalDatasetHolder::with_byte_cache);
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {

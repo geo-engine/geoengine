@@ -6,26 +6,30 @@
 //! cache holds and reads the missing ones through the remote file system as before, so
 //! authentication, retries and GDAL's network statistics stay unchanged.
 //!
-//! Per version of a remote file, the cache directory holds two files:
-//! - `<version>.data`: a sparse file of the remote file's size, with each cached chunk of
-//!   [`CHUNK_SIZE`] bytes at its offset in the remote file;
-//! - `<version>.map`: one byte per chunk, 1 if the chunk is in the data file.
+//! Per version of a remote file, the cache directory holds one sparse file `<version>.cache`: the
+//! remote file's bytes at their offsets `0..size`, each cached chunk of [`CHUNK_SIZE`] bytes in
+//! place, followed by a map with one byte per chunk, 1 if the chunk is cached. Data and map share
+//! the file, so a worker can never see the data of one version with the map of another.
 //!
 //! The map, not the file system's holes, says what is cached: file systems may add or remove
-//! zero blocks of a sparse file. A chunk is written to the data file before its map byte is set,
-//! so a reader that sees the byte sees the data. Workers that miss the same chunks take an
+//! zero blocks of a sparse file. A chunk is written before its map byte, so a reader that sees
+//! the byte sees the data. Nothing is synced to disk, so the server empties the directory when
+//! it starts ([`sweep`] with size 0). Workers that miss the same chunks take an
 //! open-file-description lock on their map bytes, so one downloads and the others wait and then
 //! read its bytes. The kernel releases the lock when a worker dies.
 //!
-//! The server deletes whole files, least recently used first (by the map's modification time,
-//! which every open sets), when the directory exceeds its size ([`sweep`]). A reader that still
-//! has a deleted file open keeps reading it. One remote file may take at most `max_file_bytes`,
-//! so that reading a whole large file cannot empty the cache.
+//! The server deletes whole files, least recently used first (by their modification time, which
+//! every open and, once a minute, every read through an open handle sets), when the directory
+//! exceeds its size. A reader that still has a deleted file open keeps reading it. One remote
+//! file may take at most `max_file_bytes`, so that reading a whole large file cannot empty the
+//! cache.
 //!
 //! A path is `/vsigecache/<key>/vsicurl/...`: the key is a SHA-256 of the dataset's path and GDAL
 //! options, which may carry credentials, so a dataset never reads bytes another dataset was
 //! allowed to download but it is not. The version adds the file's size and, if the remote file
-//! system reports them, its `ETag` and `Last-Modified`, so a changed file gets new files.
+//! system reports them, its `ETag` and `Last-Modified`, so a changed file gets a new file. A
+//! worker checks a file's version again after [`VERSION_CHECK_INTERVAL`], and at once after
+//! [`ByteCache::forget`].
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -48,8 +52,11 @@ static PREFIX_C: &CStr = c"/vsigecache/";
 /// `CPL_VSIL_CURL_CHUNK_SIZE`, so that a missing chunk costs one chunk of the remote file system.
 pub const CHUNK_SIZE: u64 = 64 * 1024;
 
-/// Length of a key in hex digits: a SHA-256.
+/// Length of a key and of a file name stem in hex digits: a SHA-256.
 const KEY_LEN: usize = 64;
+
+/// The extension of the cache's files.
+const EXTENSION: &str = "cache";
 
 /// Remote GDAL file systems whose files are read through the cache.
 const REMOTE_FILE_SYSTEMS: [&str; 7] = [
@@ -63,9 +70,14 @@ const REMOTE_FILE_SYSTEMS: [&str; 7] = [
 ];
 
 /// Files whose version a process remembers, so that it asks the remote file system for a file's
-/// version once, not for every handle (GDAL opens one per decoding thread).
+/// version once per [`VERSION_CHECK_INTERVAL`], not for every handle (GDAL opens one per decoding
+/// thread).
 const REMEMBERED_FILES: std::num::NonZeroUsize =
     std::num::NonZeroUsize::new(4096).expect("not zero");
+
+/// How long a process trusts a file's version before asking the remote file system again, so that
+/// a file replaced by one of the same size gets a new cache file within this time.
+pub const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The sweep deletes down to this share of the size, so that it does not delete on every run.
 const LOW_WATERMARK_PERCENT: u64 = 90;
@@ -74,9 +86,13 @@ const LOW_WATERMARK_PERCENT: u64 = 90;
 /// from the cache through handles that stay open.
 const TOUCH_INTERVAL: Duration = Duration::from_secs(60);
 
+/// `VSIErrorNum` of a missing object in an object store (`cpl_vsi_error.h`).
+const VSIE_OBJECT_NOT_FOUND: c_int = 8;
+
 // Public GDAL C API, not in the gdal-sys bindings.
 unsafe extern "C" {
     fn VSIErrorReset();
+    fn VSIGetLastErrorNo() -> c_int;
     fn VSIGetLastErrorMsg() -> *const c_char;
 }
 
@@ -114,8 +130,8 @@ pub struct ByteCache {
     misses: AtomicU64,
     waited: AtomicU64,
     write_failures: AtomicU64,
-    /// file name stem by key, inner path and size
-    versions: std::sync::Mutex<lru::LruCache<FileId, String>>,
+    /// file name stem and when it was checked, by key, inner path and size
+    versions: std::sync::Mutex<lru::LruCache<FileId, (String, Instant)>>,
 }
 
 impl ByteCache {
@@ -126,6 +142,22 @@ impl ByteCache {
             misses: self.misses.swap(0, Ordering::Relaxed),
             waited: self.waited.swap(0, Ordering::Relaxed),
             write_failures: self.write_failures.swap(0, Ordering::Relaxed),
+        }
+    }
+
+    /// Forgets the versions of the remote file `inner` (e.g. `/vsicurl/https://...`), so that the
+    /// next open asks for its version again. For a read that failed, e.g. because the file was
+    /// replaced by one of the same size.
+    pub fn forget(&self, inner: &Path) {
+        let inner = inner.as_os_str().as_encoded_bytes();
+        let mut versions = lock(&self.versions);
+        let ids: Vec<FileId> = versions
+            .iter()
+            .filter(|((_, path, _), _)| path == inner)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            versions.pop(&id);
         }
     }
 
@@ -207,6 +239,8 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         let callbacks = gdal_sys::VSIAllocFilesystemPluginCallbacksStruct();
         (*callbacks).pUserData = std::ptr::from_ref(cache).cast_mut().cast();
         (*callbacks).stat = Some(stat);
+        (*callbacks).read_dir = Some(read_dir);
+        (*callbacks).sibling_files = Some(sibling_files);
         (*callbacks).open = Some(open);
         (*callbacks).tell = Some(tell);
         (*callbacks).seek = Some(seek);
@@ -214,7 +248,7 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         (*callbacks).read_multi_range = Some(read_multi_range);
         (*callbacks).eof = Some(eof);
         (*callbacks).close = Some(close);
-        // no buffering on top: the data file and the page cache are the buffer
+        // no buffering on top: the cache file and the page cache are the buffer
         (*callbacks).nBufferSize = 0;
         (*callbacks).nCacheSize = 0;
         let result = gdal_sys::VSIInstallPluginHandler(PREFIX_C.as_ptr(), callbacks);
@@ -249,113 +283,96 @@ fn unwrap(path: &str) -> Option<(&str, &str)> {
     inner.starts_with('/').then_some((key, inner))
 }
 
-/// Deletes the least recently used remote files (data and map) while the directory holds more
-/// than `size_bytes`, down to [`LOW_WATERMARK_PERCENT`] of it, and halves of pairs older than a
-/// minute (of a worker that died while creating a pair). Counts the allocated blocks, not the
-/// length, as the data files are sparse. Touches only files the cache names ([`is_cache_stem`]).
-/// Returns the bytes kept and the files deleted.
+/// The inner path of a path GDAL passes a callback, for the inner file system.
+///
+/// # Safety
+/// `filename` must be a null-terminated string.
+unsafe fn inner_path(filename: *const c_char) -> Option<CString> {
+    // SAFETY: as the caller promises
+    let filename = unsafe { CStr::from_ptr(filename) };
+    let (_, inner) = unwrap(filename.to_str().ok()?)?;
+    CString::new(inner).ok()
+}
+
+/// Deletes the least recently used remote files while the directory holds more than
+/// `size_bytes`, down to [`LOW_WATERMARK_PERCENT`] of it; with a size of 0, all of them. Counts
+/// the allocated blocks, not the length, as the files are sparse. Touches only files the cache
+/// names ([`is_cache_stem`]). Returns the bytes kept and the files deleted.
 ///
 /// # Errors
 /// Fails if the directory cannot be listed.
 pub fn sweep(directory: &Path, size_bytes: u64) -> std::io::Result<(u64, u64)> {
-    #[derive(Default)]
-    struct Pair {
-        bytes: u64,
-        used: Option<SystemTime>,
-        modified: Option<SystemTime>,
-        halves: u8,
-    }
-    let stale = SystemTime::now() - Duration::from_secs(60);
-    let mut pairs: std::collections::HashMap<String, Pair> = std::collections::HashMap::new();
-    let mut deleted = 0;
+    let mut files: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
     for entry in std::fs::read_dir(directory)?.flatten() {
         let path = entry.path();
         let Ok(meta) = entry.metadata() else {
             continue;
         };
-        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let ext = path.extension().and_then(|e| e.to_str());
-        let stem = path.file_stem().and_then(|s| s.to_str());
-        let (Some(stem), Some(ext @ ("data" | "map")), true) = (stem, ext, meta.is_file()) else {
-            continue;
-        };
-        if !is_cache_stem(stem) {
-            continue;
-        }
-        let pair = pairs.entry(stem.to_string()).or_default();
-        pair.bytes += meta.blocks() * 512;
-        pair.halves += 1;
-        pair.modified = pair.modified.max(Some(modified));
-        if ext == "map" {
-            pair.used = Some(modified);
+        let ours = meta.is_file()
+            && path.extension().is_some_and(|e| e == EXTENSION)
+            && path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(is_cache_stem);
+        if ours {
+            let used = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+            files.push((used, meta.blocks() * 512, path));
         }
     }
-
-    let mut total: u64 = pairs.values().map(|p| p.bytes).sum();
-    let mut by_use: Vec<(SystemTime, String, Pair)> = pairs
-        .into_iter()
-        .map(|(stem, pair)| {
-            let used = pair
-                .used
-                .or(pair.modified)
-                .unwrap_or(SystemTime::UNIX_EPOCH);
-            (used, stem, pair)
-        })
-        .collect();
-    by_use.sort_unstable_by_key(|(used, _, _)| *used);
-
+    let mut total: u64 = files.iter().map(|(_, bytes, _)| bytes).sum();
+    if total <= size_bytes && size_bytes > 0 {
+        return Ok((total, 0));
+    }
+    files.sort_unstable_by_key(|(used, _, _)| *used);
     let low = size_bytes / 100 * LOW_WATERMARK_PERCENT;
-    let over = total > size_bytes;
-    for (used, stem, pair) in by_use {
-        let incomplete = pair.halves < 2 && used < stale;
-        if !incomplete && (!over || total <= low) {
-            continue;
+    let mut deleted = 0;
+    for (_, bytes, path) in files {
+        if total <= low && size_bytes > 0 {
+            break;
         }
-        for ext in ["data", "map"] {
-            if std::fs::remove_file(directory.join(format!("{stem}.{ext}"))).is_ok() {
-                deleted += 1;
-            }
+        if std::fs::remove_file(path).is_ok() {
+            total -= bytes;
+            deleted += 1;
         }
-        total -= pair.bytes;
     }
     Ok((total, deleted))
 }
 
-/// The cache files of one remote file version, as a handle has them open.
-struct CacheFiles {
-    data: File,
-    map: File,
+/// The cache file of one remote file version, as a handle has it open: the remote file's bytes
+/// at `0..size`, then the map, one byte per chunk.
+struct CacheFile {
+    file: File,
+    size: u64,
 }
 
-impl CacheFiles {
-    /// Opens or creates the pair and marks it as used now.
+impl CacheFile {
+    /// Opens or creates the file and marks it as used now.
     fn open(directory: &Path, stem: &str, size: u64) -> std::io::Result<Self> {
-        let open = |ext: &str, len: u64| -> std::io::Result<File> {
-            let file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .mode(0o600)
-                .open(directory.join(format!("{stem}.{ext}")))?;
-            if file.metadata()?.len() != len {
-                file.set_len(len)?; // sparse; all workers set the same length
-            }
-            Ok(file)
-        };
-        let data = open("data", size)?;
-        let map = open("map", size.div_ceil(CHUNK_SIZE))?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(directory.join(format!("{stem}.{EXTENSION}")))?;
+        let len = size + size.div_ceil(CHUNK_SIZE);
+        if file.metadata()?.len() != len {
+            file.set_len(len)?; // sparse; all workers set the same length
+        }
         // the sweep deletes the least recently used files first
-        let _ = map.set_modified(SystemTime::now());
-        Ok(Self { data, map })
+        let _ = file.set_modified(SystemTime::now());
+        Ok(Self { file, size })
     }
 
-    /// The map bytes of chunks `first..=last`; missing bytes, e.g. of a short map, read as 0.
+    /// The map bytes of chunks `first..=last`; missing bytes, e.g. of a short file, read as 0.
     fn present(&self, first: u64, last: u64) -> Vec<u8> {
         let mut bytes = vec![0_u8; (last - first + 1) as usize];
         let mut read = 0;
         while read < bytes.len() {
-            match self.map.read_at(&mut bytes[read..], first + read as u64) {
+            match self
+                .file
+                .read_at(&mut bytes[read..], self.size + first + read as u64)
+            {
                 Ok(0) | Err(_) => break,
                 Ok(n) => read += n,
             }
@@ -363,26 +380,39 @@ impl CacheFiles {
         bytes
     }
 
+    /// Stores `chunks` whole chunks of `bytes` at chunk `first`: the data, then the map bytes.
+    fn store(&self, first: u64, chunks: u64, bytes: &[u8]) -> std::io::Result<()> {
+        let len = ((chunks * CHUNK_SIZE) as usize).min(bytes.len());
+        self.file.write_all_at(&bytes[..len], first * CHUNK_SIZE)?;
+        self.file
+            .write_all_at(&vec![1_u8; chunks as usize], self.size + first)
+    }
+
+    /// Waits for the lock on the map bytes of chunks `first..first + count`.
+    fn lock(&self, first: u64, count: u64) -> Option<ChunkLock<'_>> {
+        ChunkLock::wait(&self.file, self.size + first, count)
+    }
+
     fn allocated(&self) -> u64 {
-        self.data.metadata().map_or(u64::MAX, |m| m.blocks() * 512)
+        self.file.metadata().map_or(u64::MAX, |m| m.blocks() * 512)
     }
 }
 
-/// An open-file-description lock on bytes of a map, released on drop or when the process dies.
-/// Each handle opens its own map, so handles of one process lock each other out, too.
+/// An open-file-description lock on bytes of a file, released on drop or when the process dies.
+/// Each handle opens its own file, so handles of one process lock each other out, too.
 struct ChunkLock<'a> {
-    map: &'a File,
+    file: &'a File,
     start: u64,
     len: u64,
 }
 
 impl<'a> ChunkLock<'a> {
-    /// Waits for the lock on map bytes `start..start + len`. `None` if the file system does not
+    /// Waits for the lock on bytes `start..start + len`. `None` if the file system does not
     /// support such locks; the caller then reads without one and may download a chunk twice.
-    fn wait(map: &'a File, start: u64, len: u64) -> Option<Self> {
+    fn wait(file: &'a File, start: u64, len: u64) -> Option<Self> {
         loop {
-            match fcntl_lock(map, libc::F_OFD_SETLKW, libc::F_WRLCK, start, len) {
-                Ok(()) => return Some(Self { map, start, len }),
+            match fcntl_lock(file, libc::F_OFD_SETLKW, libc::F_WRLCK, start, len) {
+                Ok(()) => return Some(Self { file, start, len }),
                 Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(_) => return None,
             }
@@ -393,7 +423,7 @@ impl<'a> ChunkLock<'a> {
 impl Drop for ChunkLock<'_> {
     fn drop(&mut self) {
         let _ = fcntl_lock(
-            self.map,
+            self.file,
             libc::F_OFD_SETLK,
             libc::F_UNLCK,
             self.start,
@@ -423,12 +453,12 @@ fn fcntl_lock(
     }
 }
 
-/// An open file: the inner handle, its cache files, and the position.
+/// An open file: the inner handle, its cache file, and the position.
 struct Handle {
     cache: &'static ByteCache,
     inner: *mut gdal_sys::VSILFILE,
-    /// `None` if they could not be opened, e.g. a full directory: reads then go to the inner file
-    files: Option<CacheFiles>,
+    /// `None` if it could not be opened, e.g. a full directory: reads then go to the inner file
+    file: Option<CacheFile>,
     size: u64,
     position: u64,
     eof: bool,
@@ -443,32 +473,33 @@ impl Handle {
         if offset >= end {
             return 0;
         }
+        let len = (end - offset) as usize;
         if self.touched.elapsed() >= TOUCH_INTERVAL {
             // a worker keeps its dataset open, so reads that hit the cache must mark it as used
-            if let Some(files) = &self.files {
-                let _ = files.map.set_modified(SystemTime::now());
+            if let Some(file) = &self.file {
+                let _ = file.file.set_modified(SystemTime::now());
             }
             self.touched = Instant::now();
         }
-        let len = (end - offset) as usize;
-        let Some(files) = &self.files else {
+        let Some(file) = &self.file else {
             return self
                 .inner_read(offset, &mut buffer[..len])
                 .map_or(0, |()| len);
         };
         let (first, last) = (offset / CHUNK_SIZE, (end - 1) / CHUNK_SIZE);
-        let present = files.present(first, last);
+        let present = file.present(first, last);
         let hits: u64 = present.iter().map(|&b| u64::from(b == 1)).sum();
         self.cache.hits.fetch_add(hits, Ordering::Relaxed);
 
         // download each run of missing chunks once: under a lock on its map bytes, so that other
-        // workers missing them wait and then read them
-        let mut downloaded: Vec<(u64, Vec<u8>)> = Vec::new();
-        for (a, b) in missing_runs(&present) {
+        // workers missing them wait and then read them. Downloaded bytes go straight to the
+        // caller's buffer.
+        let mut downloaded = vec![false; present.len()];
+        for (a, b) in runs(present.len(), |i| present[i] != 1) {
             let (a, b) = (first + a, first + b);
-            let _lock = ChunkLock::wait(&files.map, a, b - a + 1);
-            let now = files.present(a, b);
-            let missing: Vec<_> = missing_runs(&now).collect();
+            let _lock = file.lock(a, b - a + 1);
+            let now = file.present(a, b);
+            let missing = runs(now.len(), |i| now[i] != 1);
             let still = missing.iter().map(|(c, d)| d - c + 1).sum::<u64>();
             self.cache
                 .waited
@@ -481,42 +512,33 @@ impl Handle {
                     return 0;
                 }
                 self.cache.misses.fetch_add(d - c + 1, Ordering::Relaxed);
-                // as many chunks as the file's share still holds; the rest is served, not stored
-                let room = self.cache.max_file_bytes.saturating_sub(files.allocated()) / CHUNK_SIZE;
+                // as many chunks as the file's share still holds; the rest is served, not stored.
+                // shortcut: workers storing runs of one file at once may each see room and exceed
+                // its share by their runs; lock the whole map while checking if that matters.
+                let room = self.cache.max_file_bytes.saturating_sub(file.allocated()) / CHUNK_SIZE;
                 let chunks = (d - c + 1).min(room);
-                if chunks > 0 {
-                    let stored_len = ((chunks * CHUNK_SIZE) as usize).min(bytes.len());
-                    let stored = files.data.write_all_at(&bytes[..stored_len], start).is_ok()
-                        && files
-                            .map
-                            .write_all_at(&vec![1_u8; chunks as usize], c)
-                            .is_ok();
-                    if !stored {
-                        self.cache.failed_write();
-                    }
+                if chunks > 0 && file.store(c, chunks, &bytes).is_err() {
+                    self.cache.failed_write();
                 }
-                downloaded.push((start, bytes));
+                let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
+                buffer[(from - offset) as usize..(to - offset) as usize]
+                    .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
+                for chunk in c..=d {
+                    downloaded[(chunk - first) as usize] = true;
+                }
             }
         }
 
-        // the cached bytes from the data file, then the downloaded ones over them, so that a
-        // chunk the cache could not store is still served
-        if files
-            .data
-            .read_exact_at(&mut buffer[..len], offset)
-            .is_err()
-        {
-            // e.g. a disk error: the cached bytes are unknown, so read the range from the source
-            return self
-                .inner_read(offset, &mut buffer[..len])
-                .map_or(0, |()| len);
-        }
-        for (start, bytes) in downloaded {
-            let from = offset.max(start);
-            let to = end.min(start + bytes.len() as u64);
-            if from < to {
-                buffer[(from - offset) as usize..(to - offset) as usize]
-                    .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
+        // the chunks this read did not download, from the cache file
+        for (a, b) in runs(downloaded.len(), |i| !downloaded[i]) {
+            let from = offset.max((first + a) * CHUNK_SIZE);
+            let to = end.min((first + b) * CHUNK_SIZE + self.chunk_len(first + b));
+            let part = &mut buffer[(from - offset) as usize..(to - offset) as usize];
+            if file.file.read_exact_at(part, from).is_err()
+                // e.g. a disk error: the cached bytes are unknown, so read them from the source
+                && self.inner_read(from, part).is_err()
+            {
+                return 0;
             }
         }
         len
@@ -539,23 +561,22 @@ impl Handle {
     }
 }
 
-/// The runs `(first, last)` of consecutive chunks whose map byte says missing.
-fn missing_runs(bytes: &[u8]) -> impl Iterator<Item = (u64, u64)> + '_ {
-    let matches = |byte: u8| byte != 1;
+/// The runs `(first, last)` of consecutive indices below `len` that `pick` selects.
+fn runs(len: usize, pick: impl Fn(usize) -> bool) -> Vec<(u64, u64)> {
+    let mut out = Vec::new();
     let mut i = 0;
-    std::iter::from_fn(move || {
-        while i < bytes.len() && !matches(bytes[i]) {
+    while i < len {
+        if pick(i) {
+            let start = i;
+            while i < len && pick(i) {
+                i += 1;
+            }
+            out.push((start as u64, i as u64 - 1));
+        } else {
             i += 1;
         }
-        if i == bytes.len() {
-            return None;
-        }
-        let start = i;
-        while i < bytes.len() && matches(bytes[i]) {
-            i += 1;
-        }
-        Some((start as u64, i as u64 - 1))
-    })
+    }
+    out
 }
 
 /// The lock even if a thread panicked while holding it: the map stays valid.
@@ -565,10 +586,13 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The file name stem of a remote file version, remembered per process.
+/// The file name stem of a remote file version, remembered per process for
+/// [`VERSION_CHECK_INTERVAL`].
 fn version(cache: &ByteCache, key: &str, inner: &CStr, size: u64) -> String {
     let id = (key.to_string(), inner.to_bytes().to_vec(), size);
-    if let Some(stem) = lock(&cache.versions).get(&id) {
+    if let Some((stem, checked)) = lock(&cache.versions).get(&id)
+        && checked.elapsed() < VERSION_CHECK_INTERVAL
+    {
         return stem.clone();
     }
     let mut hash = Sha256::new();
@@ -602,7 +626,7 @@ fn version(cache: &ByteCache, key: &str, inner: &CStr, size: u64) -> String {
         }
     }
     let stem = hex(&hash.finalize());
-    lock(&cache.versions).put(id, stem.clone());
+    lock(&cache.versions).put(id, (stem.clone(), Instant::now()));
     stem
 }
 
@@ -644,13 +668,13 @@ unsafe extern "C" fn open(
         (handle, gdal_sys::VSIFTellL(handle))
     };
     let stem = version(cache, key, &inner, size);
-    let files = CacheFiles::open(&cache.directory, &stem, size)
+    let file = CacheFile::open(&cache.directory, &stem, size)
         .inspect_err(|_| cache.failed_write())
         .ok();
     Box::into_raw(Box::new(Handle {
         cache,
         inner: handle,
-        files,
+        file,
         size,
         position: 0,
         eof: false,
@@ -660,19 +684,21 @@ unsafe extern "C" fn open(
 }
 
 /// Sets `errno` for GDAL, which reports a failed open of the plugin as `<path>: strerror(errno)`:
-/// "No such file or directory" for a remote file that does not exist (HTTP 404), as the worker
-/// tells missing files by that message, and an I/O error otherwise, not whatever `errno` was left.
+/// "No such file or directory" for a remote file that does not exist (HTTP 404, or an object
+/// store's "object not found"), as the worker tells missing files by that message, and an I/O
+/// error otherwise, not whatever `errno` was left.
 ///
 /// # Safety
 /// Call right after the inner open failed, before other GDAL calls.
 unsafe fn open_failed() {
-    // SAFETY: GDAL returns its last error message, valid until the next error
+    // SAFETY: GDAL returns its last error and message, the message valid until the next error
     let not_found = unsafe {
         let msg = VSIGetLastErrorMsg();
-        !msg.is_null()
-            && CStr::from_ptr(msg)
-                .to_bytes()
-                .starts_with(b"HTTP response code: 404")
+        VSIGetLastErrorNo() == VSIE_OBJECT_NOT_FOUND
+            || (!msg.is_null()
+                && CStr::from_ptr(msg)
+                    .to_bytes()
+                    .starts_with(b"HTTP response code: 404"))
     };
     // SAFETY: the calling thread's errno
     unsafe { *libc::__errno_location() = if not_found { libc::ENOENT } else { libc::EIO } };
@@ -685,15 +711,37 @@ unsafe extern "C" fn stat(
     flags: c_int,
 ) -> c_int {
     // SAFETY: GDAL passes a null-terminated string
-    let filename = unsafe { CStr::from_ptr(filename) };
-    let Some((_, inner)) = filename.to_str().ok().and_then(unwrap) else {
-        return -1;
-    };
-    let Ok(inner) = CString::new(inner) else {
+    let Some(inner) = (unsafe { inner_path(filename) }) else {
         return -1;
     };
     // SAFETY: the buffer is GDAL's, filled by the inner file system
     unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) }
+}
+
+/// The listing of the inner directory, so that drivers find sibling files (`.ovr`, `.aux.xml`)
+/// by one listing, as without the cache, and not by one request per candidate.
+unsafe extern "C" fn read_dir(
+    _user_data: *mut c_void,
+    dirname: *const c_char,
+    max_files: c_int,
+) -> *mut *mut c_char {
+    // SAFETY: GDAL passes a null-terminated string and takes ownership of the returned list
+    match unsafe { inner_path(dirname) } {
+        Some(inner) => unsafe { gdal_sys::VSIReadDirEx(inner.as_ptr(), max_files) },
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// The sibling files the inner file system knows, for the same reason as [`read_dir`].
+unsafe extern "C" fn sibling_files(
+    _user_data: *mut c_void,
+    filename: *const c_char,
+) -> *mut *mut c_char {
+    // SAFETY: GDAL passes a null-terminated string and takes ownership of the returned list
+    match unsafe { inner_path(filename) } {
+        Some(inner) => unsafe { gdal_sys::VSISiblingFiles(inner.as_ptr()) },
+        None => std::ptr::null_mut(),
+    }
 }
 
 /// # Safety
@@ -842,16 +890,39 @@ mod tests {
         buffer
     }
 
-    /// The cache files of a test file, opened as a handle opens them.
-    fn files_of(path: &Path, n: u64, size: u64) -> CacheFiles {
+    /// The cache file of a test file, opened as a handle opens it.
+    fn file_of(path: &Path, n: u64, size: u64) -> CacheFile {
         let (_dir, cache) = cache();
         let inner = CString::new(path.to_str().unwrap()).unwrap();
-        CacheFiles::open(
+        CacheFile::open(
             &cache.directory,
             &version(cache, &key(n), &inner, size),
             size,
         )
         .unwrap()
+    }
+
+    /// A handle on a local file through a cache file, as `open` builds it for a remote one.
+    fn handle_on(path: &Path, n: u64, size: u64) -> Handle {
+        let (_, cache) = cache();
+        let inner = CString::new(path.to_str().unwrap()).unwrap();
+        // SAFETY: a valid path; the test closes the handle
+        let file = unsafe { gdal_sys::VSIFOpenL(inner.as_ptr(), c"rb".as_ptr()) };
+        assert!(!file.is_null());
+        Handle {
+            cache,
+            inner: file,
+            file: Some(file_of(path, n, size)),
+            size,
+            position: 0,
+            eof: false,
+            touched: Instant::now(),
+        }
+    }
+
+    fn close(handle: &Handle) {
+        // SAFETY: opened in `handle_on`, closed once
+        unsafe { gdal_sys::VSIFCloseL(handle.inner) };
     }
 
     #[test]
@@ -879,7 +950,7 @@ mod tests {
     }
 
     #[test]
-    fn it_reads_the_bytes_of_the_file_and_serves_them_again_from_the_data_file() {
+    fn it_reads_the_bytes_of_the_file_and_serves_them_again_from_the_cache_file() {
         let _ = cache();
         let len = 3 * CHUNK_SIZE as usize + 1234; // a partial last chunk
         let (_dir, path, bytes) = file(len);
@@ -891,7 +962,7 @@ mod tests {
             read_range(&cached, offset as u64, size),
             bytes[offset..offset + size]
         );
-        assert_eq!(files_of(&path, 1, len as u64).present(0, 3), [1, 1, 1, 1]);
+        assert_eq!(file_of(&path, 1, len as u64).present(0, 3), [1, 1, 1, 1]);
 
         // other bytes of the same size in the file: the cache still serves the old ones
         std::fs::write(&path, vec![0_u8; len]).unwrap();
@@ -908,7 +979,7 @@ mod tests {
     }
 
     #[test]
-    fn the_data_file_is_sparse() {
+    fn it_keeps_the_cache_file_sparse() {
         let _ = cache();
         let len = 40 * CHUNK_SIZE as usize;
         let (_dir, path, bytes) = file(len);
@@ -917,16 +988,16 @@ mod tests {
             read_range(&cached_path(&path, 7), offset as u64, 100),
             bytes[offset..offset + 100]
         );
-        let files = files_of(&path, 7, len as u64);
-        assert_eq!(files.data.metadata().unwrap().len(), len as u64);
+        let file = file_of(&path, 7, len as u64);
+        assert_eq!(file.file.metadata().unwrap().len(), len as u64 + 40);
         assert!(
-            files.allocated() <= 2 * CHUNK_SIZE,
-            "only the cached chunk takes space"
+            file.allocated() <= 3 * CHUNK_SIZE,
+            "only the cached chunk and the map take space"
         );
     }
 
     #[test]
-    fn another_key_does_not_see_the_bytes() {
+    fn it_does_not_share_bytes_between_keys() {
         let _ = cache();
         let len = CHUNK_SIZE as usize * 2;
         let (_dir, path, bytes) = file(len);
@@ -969,13 +1040,13 @@ mod tests {
     }
 
     #[test]
-    fn a_miss_waits_for_the_worker_that_downloads_the_same_chunks() {
+    fn it_waits_for_the_worker_that_downloads_the_same_chunks() {
         let _ = cache();
         let len = CHUNK_SIZE as usize * 2;
         let (_dir, path, _) = file(len);
         // another worker holds the lock on chunk 0 while it downloads
-        let other = files_of(&path, 5, len as u64);
-        let lock = ChunkLock::wait(&other.map, 0, 1).expect("OFD locks on the test file system");
+        let other = file_of(&path, 5, len as u64);
+        let lock = other.lock(0, 1).expect("OFD locks on the test file system");
 
         let cached = cached_path(&path, 5);
         let reader = std::thread::spawn(move || read_range(&cached, 0, 100));
@@ -984,8 +1055,7 @@ mod tests {
 
         // the other worker stores bytes the file does not have, then releases the lock
         let sentinel = vec![42_u8; CHUNK_SIZE as usize];
-        other.data.write_all_at(&sentinel, 0).unwrap();
-        other.map.write_all_at(&[1], 0).unwrap();
+        other.store(0, 1, &sentinel).unwrap();
         drop(lock);
 
         assert_eq!(
@@ -996,35 +1066,39 @@ mod tests {
     }
 
     #[test]
-    fn closing_the_file_releases_its_locks() {
+    fn it_releases_the_locks_of_a_closed_file() {
         let _ = cache();
         let (_dir, path, _) = file(CHUNK_SIZE as usize);
-        let first = files_of(&path, 6, CHUNK_SIZE);
-        let held = ChunkLock::wait(&first.map, 0, 1).unwrap();
-        let second = files_of(&path, 6, CHUNK_SIZE);
-        assert!(fcntl_lock(&second.map, libc::F_OFD_SETLK, libc::F_WRLCK, 0, 1).is_err());
+        let first = file_of(&path, 6, CHUNK_SIZE);
+        let held = first.lock(0, 1).unwrap();
+        let second = file_of(&path, 6, CHUNK_SIZE);
+        let try_lock = |file: &CacheFile| {
+            fcntl_lock(&file.file, libc::F_OFD_SETLK, libc::F_WRLCK, CHUNK_SIZE, 1)
+        };
+        assert!(try_lock(&second).is_err());
         std::mem::forget(held); // no unlock, as when a worker dies
-        drop(first); // its descriptors close
-        assert!(fcntl_lock(&second.map, libc::F_OFD_SETLK, libc::F_WRLCK, 0, 1).is_ok());
+        drop(first); // its descriptor closes
+        assert!(try_lock(&second).is_ok());
     }
 
     #[test]
-    fn one_file_takes_at_most_its_share_but_reads_all_of_it() {
+    fn it_stores_at_most_the_share_of_one_file_but_reads_all_of_it() {
         let _ = cache();
         let len = 300 * CHUNK_SIZE as usize;
         let (_dir, path, bytes) = file(len);
         assert_eq!(read_range(&cached_path(&path, 8), 0, len), bytes);
-        let files = files_of(&path, 8, len as u64);
+        let file = file_of(&path, 8, len as u64);
         assert!(
-            files.allocated() <= TEST_FILE_CAP,
-            "at most the file's share"
+            file.allocated() <= TEST_FILE_CAP + CHUNK_SIZE,
+            "at most the file's share and its map"
         );
-        let present = files.present(0, 299);
-        assert_eq!(present.iter().map(|&b| u64::from(b == 1)).sum::<u64>(), 256);
+        let present = file.present(0, 299);
+        let stored = present.iter().map(|&b| u64::from(b == 1)).sum::<u64>();
+        assert!((250..=256).contains(&stored), "{stored} chunks stored");
     }
 
     #[test]
-    fn a_reader_keeps_reading_a_file_the_sweep_deletes() {
+    fn it_keeps_reading_a_file_the_sweep_deletes() {
         let (_, cache) = cache();
         let len = 3 * CHUNK_SIZE as usize;
         let (_dir, path, bytes) = file(len);
@@ -1039,9 +1113,7 @@ mod tests {
                 100
             );
             // as the sweep deletes it, without touching the other tests' files
-            for ext in ["data", "map"] {
-                std::fs::remove_file(cache.directory.join(format!("{stem}.{ext}"))).unwrap();
-            }
+            std::fs::remove_file(cache.directory.join(format!("{stem}.{EXTENSION}"))).unwrap();
             assert_eq!(gdal_sys::VSIFSeekL(file, 2 * CHUNK_SIZE, 0), 0);
             assert_eq!(
                 gdal_sys::VSIFReadL(buffer.as_mut_ptr().cast(), 1, 100, file),
@@ -1056,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn a_raster_reads_the_same_through_the_cache() {
+    fn it_reads_a_raster_the_same_through_the_cache() {
         let _ = cache();
         let path = test_data("raster/landcover/landcover.tif");
         let read = |path: &str| {
@@ -1079,7 +1151,7 @@ mod tests {
     /// hold it, downloads nothing but what it asks the server about the file.
     #[test]
     #[serial_test::serial]
-    fn a_remote_file_read_again_downloads_nothing() {
+    fn it_downloads_nothing_when_reading_a_remote_file_again() {
         let _ = cache();
         let server = super::test_range_server::RangeServer::start(
             test_data("raster/landcover"),
@@ -1117,62 +1189,137 @@ mod tests {
         assert_eq!(server.gets(), gets, "no chunk downloaded again");
     }
 
+    /// The inner directory's listing, so that drivers find sibling files by one listing.
     #[test]
-    fn the_sweep_deletes_least_recently_used_files_down_to_the_low_watermark() {
+    fn it_lists_the_inner_directory() {
+        let _ = cache();
+        let (dir, _, _) = file(10);
+        std::fs::write(dir.path().join("file.bin.ovr"), [0_u8]).unwrap();
+        let cached = CString::new(format!("{PREFIX}{}{}", key(14), dir.path().display())).unwrap();
+        let mut names = Vec::new();
+        unsafe {
+            let list = gdal_sys::VSIReadDirEx(cached.as_ptr(), 0);
+            assert!(!list.is_null());
+            let mut entry = list;
+            while !(*entry).is_null() {
+                names.push(CStr::from_ptr(*entry).to_string_lossy().into_owned());
+                entry = entry.add(1);
+            }
+            gdal_sys::CSLDestroy(list);
+        }
+        names.retain(|name| name != "." && name != ".."); // as the local file system lists them
+        names.sort();
+        assert_eq!(names, ["file.bin", "file.bin.ovr"]);
+    }
+
+    #[test]
+    fn it_marks_files_read_from_the_cache_as_used() {
+        let len = 2 * CHUNK_SIZE as usize;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 12, len as u64);
+        let mut buffer = vec![0_u8; 100];
+        assert_eq!(handle.read_at(0, &mut buffer), 100); // now cached
+        let long_ago = SystemTime::now() - Duration::from_hours(1);
+        let cache_file = &handle.file.as_ref().unwrap().file;
+        cache_file.set_modified(long_ago).unwrap();
+
+        // a hit after the interval marks the file as used again
+        handle.touched = Instant::now().checked_sub(TOUCH_INTERVAL).unwrap();
+        assert_eq!(handle.read_at(0, &mut buffer), 100);
+        assert_eq!(buffer, bytes[..100]);
+        let used = handle
+            .file
+            .as_ref()
+            .unwrap()
+            .file
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert!(used > long_ago + Duration::from_mins(50));
+        close(&handle);
+    }
+
+    /// A read through a handle downloads the missing runs straight into the buffer and reads the
+    /// chunks another worker stored from the cache file.
+    #[test]
+    fn it_combines_downloaded_and_cached_chunks_in_one_read() {
+        let len = 4 * CHUNK_SIZE as usize;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 15, len as u64);
+        // another worker stored chunks 1 and 3, with bytes the file does not have
+        let other = file_of(&path, 15, len as u64);
+        other.store(1, 1, &vec![7_u8; CHUNK_SIZE as usize]).unwrap();
+        other.store(3, 1, &vec![9_u8; CHUNK_SIZE as usize]).unwrap();
+
+        let mut buffer = vec![0_u8; len];
+        assert_eq!(handle.read_at(0, &mut buffer), len);
+        let c = CHUNK_SIZE as usize;
+        assert_eq!(buffer[..c], bytes[..c], "chunk 0 downloaded");
+        assert!(buffer[c..2 * c].iter().all(|&b| b == 7), "chunk 1 cached");
+        assert_eq!(
+            buffer[2 * c..3 * c],
+            bytes[2 * c..3 * c],
+            "chunk 2 downloaded"
+        );
+        assert!(buffer[3 * c..].iter().all(|&b| b == 9), "chunk 3 cached");
+        close(&handle);
+    }
+
+    #[test]
+    fn it_asks_for_a_forgotten_version_again() {
+        let (_, cache) = cache();
+        let inner = CString::new("/nonexistent/file.bin").unwrap();
+        let stem = version(cache, &key(16), &inner, 10);
+        assert_eq!(version(cache, &key(16), &inner, 10), stem, "remembered");
+        cache.forget(Path::new("/nonexistent/file.bin"));
+        assert!(
+            lock(&cache.versions)
+                .iter()
+                .all(|((_, path, _), _)| path != inner.to_bytes())
+        );
+    }
+
+    #[test]
+    fn it_sweeps_least_recently_used_files_down_to_the_low_watermark() {
         let dir = tempfile::tempdir().unwrap();
-        let pair = |stem: &str, chunks: u64, age_s: u64| {
-            let files = CacheFiles::open(dir.path(), stem, chunks * CHUNK_SIZE).unwrap();
-            files
-                .data
-                .write_all_at(&vec![1_u8; (chunks * CHUNK_SIZE) as usize], 0)
+        let cache_file = |n: u64, chunks: u64, age_s: u64| {
+            let file = CacheFile::open(dir.path(), &key(n), chunks * CHUNK_SIZE).unwrap();
+            file.store(0, chunks, &vec![1_u8; (chunks * CHUNK_SIZE) as usize])
                 .unwrap();
             let used = SystemTime::now() - Duration::from_secs(age_s);
-            files.map.set_modified(used).unwrap();
-            files.data.metadata().unwrap().blocks() * 512
-                + files.map.metadata().unwrap().blocks() * 512
+            file.file.set_modified(used).unwrap();
+            file.allocated()
         };
-        let (old, middle, recent, lost) = (key(1), key(2), key(3), key(4));
-        let old_bytes = pair(&old, 4, 300);
-        let middle_bytes = pair(&middle, 4, 200);
-        let recent_bytes = pair(&recent, 4, 100);
-        // a half of a pair, left by a worker that died while creating it
-        let lost_data = dir.path().join(format!("{lost}.data"));
-        std::fs::write(&lost_data, [0_u8; 10]).unwrap();
-        File::options()
-            .write(true)
-            .open(&lost_data)
-            .unwrap()
-            .set_modified(SystemTime::now() - Duration::from_secs(120))
-            .unwrap();
+        let old = cache_file(1, 4, 300);
+        let middle = cache_file(2, 4, 200);
+        let recent = cache_file(3, 4, 100);
+        let name = |n: u64| dir.path().join(format!("{}.{EXTENSION}", key(n)));
 
         // above the size: delete the oldest until at most 90% of it remain
-        let (middle, recent) = (middle_bytes, recent_bytes);
-        let size = old_bytes + middle + recent - 1;
-        let (kept, deleted) = sweep(dir.path(), size).unwrap();
-        assert!(!dir.path().join(format!("{old}.data")).exists());
-        assert!(!dir.path().join(format!("{old}.map")).exists());
-        assert!(!lost_data.exists());
-        assert_eq!(kept, middle + recent);
-        assert_eq!(deleted, 3);
-        assert!(dir.path().join(format!("{}.data", key(2))).exists());
+        let size = old + middle + recent - 1;
+        assert_eq!(sweep(dir.path(), size).unwrap(), (middle + recent, 1));
+        assert!(!name(1).exists());
+        assert!(name(2).exists());
 
         // under the size: nothing goes
         assert_eq!(sweep(dir.path(), size).unwrap(), (middle + recent, 0));
-        // size 0, as when clearing the caches: everything goes
-        assert_eq!(sweep(dir.path(), 0).unwrap(), (0, 4));
+        // size 0, as at start and when clearing the caches: everything goes
+        assert_eq!(sweep(dir.path(), 0).unwrap(), (0, 2));
     }
 
     /// A directory set to one with other files by mistake: the sweep and clearing the caches
     /// delete only the cache's own files, and the directory keeps its permissions.
     #[test]
-    fn the_sweep_touches_only_files_the_cache_names() {
+    fn it_sweeps_only_files_the_cache_names() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
-        let old = SystemTime::now() - Duration::from_secs(3600);
+        let old = SystemTime::now() - Duration::from_hours(1);
         let foreign = [
             dir.path().join("Settings.toml"),
-            dir.path().join("scene.data"),
-            dir.path().join(format!("{}.map", "A".repeat(64))),
+            dir.path().join("scene.cache"),
+            dir.path().join(format!("{}.cache", "A".repeat(64))),
+            dir.path().join(format!("{}.data", key(1))),
         ];
         for path in &foreign {
             std::fs::write(path, [1_u8; 100]).unwrap();
@@ -1186,83 +1333,24 @@ mod tests {
         let folder = dir.path().join("0000000000000001");
         std::fs::create_dir(&folder).unwrap();
         std::fs::write(folder.join("0"), [1_u8; 100]).unwrap();
-        let own = CacheFiles::open(dir.path(), &key(1), CHUNK_SIZE).unwrap();
-        own.data.write_all_at(&[1_u8; 100], 0).unwrap();
+        let own = CacheFile::open(dir.path(), &key(1), CHUNK_SIZE).unwrap();
+        own.store(0, 1, &[1_u8; 100]).unwrap();
 
         create_directory(dir.path()).unwrap();
         let (_, deleted) = sweep(dir.path(), 0).unwrap();
 
-        assert_eq!(deleted, 2, "the cache's data and map");
+        assert_eq!(deleted, 1, "the cache's own file");
         assert!(foreign.iter().all(|path| path.exists()));
         assert!(folder.join("0").exists());
         let mode = std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o755);
     }
 
-    /// A handle on a local file through cache files, as `open` builds it for a remote one.
-    fn handle_on(path: &Path, n: u64, size: u64) -> Handle {
-        let (_, cache) = cache();
-        let inner = CString::new(path.to_str().unwrap()).unwrap();
-        // SAFETY: a valid path; the test closes the handle
-        let file = unsafe { gdal_sys::VSIFOpenL(inner.as_ptr(), c"rb".as_ptr()) };
-        assert!(!file.is_null());
-        Handle {
-            cache,
-            inner: file,
-            files: Some(files_of(path, n, size)),
-            size,
-            position: 0,
-            eof: false,
-            touched: Instant::now(),
-        }
-    }
-
-    fn close(handle: &Handle) {
-        // SAFETY: opened in `handle_on`, closed once
-        unsafe { gdal_sys::VSIFCloseL(handle.inner) };
-    }
-
     #[test]
-    fn reads_from_the_cache_mark_the_file_as_used() {
-        let len = 2 * CHUNK_SIZE as usize;
-        let (_dir, path, bytes) = file(len);
-        let mut handle = handle_on(&path, 12, len as u64);
-        let mut buffer = vec![0_u8; 100];
-        assert_eq!(handle.read_at(0, &mut buffer), 100); // now cached
-        let long_ago = SystemTime::now() - Duration::from_secs(3600);
-        let map = &handle.files.as_ref().unwrap().map;
-        map.set_modified(long_ago).unwrap();
-
-        // a hit after the interval marks the file as used again
-        handle.touched = Instant::now().checked_sub(TOUCH_INTERVAL).unwrap();
-        assert_eq!(handle.read_at(0, &mut buffer), 100);
-        assert_eq!(buffer, bytes[..100]);
-        let used = handle
-            .files
-            .as_ref()
-            .unwrap()
-            .map
-            .metadata()
-            .unwrap()
-            .modified()
-            .unwrap();
-        assert!(used > long_ago + Duration::from_mins(50));
-        close(&handle);
-    }
-
-    #[test]
-    fn a_failed_read_of_the_cache_reads_the_source() {
-        let len = 2 * CHUNK_SIZE as usize;
-        let (_dir, path, bytes) = file(len);
-        let mut handle = handle_on(&path, 13, len as u64);
-        let mut buffer = vec![0_u8; 100];
-        assert_eq!(handle.read_at(10, &mut buffer), 100); // now cached
-        // the map says cached, but the data file cannot deliver it
-        handle.files.as_ref().unwrap().data.set_len(0).unwrap();
-
-        buffer.fill(0);
-        assert_eq!(handle.read_at(10, &mut buffer), 100);
-        assert_eq!(buffer, bytes[10..110]);
-        close(&handle);
+    fn it_finds_runs() {
+        let bytes = [1_u8, 0, 0, 1, 0];
+        assert_eq!(runs(bytes.len(), |i| bytes[i] != 1), [(1, 2), (4, 4)]);
+        assert_eq!(runs(bytes.len(), |i| bytes[i] == 1), [(0, 0), (3, 3)]);
+        assert_eq!(runs(0, |_| true), []);
     }
 }
