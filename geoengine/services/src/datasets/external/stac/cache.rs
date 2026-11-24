@@ -4,7 +4,7 @@ use futures::FutureExt;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, TimeInterval};
 use geoengine_datatypes::raster::GridIdx2D;
 use geoengine_operators::{error::Error, source::gdal_worker_process::GdalMetadataMapping};
-use moka::future::Cache;
+use moka::{Expiry, future::Cache};
 use std::{
     future::Future,
     panic::AssertUnwindSafe,
@@ -63,7 +63,41 @@ pub(crate) struct StacQueryCache {
     /// the steps with items per search box and chunk, from the aggregation of the calendar
     aggregations: Cache<AggregationKey, Arc<Vec<TimeInterval>>>,
     /// the temporal extent of the provider's collection, `None` if it has none
-    collection_time: Cache<(), Option<TimeInterval>>,
+    collection_time: Cache<(), CollectionTime>,
+}
+
+/// The temporal extent of the provider's collection, `None` if it has none, or that asking failed.
+#[derive(Clone, Copy, Debug)]
+enum CollectionTime {
+    Known(Option<TimeInterval>),
+    Failed,
+}
+
+/// A known extent is kept long, a failure only briefly, so the collection is asked again soon.
+struct CollectionTimeExpiry {
+    known: Duration,
+    failed: Duration,
+}
+
+impl Expiry<(), CollectionTime> for CollectionTimeExpiry {
+    fn expire_after_create(
+        &self,
+        _key: &(),
+        value: &CollectionTime,
+        _created_at: std::time::Instant,
+    ) -> Option<Duration> {
+        Some(match value {
+            CollectionTime::Known(_) => self.known,
+            CollectionTime::Failed => self.failed,
+        })
+    }
+}
+
+fn collection_time_cache(known: Duration, failed: Duration) -> Cache<(), CollectionTime> {
+    Cache::builder()
+        .max_capacity(1)
+        .expire_after(CollectionTimeExpiry { known, failed })
+        .build()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -139,6 +173,10 @@ impl StacQueryCache {
                 config.max_aggregations,
                 Duration::from_secs(config.ttl_secs),
             ),
+            collection_time: collection_time_cache(
+                Duration::from_secs(config.collection_time_ttl_secs),
+                Duration::from_secs(config.collection_time_failure_ttl_secs),
+            ),
             ..Self::new(
                 config.size_in_mb * 1024 * 1024,
                 Duration::from_secs(config.ttl_secs),
@@ -161,19 +199,31 @@ impl StacQueryCache {
         self.collection_time.invalidate_all();
     }
 
-    /// The temporal extent of the collection, fetched once for concurrent callers and kept like a
-    /// search result. A failed fetch (`None`) is not kept, so a later call asks again.
+    /// The temporal extent of the collection, fetched once for concurrent callers. It is kept
+    /// also without a result cache, since every initialization of a source asks for it, and a
+    /// failed fetch (`None`) is kept briefly, see `[stac_cache]`.
     pub(crate) async fn get_or_fetch_collection_time(
         self: &Arc<Self>,
         fetch: impl Future<Output = Option<Option<TimeInterval>>> + Send + 'static,
     ) -> Option<TimeInterval> {
-        if !self.stores_results() {
-            return fetch.await.flatten();
-        }
         let cache = self.clone();
-        detached(async move { cache.collection_time.optionally_get_with((), fetch).await })
-            .await
-            .flatten()
+        let time = detached(async move {
+            Some(
+                cache
+                    .collection_time
+                    .get_with((), async move {
+                        fetch
+                            .await
+                            .map_or(CollectionTime::Failed, CollectionTime::Known)
+                    })
+                    .await,
+            )
+        })
+        .await;
+        match time {
+            Some(CollectionTime::Known(time)) => time,
+            Some(CollectionTime::Failed) | None => None,
+        }
     }
 
     /// A cache of the given size, for tests and benches: the planning values are fixed so that
@@ -194,7 +244,8 @@ impl StacQueryCache {
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 1_000,
             aggregations: aggregation_cache(1_000, ttl),
-            collection_time: Cache::builder().max_capacity(1).time_to_live(ttl).build(),
+            // a failure is asked again at once, as tests expect
+            collection_time: collection_time_cache(ttl, Duration::ZERO),
         }
     }
 
@@ -433,6 +484,49 @@ impl StacQueryCache {
 #[cfg(test)]
 mod tests {
     use super::{StacQueryCache, StacQueryCacheResult, StacTileFile, result_bytes};
+
+    #[tokio::test]
+    async fn it_keeps_the_collection_time_without_a_result_cache_and_a_failure_briefly() {
+        use geoengine_datatypes::util::test::TestDefault;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let config = crate::config::StacCache {
+            size_in_mb: 0,
+            ttl_secs: 0,
+            collection_time_ttl_secs: 3_600,
+            collection_time_failure_ttl_secs: 1,
+            ..crate::config::StacCache::test_default()
+        };
+        let cache = std::sync::Arc::new(StacQueryCache::from_config(&config));
+        let fetches = std::sync::Arc::new(AtomicUsize::new(0));
+        let fetch = |answer: Option<Option<TimeInterval>>| {
+            let fetches = fetches.clone();
+            async move {
+                fetches.fetch_add(1, Ordering::SeqCst);
+                answer
+            }
+        };
+
+        // a failure is kept for its TTL, so the next initialization does not ask again
+        assert_eq!(cache.get_or_fetch_collection_time(fetch(None)).await, None);
+        assert_eq!(cache.get_or_fetch_collection_time(fetch(None)).await, None);
+        assert_eq!(fetches.load(Ordering::SeqCst), 1);
+
+        // then the collection is asked again, and its extent is kept without a result cache
+        tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+        let time = TimeInterval::new_unchecked(0, 10);
+        assert_eq!(
+            cache
+                .get_or_fetch_collection_time(fetch(Some(Some(time))))
+                .await,
+            Some(time)
+        );
+        assert_eq!(
+            cache.get_or_fetch_collection_time(fetch(Some(None))).await,
+            Some(time)
+        );
+        assert_eq!(fetches.load(Ordering::SeqCst), 2);
+    }
     use crate::datasets::external::stac::{
         StacAssetBand, StacProviderDataset, StacProviderDatasetBand,
     };
