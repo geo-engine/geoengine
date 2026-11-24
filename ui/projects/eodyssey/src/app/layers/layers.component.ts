@@ -248,6 +248,7 @@ export function formatDate(timeMs: number, unit?: string): string {
                         [attr.aria-current]="preset === shownPreset() ? 'true' : null"
                         (click)="show(preset.key)"
                         [matTooltip]="preset.displayName"
+                        matTooltipPosition="right"
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
                         <span matListItemTitle>{{ preset.displayName }}</span>
