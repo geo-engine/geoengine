@@ -28,6 +28,7 @@ import {
     cellClasses,
     Footprints,
     footprintsOrTooLarge,
+    isShorterThanDay,
     isShorterThanMonth,
     mergeFootprints,
     monthStartOfTime,
@@ -63,6 +64,16 @@ const EXTENT_EDGE_STOPS = 16;
 const STEPS_BEFORE_SELECTED = 7;
 /** Opacity of the boxes of an earlier view while those of the current view load, like the faded dates of a strip. */
 const STALE_OVERLAY_OPACITY = 0.4;
+
+/**
+ * The view to ask for: `viewport` grown by `margin`, or the `kept` one while the view stays inside it at the same zoom,
+ * so small pans ask nothing again.
+ */
+function keptViewport(viewport: ViewportSize | undefined, kept: ViewportSize | undefined, margin: number): ViewportSize | undefined {
+    if (!viewport) return undefined;
+    if (kept?.resolution === viewport.resolution && containsExtent(kept.extent, viewport.extent)) return kept;
+    return {...viewport, extent: bufferedExtent(viewport.extent, margin)};
+}
 
 /** `extent` grown by `margin` of its width and height on each side. */
 function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin: number): ViewportSize['extent'] {
@@ -121,12 +132,12 @@ export class FootprintsService {
     /** The view the dates are asked for: the view and its buffer, kept while the view stays inside it at the same zoom. */
     private readonly datesViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
         source: () => this.viewport(),
-        computation: (viewport, previous) => {
-            const kept = previous?.value;
-            if (!viewport) return undefined;
-            if (kept?.resolution === viewport.resolution && containsExtent(kept.extent, viewport.extent)) return kept;
-            return {...viewport, extent: bufferedExtent(viewport.extent, DATES_BUFFER)};
-        },
+        computation: (viewport, previous) => keptViewport(viewport, previous?.value, DATES_BUFFER),
+    });
+    /** The view the boxes of a date are asked for, like `datesViewport` with the margin of the overlay. */
+    private readonly overlayViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
+        source: () => this.viewport(),
+        computation: (viewport, previous) => keptViewport(viewport, previous?.value, OVERLAY_MARGIN),
     });
 
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
@@ -248,13 +259,13 @@ export class FootprintsService {
         params: () => {
             const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
-            const viewport = this.viewport();
+            const viewport = this.overlayViewport();
             const time = this.time();
             if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
-            const query = await this.queryOf(layer, mapSpatialReference, viewport, OVERLAY_MARGIN);
+            const query = await this.queryOf(layer, mapSpatialReference, viewport);
             if (!query) return undefined;
             return await footprintsOrTooLarge(
                 this.processingGraphsService.getFootprints(
@@ -309,6 +320,15 @@ export class FootprintsService {
         },
     });
     readonly steps = computed(() => this.footprints()?.steps ?? []);
+    /**
+     * The loaded steps, where they belong to the selected time: none while the open calendar shows a month without it,
+     * whose dates say nothing about the time. For what is shown next to the date, e.g. a strip and its buttons.
+     */
+    readonly stepsOfSelection = computed(() => {
+        const time = this.time()?.start.valueOf();
+        const steps = this.steps();
+        return this.calendarOpen() && time !== undefined && !stepAt(steps, time) ? [] : steps;
+    });
     /** The dates shown are those of an earlier view, kept while the ones of this view load. */
     readonly datesStale = computed(() => this.footprints() !== undefined && this.footprints() !== this.currentFootprints());
     /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
@@ -366,7 +386,7 @@ export class FootprintsService {
      * there are none.
      */
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const time = this.time()?.start.valueOf();
         if (this.isLoading() || !steps.length || time === undefined || stepAt(steps, time)) return undefined;
         if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
@@ -441,7 +461,8 @@ export class FootprintsService {
             untracked(() => {
                 // from a month start a few steps before the time, so dates before it are loaded too
                 const before = timeStep ? minusSteps(time.start.valueOf(), timeStep, STEPS_BEFORE_SELECTED) : time.start.valueOf();
-                const start = monthStartOfTime(before);
+                // a window of steps below a day spans a few days only, so from the month start it would not reach the time
+                const start = isShorterThanDay(timeStep?.durationUnit) ? before : monthStartOfTime(before);
                 if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
             });
         });
@@ -455,8 +476,8 @@ export class FootprintsService {
         const time = this.time();
         if (!time) return undefined;
         const now = time.start.valueOf();
-        const currentStart = stepAt(this.steps(), now)?.time.start ?? now;
-        const withData = this.steps().filter(
+        const currentStart = stepAt(this.stepsOfSelection(), now)?.time.start ?? now;
+        const withData = this.stepsOfSelection().filter(
             (step) =>
                 step.status === TimeStepFootprintStatus.Data && (direction === 1 ? step.time.start > now : step.time.start < currentStart),
         );
@@ -469,7 +490,7 @@ export class FootprintsService {
      * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
      */
     dateBeyondLoaded(direction: 1 | -1): Time | undefined {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const timeStep = this.timeStep();
         if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
         if (this.datesReachTimeRange(direction)) return undefined;
@@ -480,7 +501,7 @@ export class FootprintsService {
 
     /** The loaded dates reach the start of the data (-1) or now (1), so there are no others in that direction, see `timeRange`. */
     datesReachTimeRange(direction: 1 | -1): boolean {
-        const steps = this.steps();
+        const steps = this.stepsOfSelection();
         const timeRange = this.timeRange();
         if (!timeRange || !steps.length) return false;
         return direction === 1 ? steps[steps.length - 1].time.end >= timeRange.end : steps[0].time.start <= timeRange.start;
@@ -495,8 +516,8 @@ export class FootprintsService {
         if (!time) return [];
         const timeMs = time.start.valueOf();
         // a part of the dates that loads first may end before the selected time, which the rest then reaches
-        if (this.isLoading() && !stepAt(this.steps(), timeMs)) return [];
-        return stepsAround(this.steps(), timeMs, count);
+        if (this.isLoading() && !stepAt(this.stepsOfSelection(), timeMs)) return [];
+        return stepsAround(this.stepsOfSelection(), timeMs, count);
     }
 
     retryDates(): void {
@@ -525,7 +546,6 @@ export class FootprintsService {
         layer: FootprintLayer,
         mapSpatialReference: SpatialReference,
         viewport: ViewportSize,
-        margin = 0,
     ): Promise<{processingGraphId: UUID; spatialBounds: string} | undefined> {
         const {processingGraphId, metadata} = await this.graphOf(layer);
         if (!metadata) return undefined;
@@ -533,7 +553,7 @@ export class FootprintsService {
         // makes the layer's spatial reference known to OpenLayers
         await firstValueFrom(this.spatialReferenceService.getSpatialReferenceSpecification(metadata.spatialReference.srsString));
 
-        const extent = bufferedExtent(viewport.extent, margin);
+        const extent = viewport.extent;
         const spatialBounds = this.spatialReferenceService.reprojectExtent(
             this.spatialReferenceService.clipBoundsIfAvailable(extent, mapSpatialReference),
             mapSpatialReference,

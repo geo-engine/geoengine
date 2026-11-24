@@ -950,7 +950,7 @@ pub struct StacCache {
     /// cells of one time step that are not cached, are rejected as too large, see
     /// `Settings-default.toml`.
     pub max_footprint_searches: usize,
-    /// Number of aggregations of a calendar kept, one per view box and chunk.
+    /// Number of aggregations of a calendar kept, one per view box and chunk, for all providers.
     pub max_aggregations: u64,
     /// TTL in seconds of the temporal extent of a collection, kept also without a query cache.
     pub collection_time_ttl_secs: u64,

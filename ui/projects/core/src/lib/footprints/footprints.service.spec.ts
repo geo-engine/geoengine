@@ -178,6 +178,22 @@ describe('FootprintsService overlay', () => {
         expect(datesRequests()).toBeGreaterThan(asked);
     });
 
+    it('asks no boxes for a view moved inside the margin of the asked one, but for a view leaving it', async () => {
+        const service = createService();
+        service.overlayVisible.set(true);
+        await settle();
+        const asked = boxesRequests();
+        expect(asked).toBe(1);
+
+        viewport.next({extent: [0.1, 0, 1.1, 1], resolution: 1});
+        await settle();
+        expect(boxesRequests()).toBe(asked);
+
+        viewport.next({extent: [0.5, 0, 1.5, 1], resolution: 1});
+        await settle();
+        expect(boxesRequests()).toBe(asked + 1);
+    });
+
     it('keeps the boxes of the date while those of a moved view load', async () => {
         const box = {upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}};
         getFootprints.mockResolvedValueOnce({
@@ -515,6 +531,45 @@ describe('FootprintsService overlay', () => {
             expect(service.dateBeyondLoaded(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 10));
             expect(service.dateBeyondLoaded(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -4));
             expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
+        });
+
+        it('tells nothing about the selected date from a month the open calendar shows without it', async () => {
+            // a step with data on every day that is asked for
+            getFootprints.mockImplementation((_id, query) => {
+                if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve(FOOTPRINTS);
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                const days = Array.from({length: Math.round((end - start) / 86_400_000)}, (_, i) => ({
+                    time: {start: start + i * 86_400_000, end: start + (i + 1) * 86_400_000},
+                    status: TimeStepFootprintStatus.Data,
+                    bounds: [],
+                }));
+                return Promise.resolve({...FOOTPRINTS, steps: days});
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.stepsAround(3)).toHaveLength(3);
+
+            // the calendar pages back to a month before the selected date
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2025, 0, 1), 'month');
+            await settle();
+            expect(service.steps().length).toBeGreaterThan(0);
+            expect(service.selectedOutsideData()).toBeUndefined();
+            expect(service.stepsAround(3)).toEqual([]);
+            expect(service.dateWithData(-1)).toBeUndefined();
+        });
+
+        it('starts the window of steps below a day shortly before the selected time, not at the month start', async () => {
+            const service = createService();
+            service.timeStepOverride.set({durationAmount: 1, durationUnit: 'hours'});
+            service.datesNeeded.set(true);
+            await settle();
+            const starts = getFootprints.mock.calls
+                .filter(([, query]) => query.precision === RasterFootprintsPrecision.Availability)
+                .map(([, query]) => Date.parse((query.timeInterval ?? '').split('/')[0]));
+            // the selected time is the first of the month: seven hours before it, in the month before
+            expect(starts[0]).toBe(Date.UTC(2026, 2, 31, 17));
         });
 
         it('shows the last dates of the data, without one selected, where the selected date lies after them', async () => {

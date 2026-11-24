@@ -129,6 +129,11 @@ export function windowSteps(unit: string | undefined, amount: number): number {
     return 100;
 }
 
+/** Whether a day holds several time steps of this unit, e.g. hours. */
+export function isShorterThanDay(unit: string | undefined): boolean {
+    return stepLevel(unit) < 0;
+}
+
 /** Whether a month holds several time steps of this unit, e.g. days or hours, and not one step or a part of one. */
 export function isShorterThanMonth(unit: string | undefined): boolean {
     return stepLevel(unit) < 1;
