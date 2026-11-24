@@ -20,7 +20,6 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
-from geoengine_api_client.models.layer_loading_cost import LayerLoadingCost
 from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.symbology import Symbology
 from typing import Optional, Set
@@ -31,14 +30,13 @@ class UpdateLayer(BaseModel):
     """
     UpdateLayer
     """ # noqa: E501
-    loading_cost: Optional[LayerLoadingCost] = Field(default=None, description="Optional structured loading-cost estimates for viewport guards.", alias="loadingCost")
     name: StrictStr = Field(json_schema_extra={"examples": ["Example Layer"]})
     description: StrictStr = Field(json_schema_extra={"examples": ["Example layer description"]})
     processing_graph: ProcessingGraph = Field(alias="processingGraph")
     symbology: Optional[Symbology] = None
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
     metadata: Optional[Dict[str, StrictStr]] = Field(default=None, description="metadata used for loading the data")
-    __properties: ClassVar[List[str]] = ["loadingCost", "name", "description", "processingGraph", "symbology", "properties", "metadata"]
+    __properties: ClassVar[List[str]] = ["name", "description", "processingGraph", "symbology", "properties", "metadata"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -79,20 +77,12 @@ class UpdateLayer(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of loading_cost
-        if self.loading_cost:
-            _dict['loadingCost'] = self.loading_cost.to_dict()
         # override the default output from pydantic by calling `to_dict()` of processing_graph
         if self.processing_graph:
             _dict['processingGraph'] = self.processing_graph.to_dict()
         # override the default output from pydantic by calling `to_dict()` of symbology
         if self.symbology:
             _dict['symbology'] = self.symbology.to_dict()
-        # set to None if loading_cost (nullable) is None
-        # and model_fields_set contains the field
-        if self.loading_cost is None and "loading_cost" in self.model_fields_set:
-            _dict['loadingCost'] = None
-
         # set to None if symbology (nullable) is None
         # and model_fields_set contains the field
         if self.symbology is None and "symbology" in self.model_fields_set:
@@ -110,7 +100,6 @@ class UpdateLayer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "loadingCost": LayerLoadingCost.from_dict(obj["loadingCost"]) if obj.get("loadingCost") is not None else None,
             "name": obj.get("name"),
             "description": obj.get("description"),
             "processingGraph": ProcessingGraph.from_dict(obj["processingGraph"]) if obj.get("processingGraph") is not None else None,

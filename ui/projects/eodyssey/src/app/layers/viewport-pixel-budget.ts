@@ -1,15 +1,39 @@
 import proj4 from 'proj4';
-import type {LayerLoadingCost, TileSourcePixelCost as TilePixelCost, StacSearchGrid as SearchGrid} from '@geoengine/api-client';
 
 export interface ViewportLimits {
     maxSourcePixels: number;
     maxStacSearches: number;
 }
 
-/** Structured layer cost model combined with EOdyssey configuration limits. */
-export interface ViewportPixelBudget extends LayerLoadingCost, ViewportLimits {
+/** Catalogue cost model combined with EOdyssey configuration limits. */
+export interface ViewportPixelBudget {
     tileMatrixSet: 'CustomWebMercator';
     crs: 'EPSG:3857';
+    maxSourcePixels: number;
+    maxStacSearches: number;
+    searchGrids: SearchGrid[];
+    matrices: TilePixelCost[];
+}
+
+interface TilePixelCost {
+    id: string;
+    cellSize: number;
+    tileWidth: number;
+    tileHeight: number;
+    matrixWidth: number;
+    matrixHeight: number;
+    sourcePixels: number;
+    pointOfOrigin: number[];
+}
+
+interface SearchGrid {
+    datasetId: string;
+    projection: string;
+    projString: string;
+    extent: number[];
+    cellSize: number;
+    columns: number;
+    rows: number;
 }
 
 export interface ViewportCost {
@@ -56,10 +80,10 @@ function matrixViewportCost(
     };
 }
 
-export function parseViewportPixelBudget(value: unknown, limits: ViewportLimits): ViewportPixelBudget {
-    if (value === undefined) throw new Error('Missing layer loadingCost');
+export function parseViewportPixelBudget(value: string | undefined, limits: ViewportLimits): ViewportPixelBudget {
+    if (value === undefined) throw new Error('Missing edv:loadingCost property');
     try {
-        const budget = value;
+        const budget: unknown = JSON.parse(value);
         if (!isRecord(budget) || budget.tileMatrixSet !== 'CustomWebMercator' || budget.crs !== 'EPSG:3857') {
             throw new Error('unsupported grid');
         }
@@ -113,7 +137,7 @@ export function parseViewportPixelBudget(value: unknown, limits: ViewportLimits)
         }
         return {...budget, ...limits} as unknown as ViewportPixelBudget;
     } catch {
-        throw new Error('Invalid layer loadingCost');
+        throw new Error('Invalid edv:loadingCost property');
     }
 }
 

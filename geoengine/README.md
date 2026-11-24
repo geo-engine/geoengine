@@ -37,12 +37,6 @@ Cf. [Settings-default.toml](Settings-default.toml) for all available configurati
 The OpenAPI specification for the public API is available at the repository
 root: [openapi.json](../openapi.json).
 
-Layers may include a structured `loadingCost` object describing per-matrix source-pixel
-estimates and native STAC search grids. The same object is returned in layer listings and
-search results, and can be supplied when creating or updating a layer. Migration
-`0042_layer_loading_cost` adds a nullable JSON column; existing layers omit the model
-until a producer supplies one. Application loading limits are configured by the client.
-
 ## Development Notes
 
 - Use `RUST_LOG` to control runtime logging verbosity (e.g. `RUST_LOG=debug`).

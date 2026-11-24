@@ -5,7 +5,6 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **r#type** | **Type** |  (enum: layer) | 
-**loading_cost** | Option<[**models::LayerLoadingCost**](LayerLoadingCost.md)> | Optional structured loading-cost estimates for viewport guards. | [optional]
 **id** | [**models::ProviderLayerId**](ProviderLayerId.md) |  | 
 **name** | **String** |  | 
 **description** | **String** |  | 

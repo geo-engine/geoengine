@@ -6,7 +6,6 @@
 
 Name | Type
 ------------ | -------------
-`loadingCost` | [LayerLoadingCost](LayerLoadingCost.md)
 `id` | [ProviderLayerId](ProviderLayerId.md)
 `name` | string
 `description` | string
@@ -22,7 +21,6 @@ import type { Layer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "loadingCost": null,
   "id": null,
   "name": null,
   "description": null,

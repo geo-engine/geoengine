@@ -1203,7 +1203,6 @@ impl StacImporter {
         );
 
         let add_layer = AddLayer {
-            loading_cost: None,
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
             processing_graph: ProcessingGraph {

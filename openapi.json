@@ -6180,17 +6180,6 @@
           "processingGraph"
         ],
         "properties": {
-          "loadingCost": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/LayerLoadingCost",
-                "description": "Optional structured loading-cost estimates for viewport guards."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "name": {
             "type": "string",
             "example": "Example Layer"
@@ -9964,17 +9953,6 @@
           "processingGraph"
         ],
         "properties": {
-          "loadingCost": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/LayerLoadingCost",
-                "description": "Optional structured loading-cost estimates for viewport guards."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerId"
           },
@@ -10127,17 +10105,6 @@
               "layer"
             ]
           },
-          "loadingCost": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/LayerLoadingCost",
-                "description": "Optional structured loading-cost estimates for viewport guards."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "$ref": "#/components/schemas/ProviderLayerId"
           },
@@ -10153,36 +10120,6 @@
               "$ref": "#/components/schemas/Property"
             },
             "description": "properties, for instance, to be rendered in the UI"
-          }
-        }
-      },
-      "LayerLoadingCost": {
-        "type": "object",
-        "description": "Estimates of source-file pixels and native STAC searches for tiled layer loading.\nLimits are application policy and are deliberately not part of the model.",
-        "required": [
-          "tileMatrixSet",
-          "crs",
-          "matrices",
-          "searchGrids"
-        ],
-        "properties": {
-          "tileMatrixSet": {
-            "type": "string"
-          },
-          "crs": {
-            "type": "string"
-          },
-          "matrices": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TileSourcePixelCost"
-            }
-          },
-          "searchGrids": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StacSearchGrid"
-            }
           }
         }
       },
@@ -15172,51 +15109,6 @@
           }
         }
       },
-      "StacSearchGrid": {
-        "type": "object",
-        "description": "Native projected-area-of-use grid for distinct dataset/cell/time-step STAC searches.",
-        "required": [
-          "datasetId",
-          "projection",
-          "projString",
-          "extent",
-          "cellSize",
-          "columns",
-          "rows"
-        ],
-        "properties": {
-          "datasetId": {
-            "type": "string"
-          },
-          "projection": {
-            "type": "string"
-          },
-          "projString": {
-            "type": "string"
-          },
-          "extent": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "cellSize": {
-            "type": "number",
-            "format": "double"
-          },
-          "columns": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "rows": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "StaticColor": {
         "type": "object",
         "required": [
@@ -16349,56 +16241,6 @@
           }
         }
       },
-      "TileSourcePixelCost": {
-        "type": "object",
-        "description": "Estimated source-file pixel coverage of one OGC tile at this matrix resolution.",
-        "required": [
-          "id",
-          "cellSize",
-          "tileWidth",
-          "tileHeight",
-          "matrixWidth",
-          "matrixHeight",
-          "sourcePixels",
-          "pointOfOrigin"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "cellSize": {
-            "type": "number",
-            "format": "double"
-          },
-          "tileWidth": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "tileHeight": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "matrixWidth": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "matrixHeight": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "sourcePixels": {
-            "type": "number",
-            "format": "double"
-          },
-          "pointOfOrigin": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            }
-          }
-        }
-      },
       "TilesCrs": {
         "oneOf": [
           {
@@ -17074,17 +16916,6 @@
           "processingGraph"
         ],
         "properties": {
-          "loadingCost": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/LayerLoadingCost",
-                "description": "Optional structured loading-cost estimates for viewport guards."
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "name": {
             "type": "string",
             "example": "Example Layer"

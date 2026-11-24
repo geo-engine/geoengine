@@ -28,53 +28,8 @@ pub struct ProviderLayerCollectionId {
     pub collection_id: LayerCollectionId,
 }
 
-/// Estimates of source-file pixels and native STAC searches for tiled layer loading.
-/// Limits are application policy and are deliberately not part of the model.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct LayerLoadingCost {
-    pub tile_matrix_set: String,
-    pub crs: String,
-    pub matrices: Vec<TileSourcePixelCost>,
-    pub search_grids: Vec<StacSearchGrid>,
-}
-
-/// Estimated source-file pixel coverage of one OGC tile at this matrix resolution.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TileSourcePixelCost {
-    pub id: String,
-    pub cell_size: f64,
-    pub tile_width: i32,
-    pub tile_height: i32,
-    pub matrix_width: i32,
-    pub matrix_height: i32,
-    pub source_pixels: f64,
-    pub point_of_origin: [f64; 2],
-}
-
-/// Native projected-area-of-use grid for distinct dataset/cell/time-step STAC searches.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct StacSearchGrid {
-    pub dataset_id: String,
-    pub projection: String,
-    pub proj_string: String,
-    pub extent: [f64; 4],
-    pub cell_size: f64,
-    pub columns: u32,
-    pub rows: u32,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Layer {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(
-        default,
-        rename = "loadingCost",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub loading_cost: Option<LayerLoadingCost>,
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
@@ -90,15 +45,8 @@ pub struct Layer {
 }
 
 #[type_tag(value = "layer")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct LayerListing {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(
-        default,
-        rename = "loadingCost",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub loading_cost: Option<LayerLoadingCost>,
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
@@ -110,13 +58,6 @@ pub struct LayerListing {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 // TODO: validate user input
 pub struct AddLayer {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(
-        default,
-        rename = "loadingCost",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub loading_cost: Option<LayerLoadingCost>,
     // #[schema(example = "Example Layer")]
     pub name: String,
     // #[schema(example = "Example layer description")]
@@ -134,13 +75,6 @@ pub struct AddLayer {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 pub struct UpdateLayer {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(
-        default,
-        rename = "loadingCost",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub loading_cost: Option<LayerLoadingCost>,
     // #[schema(example = "Example Layer")]
     #[validate(length(min = 1))]
     pub name: String,
@@ -160,13 +94,6 @@ pub struct UpdateLayer {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LayerDefinition {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(
-        default,
-        rename = "loadingCost",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub loading_cost: Option<LayerLoadingCost>,
     pub id: LayerId,
     pub name: String,
     pub description: String,
@@ -181,7 +108,7 @@ pub struct LayerDefinition {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollection {
     pub id: ProviderLayerCollectionId,
@@ -329,7 +256,7 @@ pub struct LayerCollectionListing {
     pub properties: Vec<Property>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
 pub enum CollectionItem {

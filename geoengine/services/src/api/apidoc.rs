@@ -72,8 +72,8 @@ use crate::{
     layers::{
         layer::{
             AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
-            LayerListing, LayerLoadingCost, Property, ProviderLayerCollectionId, ProviderLayerId,
-            StacSearchGrid, TileSourcePixelCost, UpdateLayerCollection,
+            LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+            UpdateLayerCollection,
         },
         listing::{
             LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
@@ -292,9 +292,6 @@ use utoipa::{
 
             Layer,
             LayerListing,
-            LayerLoadingCost,
-            TileSourcePixelCost,
-            StacSearchGrid,
             LayerCollection,
             LayerCollectionListing,
             Property,

@@ -18,7 +18,6 @@ exports.AddLayerFromJSONTyped = AddLayerFromJSONTyped;
 exports.AddLayerToJSON = AddLayerToJSON;
 exports.AddLayerToJSONTyped = AddLayerToJSONTyped;
 const Symbology_1 = require("./Symbology");
-const LayerLoadingCost_1 = require("./LayerLoadingCost");
 const ProcessingGraph_1 = require("./ProcessingGraph");
 /**
  * Check if a given object implements the AddLayer interface.
@@ -40,7 +39,6 @@ function AddLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'loadingCost': json['loadingCost'] === undefined ? undefined : json['loadingCost'] === null ? null : (0, LayerLoadingCost_1.LayerLoadingCostFromJSON)(json['loadingCost']),
         'name': json['name'],
         'description': json['description'],
         'processingGraph': (0, ProcessingGraph_1.ProcessingGraphFromJSON)(json['processingGraph']),
@@ -57,7 +55,6 @@ function AddLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'loadingCost': (0, LayerLoadingCost_1.LayerLoadingCostToJSON)(value['loadingCost']),
         'name': value['name'],
         'description': value['description'],
         'processingGraph': (0, ProcessingGraph_1.ProcessingGraphToJSON)(value['processingGraph']),

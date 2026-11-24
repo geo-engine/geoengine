@@ -701,8 +701,7 @@ CREATE TABLE layers (
     processing_graph_id uuid REFERENCES processing_graphs (id) NOT NULL,
     symbology "Symbology",
     properties "PropertyType"[] NOT NULL,
-    metadata "TextTextKeyValue"[] NOT NULL,
-    loading_cost jsonb
+    metadata "TextTextKeyValue"[] NOT NULL
 );
 
 CREATE TABLE collection_layers (

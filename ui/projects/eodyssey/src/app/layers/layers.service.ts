@@ -247,6 +247,7 @@ export class EOdysseyLayerService {
         if (!edvCollection || !edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
+        const inheritedCost = getProperties(edvCollection).get('edv:loadingCost');
         const items = (await this.allItems(edvCollectionId)).filter(isCollection);
         // Keep existing deployments usable until their catalogue is bootstrapped with categories.
         const legacySources = items.filter((item) => getProperties(item).has('edv:dataset'));
@@ -256,11 +257,14 @@ export class EOdysseyLayerService {
                 .map(async (item): Promise<DataSourceCategory> => ({
                     key: item.id.collectionId,
                     name: item.name,
-                    sources: await this.loadSources((await this.allItems(item.id.collectionId)).filter(isCollection)),
+                    sources: await this.loadSources(
+                        (await this.allItems(item.id.collectionId)).filter(isCollection),
+                        getProperties(item).get('edv:loadingCost') ?? inheritedCost,
+                    ),
                 })),
         );
         if (legacySources.length) {
-            categories.push({key: edvCollectionId, name: 'Data Sources', sources: await this.loadSources(legacySources)});
+            categories.push({key: edvCollectionId, name: 'Data Sources', sources: await this.loadSources(legacySources, inheritedCost)});
         }
         requireUniqueKeys(
             categories.flatMap((category) => category.sources),
@@ -269,19 +273,25 @@ export class EOdysseyLayerService {
         return categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
-    private async loadSources(items: Extract<CollectionItem, {type: 'collection'}>[]): Promise<DataSourceDefinition[]> {
-        const sources = await Promise.all(items.map((item) => this.loadDataset(item)));
+    private async loadSources(
+        items: Extract<CollectionItem, {type: 'collection'}>[],
+        inheritedCost?: string,
+    ): Promise<DataSourceDefinition[]> {
+        const sources = await Promise.all(items.map((item) => this.loadDataset(item, inheritedCost)));
         requireUniqueKeys(sources, 'data source');
         return sources
             .filter((source) => source.variants.length > 0)
             .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
     }
 
-    private async loadDataset(dataset: Extract<CollectionItem, {type: 'collection'}>): Promise<DataSourceDefinition> {
+    private async loadDataset(
+        dataset: Extract<CollectionItem, {type: 'collection'}>,
+        inheritedCost?: string,
+    ): Promise<DataSourceDefinition> {
         const metadata = getProperties(dataset);
         const key = requiredProperty(dataset, 'edv:dataset');
         const items = await this.allItems(dataset.id.collectionId);
-        const variants = items.filter(isCollection).map((item) => this.loadVariant(item));
+        const variants = items.filter(isCollection).map((item) => this.loadVariant(item, metadata.get('edv:loadingCost') ?? inheritedCost));
         requireUniqueKeys(variants, 'region in ' + dataset.name);
         variants.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
         const timeStep = metadata.get('edv:timeStep');
@@ -295,7 +305,7 @@ export class EOdysseyLayerService {
         };
     }
 
-    private loadVariant(item: Extract<CollectionItem, {type: 'collection'}>): DataSourceVariant {
+    private loadVariant(item: Extract<CollectionItem, {type: 'collection'}>, inheritedCost?: string): DataSourceVariant {
         const crs = requiredProperty(item, 'edv:crs');
         return {
             key: crs,
@@ -303,10 +313,11 @@ export class EOdysseyLayerService {
             crs,
             coverage: parseCoverage(getProperties(item).get('edv:coverage')),
             collectionId: item.id.collectionId,
+            loadingCost: getProperties(item).get('edv:loadingCost') ?? inheritedCost,
         };
     }
 
-    private createPreset(item: Extract<CollectionItem, {type: 'layer'}>): VisualizationPreset {
+    private createPreset(item: Extract<CollectionItem, {type: 'layer'}>, inheritedCost?: string): VisualizationPreset {
         const metadata = getProperties(item);
         return {
             key: requiredProperty(item, 'edv:presetKey'),
@@ -316,7 +327,7 @@ export class EOdysseyLayerService {
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
 
-            viewportPixelBudget: parseViewportPixelBudget(item.loadingCost, {
+            viewportPixelBudget: parseViewportPixelBudget(metadata.get('edv:loadingCost') ?? inheritedCost, {
                 maxSourcePixels: this.config.VIEWPORT_LIMITS.MAX_SOURCE_PIXELS,
                 maxStacSearches: this.config.VIEWPORT_LIMITS.MAX_STAC_SEARCHES,
             }),
@@ -373,7 +384,7 @@ export class EOdysseyLayerService {
             const items = await this.allItems(variant.collectionId);
             const presets = items
                 .filter((item): item is Extract<CollectionItem, {type: 'layer'}> => item.type === 'layer')
-                .map((item) => this.createPreset(item));
+                .map((item) => this.createPreset(item, variant.loadingCost));
             requireUniqueKeys(presets, 'preset in ' + variant.name);
             presets.sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
             if (generation !== this.variantLoadGeneration || epoch !== (this.variantLoadEpochs.get(key) ?? 0)) {

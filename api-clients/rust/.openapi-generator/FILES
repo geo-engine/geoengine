@@ -156,7 +156,6 @@ docs/LayerCollection.md
 docs/LayerCollectionListing.md
 docs/LayerCollectionResource.md
 docs/LayerListing.md
-docs/LayerLoadingCost.md
 docs/LayerProviderListing.md
 docs/LayerResource.md
 docs/LayerUpdate.md
@@ -360,7 +359,6 @@ docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
 docs/StacProviderS3Config.md
 docs/StacQueryBuffer.md
-docs/StacSearchGrid.md
 docs/StaticColor.md
 docs/StaticNumber.md
 docs/Statistics.md
@@ -399,7 +397,6 @@ docs/TileSet.md
 docs/TileSetDataType.md
 docs/TileSetItem.md
 docs/TileSets.md
-docs/TileSourcePixelCost.md
 docs/TilesCrs.md
 docs/TilesCrsOneOf.md
 docs/TilesCrsOneOf1.md
@@ -650,7 +647,6 @@ src/models/layer_collection.rs
 src/models/layer_collection_listing.rs
 src/models/layer_collection_resource.rs
 src/models/layer_listing.rs
-src/models/layer_loading_cost.rs
 src/models/layer_provider_listing.rs
 src/models/layer_resource.rs
 src/models/layer_update.rs
@@ -843,7 +839,6 @@ src/models/stac_provider_dataset.rs
 src/models/stac_provider_dataset_band.rs
 src/models/stac_provider_s3_config.rs
 src/models/stac_query_buffer.rs
-src/models/stac_search_grid.rs
 src/models/static_color.rs
 src/models/static_number.rs
 src/models/statistics.rs
@@ -881,7 +876,6 @@ src/models/tile_set.rs
 src/models/tile_set_data_type.rs
 src/models/tile_set_item.rs
 src/models/tile_sets.rs
-src/models/tile_source_pixel_cost.rs
 src/models/tiles_crs.rs
 src/models/tiles_crs_one_of.rs
 src/models/tiles_crs_one_of_1.rs

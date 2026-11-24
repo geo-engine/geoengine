@@ -84,24 +84,26 @@ describe('LayersComponent', () => {
             items: [
                 {
                     type: 'layer',
-                    loadingCost: loadingCostFixture,
+
                     name: 'Default',
                     id: {providerId: 'provider', layerId: 'vv'},
                     description: '',
                     properties: [
                         ['edv:presetKey', 'Default'],
                         ['edv:order', '10'],
+                        ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                     ],
                 },
                 {
                     type: 'layer',
-                    loadingCost: loadingCostFixture,
+
                     name: 'Alternate',
                     id: {providerId: 'provider', layerId: 'alternate'},
                     description: '',
                     properties: [
                         ['edv:presetKey', 'Alternate'],
                         ['edv:order', '20'],
+                        ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                     ],
                 },
             ],
@@ -296,7 +298,11 @@ describe('LayersComponent', () => {
             ...Object.fromEntries(Object.entries(listings).map(([key, page]) => [key, page.items])),
             edv: [...Array.from({length: 20}, (_, index) => collection(`Category ${index}`)), collection('Imagery')],
             Imagery: [
-                ...Array.from({length: 20}, (_, index) => ({type: 'layer', loadingCost: loadingCostFixture, name: String(index)})),
+                ...Array.from({length: 20}, (_, index) => ({
+                    type: 'layer',
+                    name: String(index),
+                    properties: [['edv:loadingCost', JSON.stringify(loadingCostFixture)]],
+                })),
                 ...listings.edv.items,
             ],
         };
@@ -339,6 +345,64 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
+    function mockCostProperties(collectionCosts: Record<string, string>, layerCosts: Record<string, string> = {}): void {
+        mockCategorizedCatalogue();
+        const original = getLayerCollectionItems.getMockImplementation()!;
+        getLayerCollectionItems.mockImplementation(async (provider, collection, offset, limit) => {
+            const page = await original(provider, collection, offset, limit);
+            return {
+                items: page.items.map((item) => {
+                    const entry = item as CollectionItem;
+                    const properties = (entry.properties ?? []).filter(([key]) => key !== 'edv:loadingCost');
+                    const value = entry.type === 'layer' ? layerCosts[entry.id.layerId] : collectionCosts[entry.id.collectionId];
+                    if (value !== undefined) properties.push(['edv:loadingCost', value]);
+                    return {...entry, properties};
+                }),
+            };
+        });
+    }
+
+    it.each(['edv', 'optical', 'dataset', 'region'])('inherits a loading-cost model from collection %s', async (collection) => {
+        const model = {...loadingCostFixture, matrices: [{...loadingCostFixture.matrices[0], sourcePixels: 777}]};
+        mockCostProperties({[collection]: JSON.stringify(model)});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toBeUndefined();
+        expect(eodysseyLayerService.currentPresets()).toHaveLength(2);
+        for (const preset of eodysseyLayerService.currentPresets()) expect(preset.viewportPixelBudget.matrices[0].sourcePixels).toBe(777);
+    });
+
+    it('uses the nearest collection default and lets layer properties override it', async () => {
+        const model = (sourcePixels: number): string =>
+            JSON.stringify({...loadingCostFixture, matrices: [{...loadingCostFixture.matrices[0], sourcePixels}]});
+        mockCostProperties({edv: model(10), optical: model(20), dataset: model(30), region: model(40)}, {vv: model(55)});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.currentPresets().find((p) => p.key === 'Default')?.viewportPixelBudget.matrices[0].sourcePixels).toBe(
+            55,
+        );
+        expect(eodysseyLayerService.currentPresets().find((p) => p.key === 'Alternate')?.viewportPixelBudget.matrices[0].sourcePixels).toBe(
+            40,
+        );
+    });
+
+    it('fails closed for an invalid layer override even when its collection default is valid', async () => {
+        mockCostProperties({region: JSON.stringify(loadingCostFixture)}, {vv: 'not-json'});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:loadingCost property');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+    });
+
+    it('does not parse an unused collection default when every layer overrides it', async () => {
+        const model = JSON.stringify(loadingCostFixture);
+        mockCostProperties({edv: 'not-json'}, {vv: model, alternate: model});
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.variantError()).toBeUndefined();
+        expect(eodysseyLayerService.currentPresets()).toHaveLength(2);
+    });
+
     it('applies the complete viewport model only on Apply', async () => {
         const limits = {maxSourcePixels: 100, maxStacSearches: 64};
         TestBed.inject(AppConfig).VIEWPORT_LIMITS.MAX_SOURCE_PIXELS = 100;
@@ -377,11 +441,17 @@ describe('LayersComponent', () => {
                               const preset = item as Extract<CollectionItem, {type: 'layer'}>;
                               return {
                                   ...preset,
-                                  loadingCost: {
-                                      ...budget,
-                                      matrices: budget.matrices.map((m) => ({...m, sourcePixels: index === 0 ? 10 : 20})),
-                                  },
-                                  properties: [...(preset.properties ?? [])],
+
+                                  properties: [
+                                      ...(preset.properties ?? []),
+                                      [
+                                          'edv:loadingCost',
+                                          JSON.stringify({
+                                              ...budget,
+                                              matrices: budget.matrices.map((m) => ({...m, sourcePixels: index === 0 ? 10 : 20})),
+                                          }),
+                                      ],
+                                  ],
                               };
                           }),
                       }
@@ -441,8 +511,13 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             ...(listings.region.items[0] as CollectionItem),
-                            loadingCost: withModel ? model : undefined,
-                            properties: [['edv:presetKey', 'Default']],
+
+                            properties: [
+                                ['edv:presetKey', 'Default'],
+                                ...((withModel ? model : undefined) === undefined
+                                    ? []
+                                    : [['edv:loadingCost', JSON.stringify(withModel ? model : undefined)]]),
+                            ],
                         },
                     ],
                 });
@@ -454,7 +529,7 @@ describe('LayersComponent', () => {
             eodysseyLayerService.applySelectedPreset();
             expect(eodysseyLayerService.appliedViewportPixelBudget()).toEqual({...model, ...limits});
         } else {
-            expect(eodysseyLayerService.variantError()).toContain('Missing layer loadingCost');
+            expect(eodysseyLayerService.variantError()).toContain('Missing edv:loadingCost property');
             expect(eodysseyLayerService.canApplyPreset()).toBe(false);
         }
     });
@@ -467,8 +542,11 @@ describe('LayersComponent', () => {
                           items: [
                               {
                                   ...(listings.region.items[0] as CollectionItem),
-                                  loadingCost: {},
-                                  properties: [['edv:presetKey', 'invalid']],
+
+                                  properties: [
+                                      ['edv:presetKey', 'invalid'],
+                                      ['edv:loadingCost', JSON.stringify({})],
+                                  ],
                               },
                           ],
                       }
@@ -477,7 +555,7 @@ describe('LayersComponent', () => {
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.variantError()).toContain('Invalid layer loadingCost');
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:loadingCost property');
         expect(eodysseyLayerService.canApplyPreset()).toBe(false);
     });
 
@@ -573,13 +651,14 @@ describe('LayersComponent', () => {
         });
         const presets = Array.from({length: 25}, (_, index) => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name: `Preset ${String(index + 1).padStart(2, '0')}`,
             id: {providerId: 'provider', layerId: `preset-${index + 1}`},
             description: '',
             properties: [
                 ['edv:presetKey', `preset-${index + 1}`],
                 ['edv:order', String(index + 1)],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         }));
         getLayerCollectionItems.mockImplementation((_provider, collection, offset = 0, limit = 20) => {
@@ -718,13 +797,14 @@ describe('LayersComponent', () => {
     it('defaults to True Color Image by catalogue order and preserves a manual choice', async () => {
         const preset = (key: string, name: string, order: number): unknown => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name,
             id: {providerId: 'provider', layerId: key},
             description: '',
             properties: [
                 ['edv:presetKey', key],
                 ['edv:order', String(order)],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
@@ -781,11 +861,14 @@ describe('LayersComponent', () => {
                 items: [
                     {
                         type: 'layer',
-                        loadingCost: loadingCostFixture,
+
                         name: 'Other visualization',
                         id: {providerId: 'provider', layerId: 'other'},
                         description: '',
-                        properties: [['edv:presetKey', 'other']],
+                        properties: [
+                            ['edv:presetKey', 'other'],
+                            ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+                        ],
                     },
                 ],
             },
@@ -1010,13 +1093,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
-                            loadingCost: loadingCostFixture,
+
                             name: 'Red',
                             id: {providerId: 'data0', layerId: 'red32-0'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1025,13 +1109,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
-                            loadingCost: loadingCostFixture,
+
                             name: 'Red',
                             id: {providerId: 'data0', layerId: 'red33-0'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1072,13 +1157,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
-                            loadingCost: loadingCostFixture,
+
                             name: 'Red',
                             id: {providerId: 'data1', layerId: 'red32-1'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1087,13 +1173,14 @@ describe('LayersComponent', () => {
                     items: [
                         {
                             type: 'layer',
-                            loadingCost: loadingCostFixture,
+
                             name: 'Red',
                             id: {providerId: 'data1', layerId: 'red33-1'},
                             description: '',
                             properties: [
                                 ['edv:presetKey', 'red_band'],
                                 ['edv:order', '10'],
+                                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
                             ],
                         },
                     ],
@@ -1139,18 +1226,21 @@ describe('LayersComponent', () => {
             layerId: string,
         ): {
             type: string;
-            loadingCost: typeof loadingCostFixture;
+
             name: string;
             id: {providerId: string; layerId: string};
             description: string;
             properties: string[][];
         } => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [['edv:presetKey', 'red_band']],
+            properties: [
+                ['edv:presetKey', 'red_band'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -1225,18 +1315,21 @@ describe('LayersComponent', () => {
             layerId: string,
         ): {
             type: string;
-            loadingCost: typeof loadingCostFixture;
+
             name: string;
             id: {providerId: string; layerId: string};
             description: string;
             properties: string[][];
         } => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name: 'Red',
             id: {providerId: 'data', layerId},
             description: '',
-            properties: [['edv:presetKey', 'red_band']],
+            properties: [
+                ['edv:presetKey', 'red_band'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === LAYER_DB_ROOT_COLLECTION_ID) {
@@ -1306,13 +1399,14 @@ describe('LayersComponent', () => {
     it('reconciles the selected preset when switching to a cached variant', async () => {
         const layer = (key: string, layerId: string): unknown => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name: key,
             id: {providerId: 'data', layerId},
             description: '',
             properties: [
                 ['edv:presetKey', key],
                 ['edv:order', key === 'red_band' ? '10' : '20'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
             ],
         });
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
@@ -1400,11 +1494,14 @@ describe('LayersComponent', () => {
         });
         const layer = (id: string): unknown => ({
             type: 'layer',
-            loadingCost: loadingCostFixture,
+
             name: 'Red',
             id: {providerId: 'data', layerId: id},
             description: '',
-            properties: [['edv:presetKey', 'red']],
+            properties: [
+                ['edv:presetKey', 'red'],
+                ['edv:loadingCost', JSON.stringify(loadingCostFixture)],
+            ],
         });
         const pages: Record<string, {items: unknown[]}> = {
             [LAYER_DB_ROOT_COLLECTION_ID]: {items: [collection('edv', 'EDV')]},

@@ -540,7 +540,6 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
     db.add_layer_with_id(
         &layer_id,
         AddLayer {
-            loading_cost: None,
             name: dataset_metadata.display_name,
             description: dataset_metadata.description,
             processing_graph: ProcessingGraph { operator },
@@ -570,7 +569,6 @@ pub async fn add_file_definition_to_layers<D: GeoEngineDb>(
     db.add_layer_with_id(
         &def.id,
         AddLayer {
-            loading_cost: None,
             name: def.name,
             description: def.description,
             processing_graph: def.processing_graph,
@@ -1027,7 +1025,6 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
     db.add_layer_with_id(
         &layer_id,
         AddLayer {
-            loading_cost: None,
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
             processing_graph: ProcessingGraph {
@@ -1362,7 +1359,6 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
     db.add_layer_with_id(
         &layer_id,
         AddLayer {
-            loading_cost: None,
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
             processing_graph: ProcessingGraph {

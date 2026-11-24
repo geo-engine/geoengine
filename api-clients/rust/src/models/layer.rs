@@ -12,9 +12,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Layer {
-    /// Optional structured loading-cost estimates for viewport guards.
-    #[serde(rename = "loadingCost", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub loading_cost: Option<Option<Box<models::LayerLoadingCost>>>,
     #[serde(rename = "id")]
     pub id: Box<models::ProviderLayerId>,
     #[serde(rename = "name")]
@@ -36,7 +33,6 @@ pub struct Layer {
 impl Layer {
     pub fn new(id: models::ProviderLayerId, name: String, description: String, processing_graph: models::ProcessingGraph) -> Layer {
         Layer {
-            loading_cost: None,
             id: Box::new(id),
             name,
             description,

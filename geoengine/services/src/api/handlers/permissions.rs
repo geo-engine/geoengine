@@ -672,7 +672,6 @@ mod tests {
         let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
         let layer = AddLayer {
-            loading_cost: None,
             name: "layer".to_string(),
             description: "description".to_string(),
             processing_graph: ProcessingGraph {

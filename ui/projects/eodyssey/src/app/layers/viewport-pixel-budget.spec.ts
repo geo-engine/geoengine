@@ -156,15 +156,17 @@ describe('viewport pixel budget', () => {
         for (let step = 1; step < 100; step++) expect(searches((cutoff * step) / 100)).toBeLessThanOrEqual(64);
     });
 
-    it('combines structured costs with frontend limits and rejects incomplete cost models', () => {
+    it('combines property costs with frontend limits and rejects incomplete cost models', () => {
         const limits = {maxSourcePixels: 1_000_000, maxStacSearches: 36};
         const {maxSourcePixels: _pixels, maxStacSearches: _searches, ...payload} = dualBudget;
-        expect(parseViewportPixelBudget(payload, limits)).toEqual(dualBudget);
-        expect(() => parseViewportPixelBudget(undefined, limits)).toThrow('Missing layer loadingCost');
-        expect(() => parseViewportPixelBudget({...payload, searchGrids: undefined}, limits)).toThrow('Invalid layer loadingCost');
-        expect(() => parseViewportPixelBudget(payload, undefined!)).toThrow('Invalid layer loadingCost');
+        expect(parseViewportPixelBudget(JSON.stringify(payload), limits)).toEqual(dualBudget);
+        expect(() => parseViewportPixelBudget(undefined, limits)).toThrow('Missing edv:loadingCost property');
+        expect(() => parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: undefined}), limits)).toThrow(
+            'Invalid edv:loadingCost property',
+        );
+        expect(() => parseViewportPixelBudget(JSON.stringify(payload), undefined!)).toThrow('Invalid edv:loadingCost property');
         expect(() =>
-            parseViewportPixelBudget({...payload, searchGrids: [payload.searchGrids[0], payload.searchGrids[0]]}, limits),
+            parseViewportPixelBudget(JSON.stringify({...payload, searchGrids: [payload.searchGrids[0], payload.searchGrids[0]]}), limits),
         ).toThrow();
     });
     it('allows a Germany-sized view and blocks a larger view using the same matrix', () => {
@@ -219,12 +221,14 @@ describe('viewport pixel budget', () => {
 
     it('accepts the unversioned bootstrap contract', () => {
         expect(
-            parseViewportPixelBudget(budget, {
+            parseViewportPixelBudget(JSON.stringify(budget), {
                 maxSourcePixels: budget.maxSourcePixels,
                 maxStacSearches: budget.maxStacSearches,
             }),
         ).toEqual(budget);
-        expect(() => parseViewportPixelBudget(undefined, {maxSourcePixels: 100, maxStacSearches: 64})).toThrow('Missing layer loadingCost');
+        expect(() => parseViewportPixelBudget(undefined, {maxSourcePixels: 100, maxStacSearches: 64})).toThrow(
+            'Missing edv:loadingCost property',
+        );
     });
 
     it.each([
@@ -242,7 +246,10 @@ describe('viewport pixel budget', () => {
         {...budget, matrices: [budget.matrices[0], {...budget.matrices[0], id: '1'}]},
     ])('rejects invalid viewport metadata: %s', (value) => {
         expect(() =>
-            parseViewportPixelBudget(value, {maxSourcePixels: budget.maxSourcePixels, maxStacSearches: budget.maxStacSearches}),
-        ).toThrow('Invalid layer loadingCost');
+            parseViewportPixelBudget(typeof value === 'string' ? value : JSON.stringify(value), {
+                maxSourcePixels: budget.maxSourcePixels,
+                maxStacSearches: budget.maxStacSearches,
+            }),
+        ).toThrow('Invalid edv:loadingCost property');
     });
 });

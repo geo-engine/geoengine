@@ -223,7 +223,6 @@ impl EdrDataProvider {
                     }))
                 } else {
                     Ok(CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
@@ -282,7 +281,6 @@ impl EdrDataProvider {
                     }))
                 } else {
                     Ok(CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
@@ -329,7 +327,6 @@ impl EdrDataProvider {
             .take(options.limit as usize)
             .map(|height| {
                 Ok(CollectionItem::Layer(LayerListing {
-                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
@@ -376,7 +373,6 @@ impl EdrDataProvider {
             .take(options.limit as usize)
             .map(|height| {
                 Ok(CollectionItem::Layer(LayerListing {
-                    loading_cost: None,
                     r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
@@ -1035,7 +1031,6 @@ impl LayerCollectionProvider for EdrDataProvider {
         };
 
         Ok(Layer {
-            loading_cost: None,
             id: ProviderLayerId {
                 provider_id: self.id,
                 layer_id: id.clone(),
@@ -1445,7 +1440,6 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
@@ -1528,7 +1522,6 @@ mod tests {
                 description: "Height selection of PointsInFrance".to_owned(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
@@ -1539,7 +1532,6 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
@@ -1582,7 +1574,6 @@ mod tests {
                 description: "Height selection of GFS_isobaric".to_owned(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
@@ -1595,7 +1586,6 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
-                        loading_cost: None,
                         r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,

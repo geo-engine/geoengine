@@ -18,6 +18,8 @@ export interface DataSourceVariant {
     coverage?: GeographicCoverage;
     /** The region collection containing this variant's preset layers. */
     collectionId: string;
+    /** Nearest collection default, used when a preset has no edv:loadingCost property. */
+    loadingCost?: string;
 }
 export interface DataSourceCategory {
     /** Layer collection id; categories do not carry data-source metadata. */

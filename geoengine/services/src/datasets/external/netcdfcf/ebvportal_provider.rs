@@ -1637,8 +1637,7 @@ mod tests {
                 },
                 name: "Random metric 1".to_string(),
                 description: "Randomly created data".to_string(),
-                items: vec![CollectionItem::Layer(LayerListing {
-loading_cost: None, r#type: Default::default(),
+                items: vec![CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/0.entity".into())
@@ -1646,8 +1645,7 @@ loading_cost: None, r#type: Default::default(),
                         name: "entity01".to_string(),
                         description: String::new(),
                         properties: vec![],
-                    }), CollectionItem::Layer(LayerListing {
-loading_cost: None, r#type: Default::default(),
+                    }), CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/1.entity".into())
@@ -1655,8 +1653,7 @@ loading_cost: None, r#type: Default::default(),
                         name: "entity02".to_string(),
                         description: String::new(),
                         properties: vec![],
-                    }), CollectionItem::Layer(LayerListing {
-loading_cost: None, r#type: Default::default(),
+                    }), CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/2.entity".into())

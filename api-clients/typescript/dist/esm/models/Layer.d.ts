@@ -10,7 +10,6 @@
  */
 import type { Symbology } from './Symbology';
 import type { ProviderLayerId } from './ProviderLayerId';
-import type { LayerLoadingCost } from './LayerLoadingCost';
 import type { ProcessingGraph } from './ProcessingGraph';
 /**
  *
@@ -18,10 +17,6 @@ import type { ProcessingGraph } from './ProcessingGraph';
  * @interface Layer
  */
 export interface Layer {
-    /**
-     * Optional structured loading-cost estimates for viewport guards.
-     */
-    loadingCost?: LayerLoadingCost | null;
     /**
      *
      */
