@@ -15112,6 +15112,27 @@
                 "type": "null"
               }
             ]
+          },
+          "itemTime": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StacItemTime",
+                "description": "Which item time decides the layer time steps an item belongs to; omitted values use\n`datetime`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxConcurrentAssetProbes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Asset file headers one STAC search reads in parallel to complete grid metadata the STAC\nitems lack, as for `NetCDF` assets; omitted values use 8.",
+            "maximum": 65535,
+            "minimum": 1
           }
         }
       },
@@ -15130,6 +15151,14 @@
             "minimum": 1
           }
         }
+      },
+      "StacItemTime": {
+        "type": "string",
+        "description": "Which time of a STAC item decides the layer time steps it belongs to.",
+        "enum": [
+          "datetime",
+          "range"
+        ]
       },
       "StacProviderAuthentication": {
         "type": "object",

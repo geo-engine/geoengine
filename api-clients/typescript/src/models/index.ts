@@ -339,6 +339,7 @@ export * from './StacAssetBand';
 export * from './StacCoarserAsset';
 export * from './StacDataProviderDefinition';
 export * from './StacGrid';
+export * from './StacItemTime';
 export * from './StacProviderAuthentication';
 export * from './StacProviderDataset';
 export * from './StacProviderDatasetBand';

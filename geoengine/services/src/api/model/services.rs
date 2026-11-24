@@ -1183,6 +1183,44 @@ pub struct StacDataProviderDefinition {
     /// the data starts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_bounds: Option<TimeInterval>,
+    /// Which item time decides the layer time steps an item belongs to; omitted values use
+    /// `datetime`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_time: Option<StacItemTime>,
+    /// Asset file headers one STAC search reads in parallel to complete grid metadata the STAC
+    /// items lack, as for `NetCDF` assets; omitted values use 8.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<u16>, minimum = 1, maximum = 65_535)]
+    pub max_concurrent_asset_probes: Option<std::num::NonZeroU16>,
+}
+
+/// Which time of a STAC item decides the layer time steps it belongs to.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum StacItemTime {
+    /// The item `datetime`, snapped to the time step that contains it.
+    Datetime,
+    /// The item's `start_datetime`/`end_datetime` range: the item belongs to every time step it
+    /// overlaps, as composites over several days do. Items without a range use their `datetime`.
+    Range,
+}
+
+impl From<StacItemTime> for crate::datasets::external::stac::StacItemTime {
+    fn from(value: StacItemTime) -> Self {
+        match value {
+            StacItemTime::Datetime => Self::Datetime,
+            StacItemTime::Range => Self::Range,
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacItemTime> for StacItemTime {
+    fn from(value: crate::datasets::external::stac::StacItemTime) -> Self {
+        match value {
+            crate::datasets::external::stac::StacItemTime::Datetime => Self::Datetime,
+            crate::datasets::external::stac::StacItemTime::Range => Self::Range,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1224,6 +1262,10 @@ impl From<StacDataProviderDefinition>
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
             datetime_frequency_aggregation: value.datetime_frequency_aggregation,
             time_bounds: value.time_bounds.map(Into::into),
+            item_time: value.item_time.map(Into::into),
+            max_concurrent_asset_probes: value
+                .max_concurrent_asset_probes
+                .map(|limit| i32::from(limit.get())),
         }
     }
 }
@@ -1251,6 +1293,12 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
             datetime_frequency_aggregation: value.datetime_frequency_aggregation,
             time_bounds: value.time_bounds.map(Into::into),
+            item_time: value.item_time.map(Into::into),
+            // the database stores a positive `int`, which providers validate
+            max_concurrent_asset_probes: value
+                .max_concurrent_asset_probes
+                .and_then(|limit| u16::try_from(limit).ok())
+                .and_then(std::num::NonZeroU16::new),
         }
     }
 }

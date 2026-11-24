@@ -98,7 +98,9 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                 datetime_frequency_aggregation = True,
                 time_bounds = geoengine_api_client.models.time_interval.TimeInterval(
                     start = 56, 
-                    end = 56, )
+                    end = 56, ),
+                item_time = 'datetime',
+                max_concurrent_asset_probes = 1
             )
         else:
             return StacDataProviderDefinition(

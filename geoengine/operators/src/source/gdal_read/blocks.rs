@@ -744,7 +744,13 @@ fn grid_error(
 }
 
 /// Identifies a file and everything that changes how its pixels and properties are read.
-fn file_id(params: &GdalDatasetParameters) -> Arc<str> {
+///
+/// It keys the file's blocks and its header in the pool's header cache, so a header cached
+/// under this key elsewhere spares the first block read of the file its header read.
+///
+/// # Panics
+/// Never: dataset parameters always serialize to JSON.
+pub fn file_id(params: &GdalDatasetParameters) -> Arc<str> {
     serde_json::to_string(params)
         .expect("dataset parameters serialize to JSON")
         .into()
@@ -845,6 +851,8 @@ mod tests {
             data_type: geoengine_datatypes::raster::RasterDataType::U16,
             spatial_reference:
                 geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced,
+            geo_transform: None,
+            no_data_value: None,
             levels,
         }
     }

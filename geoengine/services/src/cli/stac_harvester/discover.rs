@@ -17,10 +17,16 @@ use crate::api::model::{
 };
 use crate::datasets::external::stac::{
     StacAssetBand, StacDataProviderDefinition, StacProviderDataset, StacProviderDatasetBand,
-    StacProviderS3Config, common,
+    StacProviderS3Config,
+    asset_probe::{self, AssetProbe},
+    common,
 };
 use crate::util::retry::{RetryPolicy, retry_http};
+use futures::StreamExt;
 use geoengine_operators::engine::SpatialGridDescriptor as GeoOpSpatialGridDescriptor;
+use geoengine_operators::source::gdal_worker_process::{
+    DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, WorkerConfig,
+};
 
 // ---------------------------------------------------------------------------
 // Discover Mapping
@@ -114,7 +120,13 @@ pub struct StacDiscoverMapping {
 pub enum ImportFileType {
     Cog,
     Jp2,
+    /// `NetCDF` assets. Missing grid metadata, data types and CRSs are read from the header of one
+    /// sample file per asset, with S3 credentials from the `AWS_*` environment variables.
+    Netcdf,
 }
+
+/// The maximum number of sample asset headers discovery reads in parallel.
+const MAX_CONCURRENT_SAMPLE_PROBES: usize = 8;
 
 // ---------------------------------------------------------------------------
 // Discover Mapping Implementation
@@ -159,8 +171,14 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         items_response.items.len()
     );
 
-    let (discovered_datasets, sample_band_info) =
-        process_sample_assets(&items_response, &params.file_types, &params.epsgs);
+    let sample_probes = probe_netcdf_sample_assets(&items_response, &params.file_types).await;
+
+    let (discovered_datasets, sample_band_info) = process_sample_assets(
+        &items_response,
+        &params.file_types,
+        &params.epsgs,
+        &sample_probes,
+    );
 
     if discovered_datasets.is_empty() {
         anyhow::bail!(
@@ -216,6 +234,8 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         max_concurrent_cell_searches: None,
         datetime_frequency_aggregation: params.datetime_frequency_aggregation.then_some(true),
         time_bounds: None,
+        item_time: None,
+        max_concurrent_asset_probes: None,
     };
 
     write_discovered_mapping(provider_def, params.output.as_ref())?;
@@ -381,6 +401,7 @@ fn process_sample_assets(
     items_response: &stac::ItemCollection,
     file_types: &[ImportFileType],
     epsgs: &[u32],
+    sample_probes: &SampleAssetProbes,
 ) -> (DiscoveredDatasets, SampleBandInfo) {
     let mut discovered_datasets: HashMap<DatasetKey, DiscoveredDatasetInfo> = HashMap::new();
     let mut sample_band_info: HashMap<PartialDatasetKey, Vec<(String, String)>> = HashMap::new();
@@ -393,20 +414,34 @@ fn process_sample_assets(
                 continue;
             }
 
-            let geo_transform = common::geo_transform_from_asset_or_item(asset, item);
-            let proj_shape = common::proj_shape_from_asset_or_item(asset, item);
+            // the header of a sample file completes the metadata NetCDF assets lack
+            let metadata = common::AssetGridMetadata::from_asset_or_item(asset, item, item_epsg);
+            let probe = metadata
+                .needs_header_probe(asset)
+                .then(|| sample_probes.get(asset_key))
+                .flatten();
 
-            let data_type = common::data_type_from_asset_v1_1_0(asset)
-                .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset));
+            let geo_transform = metadata
+                .geo_transform
+                .or(probe.map(|probe| probe.geo_transform));
+            let proj_shape = metadata
+                .shape
+                .or(probe.map(|probe| (probe.height.get(), probe.width.get())));
+
+            let data_type = metadata.data_type.or(probe.map(|probe| probe.data_type));
             let Some(data_type) = data_type else {
                 continue;
             };
 
-            let epsg = common::epsg_code_from_asset_or_item(
-                asset,
-                item_epsg,
-                common::StacExtensionMajorVersion::V2,
-            );
+            let epsg = metadata
+                .epsg
+                // dataset keys, names and the `--epsg` filter use EPSG codes
+                .or(probe
+                    .and_then(|probe| probe.spatial_reference)
+                    .filter(|spatial_reference| {
+                        *spatial_reference.authority() == SpatialReferenceAuthority::Epsg
+                    })
+                    .map(SpatialReference::code));
             let Some(epsg) = epsg else {
                 continue;
             };
@@ -883,7 +918,70 @@ fn matches_selected_file_types(media_type: Option<&str>, file_types: &[ImportFil
     file_types.iter().any(|file_type| match file_type {
         ImportFileType::Cog => common::is_cog_media_type(media_type),
         ImportFileType::Jp2 => common::is_jp2_media_type(media_type),
+        ImportFileType::Netcdf => common::is_netcdf_media_type(media_type),
     })
+}
+
+/// Header probes of `NetCDF` sample assets, keyed by asset key.
+type SampleAssetProbes = HashMap<String, AssetProbe>;
+
+/// Read the header of one sample file per `NetCDF` asset key whose STAC metadata lacks the
+/// data type, CRS, transform or shape.
+///
+/// The probe uses no provider S3 config, since discovery writes placeholders there. GDAL reads
+/// the S3 endpoint and credentials from the `AWS_*` environment variables instead.
+/// Assets whose header cannot be read are skipped with a warning.
+async fn probe_netcdf_sample_assets(
+    items_response: &stac::ItemCollection,
+    file_types: &[ImportFileType],
+) -> SampleAssetProbes {
+    if !file_types.contains(&ImportFileType::Netcdf) {
+        return SampleAssetProbes::new();
+    }
+
+    let mut sample_hrefs: HashMap<String, String> = HashMap::new();
+    for item in &items_response.items {
+        let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
+        for (asset_key, asset) in &item.assets {
+            if common::AssetGridMetadata::from_asset_or_item(asset, item, item_epsg)
+                .needs_header_probe(asset)
+            {
+                sample_hrefs
+                    .entry(asset_key.clone())
+                    .or_insert_with(|| asset.href.clone());
+            }
+        }
+    }
+
+    if sample_hrefs.is_empty() {
+        return SampleAssetProbes::new();
+    }
+
+    // the workers inherit the `AWS_*` environment variables
+    let workers = sample_hrefs.len().min(MAX_CONCURRENT_SAMPLE_PROBES);
+    let prober = asset_probe::AssetProber::new(GdalProcessPool::new(
+        workers,
+        workers,
+        workers,
+        DEFAULT_HEADER_CACHE_ENTRIES,
+        WorkerConfig::default(),
+    ));
+    let prober = &prober;
+
+    futures::stream::iter(sample_hrefs)
+        .map(|(asset_key, href)| async move {
+            match prober.probe(PathBuf::from(&href), None, None).await {
+                Ok(probe) => Some((asset_key, probe)),
+                Err(error) => {
+                    warn!("Skipping NetCDF asset '{asset_key}', could not read {href}: {error}");
+                    None
+                }
+            }
+        })
+        .buffer_unordered(MAX_CONCURRENT_SAMPLE_PROBES)
+        .filter_map(std::future::ready)
+        .collect()
+        .await
 }
 
 fn merge_dataset_bands(
@@ -1370,8 +1468,12 @@ mod tests {
         }
         let items: stac::ItemCollection = serde_json::from_value(items_json).unwrap();
 
-        let (discovered_datasets, sample_band_info) =
-            process_sample_assets(&items, &[ImportFileType::Jp2], &[]);
+        let (discovered_datasets, sample_band_info) = process_sample_assets(
+            &items,
+            &[ImportFileType::Jp2],
+            &[],
+            &SampleAssetProbes::new(),
+        );
         assert!(!discovered_datasets.is_empty());
         assert!(
             discovered_datasets
@@ -1422,8 +1524,12 @@ mod tests {
         }))
         .expect("valid items");
 
-        let (discovered_datasets, sample_band_info) =
-            process_sample_assets(&items, &[ImportFileType::Cog], &[3035]);
+        let (discovered_datasets, sample_band_info) = process_sample_assets(
+            &items,
+            &[ImportFileType::Cog],
+            &[3035],
+            &SampleAssetProbes::new(),
+        );
         let expected_transform =
             GeoTransform::new_unchecked((4_200_000.0, 3_100_000.0).into(), 100.0, -100.0);
         assert_eq!(discovered_datasets.len(), 1);
@@ -1499,8 +1605,12 @@ mod tests {
             }))
             .expect("valid items");
 
-            let (discovered_datasets, _) =
-                process_sample_assets(&items, &[ImportFileType::Cog], &[3035]);
+            let (discovered_datasets, _) = process_sample_assets(
+                &items,
+                &[ImportFileType::Cog],
+                &[3035],
+                &SampleAssetProbes::new(),
+            );
             assert_eq!(discovered_datasets.len(), 1);
             let (dataset_key, info) = discovered_datasets.iter().next().unwrap();
             assert_eq!(info.asset_count, 2);
@@ -1553,7 +1663,75 @@ mod tests {
         }))
         .expect("valid items");
 
-        let (discovered_datasets, _) = process_sample_assets(&items, &[ImportFileType::Cog], &[]);
+        let (discovered_datasets, _) = process_sample_assets(
+            &items,
+            &[ImportFileType::Cog],
+            &[],
+            &SampleAssetProbes::new(),
+        );
+        assert!(discovered_datasets.is_empty());
+    }
+
+    #[test]
+    fn it_completes_netcdf_assets_from_their_sample_header() {
+        // Sentinel-3 SYN items on CODE-DE declare neither projection nor raster metadata
+        let items: stac::ItemCollection = serde_json::from_value(serde_json::json!({
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": "item",
+                "geometry": null,
+                "properties": {"datetime": "2026-11-01T00:00:00Z", "proj:code": null},
+                "links": [],
+                "assets": {
+                    "NDVI": {
+                        "href": "s3://eodata/NDVI.nc",
+                        "title": "Normalised difference vegetation index",
+                        "type": "application/netcdf"
+                    },
+                    "B2": {
+                        "href": "s3://eodata/B2.nc",
+                        "title": "B2",
+                        "type": "application/netcdf"
+                    }
+                }
+            }]
+        }))
+        .expect("valid items");
+        let geo_transform = GeoTransform::new_unchecked(
+            (-10.995_535_714_285_715, 75.004_464_285_714_29).into(),
+            0.008_928_571_428_571,
+            -0.008_928_571_428_571,
+        );
+        let probes = SampleAssetProbes::from([(
+            "NDVI".to_owned(),
+            AssetProbe {
+                geo_transform,
+                width: std::num::NonZeroUsize::new(8176).unwrap(),
+                height: std::num::NonZeroUsize::new(5601).unwrap(),
+                data_type: RasterDataType::U8,
+                no_data_value: Some(255.),
+                spatial_reference: Some(SpatialReference::epsg_4326()),
+            },
+        )]);
+
+        let (discovered_datasets, sample_band_info) =
+            process_sample_assets(&items, &[ImportFileType::Netcdf], &[], &probes);
+
+        // `B2` has no probe, so its data type stays unknown
+        assert_eq!(discovered_datasets.len(), 1);
+        let (key, info) = discovered_datasets.iter().next().expect("one dataset");
+        assert_eq!(key.epsg, 4326);
+        assert_eq!(key.data_type, RasterDataType::U8);
+        assert_eq!(key.resolution.get(), 0.008_928_571_428_571);
+        assert_eq!(info.geo_transform, Some(geo_transform));
+        assert_eq!(info.proj_shape, Some((5601, 8176)));
+        assert_eq!(sample_band_info.len(), 1);
+
+        // without `netcdf` among the file types, the assets are not considered
+        let (discovered_datasets, _) =
+            process_sample_assets(&items, &[ImportFileType::Cog], &[], &probes);
         assert!(discovered_datasets.is_empty());
     }
 

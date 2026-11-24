@@ -356,6 +356,7 @@ docs/StacAssetBand.md
 docs/StacCoarserAsset.md
 docs/StacDataProviderDefinition.md
 docs/StacGrid.md
+docs/StacItemTime.md
 docs/StacProviderAuthentication.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
@@ -840,6 +841,7 @@ src/models/stac_asset_band.rs
 src/models/stac_coarser_asset.rs
 src/models/stac_data_provider_definition.rs
 src/models/stac_grid.rs
+src/models/stac_item_time.rs
 src/models/stac_provider_authentication.rs
 src/models/stac_provider_dataset.rs
 src/models/stac_provider_dataset_band.rs

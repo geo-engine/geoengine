@@ -16,6 +16,7 @@ import { TimeIntervalFromJSON, TimeIntervalToJSON, } from './TimeInterval';
 import { StacGridFromJSON, StacGridToJSON, } from './StacGrid';
 import { StacProviderAuthenticationFromJSON, StacProviderAuthenticationToJSON, } from './StacProviderAuthentication';
 import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
+import { StacItemTimeFromJSON, StacItemTimeToJSON, } from './StacItemTime';
 /**
  * @export
  */
@@ -72,6 +73,8 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
         'timeBounds': json['timeBounds'] === undefined ? undefined : json['timeBounds'] === null ? null : TimeIntervalFromJSON(json['timeBounds']),
+        'itemTime': json['itemTime'] === undefined ? undefined : json['itemTime'] === null ? null : StacItemTimeFromJSON(json['itemTime']),
+        'maxConcurrentAssetProbes': json['maxConcurrentAssetProbes'] === undefined ? undefined : json['maxConcurrentAssetProbes'] === null ? null : json['maxConcurrentAssetProbes'],
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -100,5 +103,7 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
         'timeBounds': TimeIntervalToJSON(value['timeBounds']),
+        'itemTime': StacItemTimeToJSON(value['itemTime']),
+        'maxConcurrentAssetProbes': value['maxConcurrentAssetProbes'],
     };
 }
