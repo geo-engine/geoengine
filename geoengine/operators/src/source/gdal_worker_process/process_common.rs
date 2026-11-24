@@ -13,7 +13,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use super::{GdalDatasetParameters, GridAndProperties};
+use super::{GdalDatasetGeoTransform, GdalDatasetParameters, GridAndProperties};
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Processing graph is as follows:
@@ -168,12 +168,17 @@ pub enum IpcChannelResult {
     RasterInfo(RasterInfo),
 }
 
-/// The data type and levels of one band and the CRS of a raster, as read from its header.
+/// The data type, no-data value and levels of one band and the CRS and geo transform of a raster,
+/// as read from its header.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RasterInfo {
     pub data_type: RasterDataType,
     /// unreferenced if the file declares no CRS
     pub spatial_reference: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+    /// `None` if the file has no geo transform or one with a zero or non-finite pixel size
+    pub geo_transform: Option<GdalDatasetGeoTransform>,
+    #[serde(with = "crate::util::input::float_option_with_nan")]
+    pub no_data_value: Option<f64>,
     /// level 0 is the full resolution, level `i` the overview `i - 1` in GDAL's order
     pub levels: Vec<RasterLevelLayout>,
 }
@@ -554,12 +559,17 @@ where
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
+/// The kind of a GDAL error. `Display` is a short text for users, `Debug` adds how to fix it, for
+/// admins and logs.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum IpcProcessGdalErrorKind {
     FileNotFound,
     AccessDenied,
     InvalidDataset,
     ConnectionTimeout,
+    /// The netCDF driver needs `userfaultfd` to read files on remote `/vsi` file systems, and the
+    /// kernel or a seccomp profile does not allow the syscall.
+    UserfaultfdUnavailable,
     Unknown,
 }
 
@@ -595,7 +605,7 @@ pub enum IpcProcessError {
     #[snafu(display("Unsupported or invalid data type: {datatype}"))]
     DataType { datatype: Cow<'static, str> },
 
-    #[snafu(display("GDAL operational error ({kind:?}): {details}"))]
+    #[snafu(display("GDAL operational error ({kind}): {details}"))]
     GdalError {
         kind: IpcProcessGdalErrorKind,
         details: String,
@@ -621,6 +631,36 @@ pub enum IpcProcessError {
 
     #[snafu(display("The dataset uses alpha mask but its not allowed in dataset params"))]
     AlphaBandAsMaskNotAllowed,
+}
+
+impl std::fmt::Display for IpcProcessGdalErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FileNotFound => "file not found",
+            Self::AccessDenied => "access denied",
+            Self::InvalidDataset => "invalid dataset",
+            Self::ConnectionTimeout => "connection timeout",
+            Self::UserfaultfdUnavailable => "remote NetCDF files cannot be read on this server",
+            Self::Unknown => "unknown",
+        })
+    }
+}
+
+impl std::fmt::Debug for IpcProcessGdalErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FileNotFound => "FileNotFound",
+            Self::AccessDenied => "AccessDenied",
+            Self::InvalidDataset => "InvalidDataset",
+            Self::ConnectionTimeout => "ConnectionTimeout",
+            Self::UserfaultfdUnavailable => {
+                "UserfaultfdUnavailable: GDAL reads remote NetCDF files through the Linux \
+                 `userfaultfd` syscall. In a container, allow it with a seccomp profile that \
+                 permits `userfaultfd`, e.g. `--security-opt seccomp=unconfined`"
+            }
+            Self::Unknown => "Unknown",
+        })
+    }
 }
 
 impl IpcProcessError {
@@ -664,6 +704,9 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
 
         // Parse the error structural context cleanly
         let kind = match &err {
+            _ if err_string.contains("userfaultfd") => {
+                IpcProcessGdalErrorKind::UserfaultfdUnavailable
+            }
             gdal::errors::GdalError::NullPointer { method_name, msg }
                 if *method_name == "GDALOpenEx"
                     && (*msg == "HTTP response code: 404"
@@ -684,6 +727,10 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
             }
             _ => IpcProcessGdalErrorKind::Unknown,
         };
+
+        if kind == IpcProcessGdalErrorKind::UserfaultfdUnavailable {
+            tracing::error!(kind = ?kind, "cannot read a remote NetCDF file: {err_string}");
+        }
 
         IpcProcessError::GdalError {
             kind,
@@ -820,5 +867,27 @@ mod tests {
                 assert!((width.get() as f64) - exact[2] < 1.);
             }
         }
+    }
+
+    #[test]
+    fn it_classifies_a_missing_userfaultfd_and_says_how_to_fix_it() {
+        let error = IpcProcessError::from(gdal::errors::GdalError::NullPointer {
+            method_name: "GDALOpenEx",
+            msg: "Opening a /vsi file with the netCDF driver requires Linux userfaultfd to be \
+                  available. If running from Docker, --security-opt seccomp=unconfined might be \
+                  needed."
+                .to_string(),
+        });
+
+        assert!(matches!(
+            error,
+            IpcProcessError::GdalError {
+                kind: IpcProcessGdalErrorKind::UserfaultfdUnavailable,
+                ..
+            }
+        ));
+        // users get a short message, admins the fix in the debug output
+        assert!(!error.to_string().contains("Linux `userfaultfd` syscall"));
+        assert!(format!("{error:?}").contains("seccomp profile that permits `userfaultfd`"));
     }
 }

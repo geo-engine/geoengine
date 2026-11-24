@@ -47,6 +47,13 @@ import {
     TimeDimensionToJSON,
     TimeDimensionToJSONTyped,
 } from './TimeDimension';
+import type { StacItemTime } from './StacItemTime';
+import {
+    StacItemTimeFromJSON,
+    StacItemTimeFromJSONTyped,
+    StacItemTimeToJSON,
+    StacItemTimeToJSONTyped,
+} from './StacItemTime';
 
 /**
  * 
@@ -118,6 +125,16 @@ export interface StacDataProviderDefinition {
      * STAC searches one loading info request runs in parallel; omitted values use 8.
      */
     maxConcurrentCellSearches?: number | null;
+    /**
+     * Which item time decides the layer time steps an item belongs to; omitted values use
+     * `datetime`.
+     */
+    itemTime?: StacItemTime | null;
+    /**
+     * Asset file headers one STAC search reads in parallel to complete grid metadata the STAC
+     * items lack, as for `NetCDF` assets; omitted values use 8.
+     */
+    maxConcurrentAssetProbes?: number | null;
 }
 
 
@@ -173,6 +190,8 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
+        'itemTime': json['itemTime'] === undefined ? undefined : json['itemTime'] === null ? null : StacItemTimeFromJSON(json['itemTime']),
+        'maxConcurrentAssetProbes': json['maxConcurrentAssetProbes'] === undefined ? undefined : json['maxConcurrentAssetProbes'] === null ? null : json['maxConcurrentAssetProbes'],
     };
 }
 
@@ -203,6 +222,8 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
+        'itemTime': StacItemTimeToJSON(value['itemTime']),
+        'maxConcurrentAssetProbes': value['maxConcurrentAssetProbes'],
     };
 }
 

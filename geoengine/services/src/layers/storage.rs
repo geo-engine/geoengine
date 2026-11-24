@@ -124,6 +124,12 @@ pub trait LayerProviderDb: Send + Sync + 'static {
     /// Shared STAC request coordination for this database's application context.
     fn stac_request_registry(&self) -> &crate::datasets::external::stac::StacRequestRegistry;
 
+    /// The GDAL worker pool of this database's application context, for data connectors that
+    /// read file headers.
+    fn gdal_process_pool(
+        &self,
+    ) -> &std::sync::Arc<geoengine_operators::source::gdal_worker_process::GdalProcessPool>;
+
     async fn add_layer_provider(
         &self,
         provider: TypedDataProviderDefinition,
