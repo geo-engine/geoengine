@@ -369,7 +369,7 @@ block_reads = "auto"
 min_block_ttl_seconds = 60
 
 [stac_cache]
-# maximum size of the STAC query cache in MB
+# maximum size of the STAC query cache in MB, shared by all STAC providers (collections)
 size_in_mb = 100
 # TTL in seconds for STAC query cache entries
 ttl_secs = 3600
@@ -387,7 +387,7 @@ search_chunk_steps = 30
 # nothing where the map was loaded, and it is refused for a large area that nobody has looked at.
 # It also bounds the grid cells for which the days without items of an aggregation are stored in the cache.
 max_footprint_searches = 50
-# Number of aggregations kept for the calendars of providers with `datetimeFrequencyAggregation`, one per view
+# Number of aggregations kept for the calendars of all providers with `datetimeFrequencyAggregation`, one per view
 # box and chunk of `search_chunk_steps` steps, for `ttl_secs`. A kept one answers a moved window of dates in the
 # same view without a request. An entry holds the steps with items of one chunk, a few hundred bytes.
 max_aggregations = 10000
