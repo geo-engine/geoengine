@@ -1392,7 +1392,7 @@ async fn it_rewrites_the_resolution_of_a_rasterization_and_its_sibling_for_overv
     let TypedRasterOperator::GdalSource(ndvi) = ndvi else {
         panic!("the NDVI should still be read directly, was {ndvi:?}");
     };
-    assert_eq!(ndvi.params.overview_level, Some(4));
+    assert_eq!(ndvi.params.overview_level, std::num::NonZeroU32::new(4));
     let TypedRasterOperator::PolygonRasterization(mask) = mask else {
         panic!("the mask should still be rasterized, was {mask:?}");
     };

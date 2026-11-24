@@ -479,7 +479,9 @@ mod tests {
 
     fn overview_level(operator: &TypedRasterOperator) -> Option<u32> {
         match path(operator).last() {
-            Some(TypedRasterOperator::GdalSource(gdal)) => gdal.params.overview_level,
+            Some(TypedRasterOperator::GdalSource(gdal)) => {
+                gdal.params.overview_level.map(std::num::NonZeroU32::get)
+            }
             leaf => panic!("the leaf should be a GDAL source, was {leaf:?}"),
         }
     }

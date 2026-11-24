@@ -1479,7 +1479,10 @@ mod tests {
                 "the overview level is the output, so there is nothing to warp, was {optimized:?}"
             );
         };
-        assert_eq!(gdal_source.params.overview_level, Some(8));
+        assert_eq!(
+            gdal_source.params.overview_level,
+            std::num::NonZeroU32::new(8)
+        );
 
         // the warp still converts the data type
         let converting = initialize(WarpParams {
@@ -1496,7 +1499,10 @@ mod tests {
         let TypedRasterOperator::GdalSource(gdal_source) = &converting.sources.raster else {
             panic!("the source should be a GDAL source");
         };
-        assert_eq!(gdal_source.params.overview_level, Some(8));
+        assert_eq!(
+            gdal_source.params.overview_level,
+            std::num::NonZeroU32::new(8)
+        );
     }
 
     #[test]
