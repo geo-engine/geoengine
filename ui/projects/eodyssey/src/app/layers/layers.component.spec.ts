@@ -254,7 +254,8 @@ describe('LayersComponent', () => {
         });
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
         expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
-        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        // the first preset is on the map at once
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(eodysseyLayerService.selectedPreset()?.layerId);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('radarRegion');
         fixture.componentInstance.applySelectedPreset();
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
@@ -263,25 +264,25 @@ describe('LayersComponent', () => {
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
     });
 
-    it('switches categories through the accordion while keeping the applied visualization until another is applied', async () => {
+    it('switches categories through the accordion and shows the first preset of the new data source', async () => {
         mockCategorizedCatalogue();
         fixture.detectChanges();
         await fixture.whenStable();
-        fixture.componentInstance.applySelectedPreset();
-        const applied = eodysseyLayerService.mapTileLayer();
         const element = fixture.nativeElement as HTMLElement;
         (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedCategory()?.key).toBe('radar');
         expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
-        expect(eodysseyLayerService.selectedPreset()?.layerId).toBe('radar-layer');
-        expect(eodysseyLayerService.mapTileLayer()).toEqual(applied);
+        await vi.waitFor(() => {
+            fixture.detectChanges();
+            expect(eodysseyLayerService.selectedPreset()?.layerId).toBe('radar-layer');
+            expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('radar-layer');
+        });
         const panels = element.querySelectorAll('mat-expansion-panel');
         expect(panels[0].classList.contains('mat-expanded')).toBe(false);
         expect(panels[1].classList.contains('mat-expanded')).toBe(true);
-        fixture.componentInstance.applySelectedPreset();
-        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('radar-layer');
         (element.querySelectorAll('mat-expansion-panel-header')[0] as HTMLElement).click();
         fixture.detectChanges();
         await fixture.whenStable();
@@ -671,7 +672,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('reads each source minimum tile matrix index and changes the applied limit only when a preset is applied', async () => {
+    it('reads each source minimum tile matrix index and changes the applied limit with the shown preset', async () => {
         const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === 'edv') {
@@ -712,18 +713,20 @@ describe('LayersComponent', () => {
         });
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(4);
         expect(eodysseyLayerService.appliedDataSource()).toBeUndefined();
         eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
+        // a new data source shows its first preset, and with it its limit
         eodysseyLayerService.setSelectedDataSource('other');
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(5);
-        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
-        eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(5);
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('other-layer');
@@ -758,6 +761,9 @@ describe('LayersComponent', () => {
             });
             fixture.detectChanges();
             await fixture.whenStable();
+            // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+            fixture.componentInstance.show();
+            fixture.detectChanges();
             expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
             eodysseyLayerService.applySelectedPreset();
             expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
@@ -931,6 +937,9 @@ describe('LayersComponent', () => {
         mapView.setCenter([148.5, -35.5]);
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.currentPresets()).toHaveLength(25));
         fixture.detectChanges();
         expect(eodysseyLayerService.currentVariants()).toHaveLength(21);
@@ -998,10 +1007,10 @@ describe('LayersComponent', () => {
         expect(element.textContent).not.toContain('No data sources are available');
         expect(element.textContent).toContain('Sentinel');
         expect(eodysseyLayerService.dataSources()).toHaveLength(1);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
     });
 
-    it('shows nothing for a new data source, then the chosen preset, with the availability alone or over it', async () => {
+    it('shows the first preset for a new data source, then the chosen one, with the availability alone or over it', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
@@ -1013,10 +1022,10 @@ describe('LayersComponent', () => {
         const toggle = (): HTMLElement => element.querySelector<HTMLElement>('.availability-toggle button')!;
         const presets = eodysseyLayerService.currentPresets();
         expect(eodysseyLayerService.selectedPresetKey()).toBe('Default');
-        expect(active()).toEqual(['None']);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        // the first preset is on the map at once, without a click
+        expect(active()).toEqual([presets[0].displayName]);
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(setTime).not.toHaveBeenCalled();
-        expect(setTimeStepDuration).not.toHaveBeenCalled();
 
         tiles()[0].click();
         fixture.detectChanges();
@@ -1063,7 +1072,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
 
         setTime.mockClear();
-        eodysseyLayerService.removeVisualization();
+        fixture.componentInstance.show();
         fixture.detectChanges();
         await fixture.whenStable();
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
@@ -1093,22 +1102,15 @@ describe('LayersComponent', () => {
         expect(setTimeStepDuration).not.toHaveBeenCalled();
     });
 
-    it('loads the legend only after applying a preset and handles a failed request', async () => {
+    it('loads the legend of the shown preset and handles a failed request', async () => {
         getLayer.mockRejectedValue(new Error('Layer unavailable'));
         fixture.detectChanges();
         await fixture.whenStable();
-        const component = fixture.componentInstance;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(getLayer).not.toHaveBeenCalled();
-        expect(element.querySelector('.legend')).toBeNull();
-
-        component.applySelectedPreset();
-        fixture.detectChanges();
-        await fixture.whenStable();
-        fixture.detectChanges();
+        // the first preset is shown at once, with its legend
         expect(getLayer).toHaveBeenCalledWith('provider', 'vv');
         expect(element.querySelector('.legend-error')?.textContent).toContain('Failed to load legend');
         expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
@@ -1116,8 +1118,6 @@ describe('LayersComponent', () => {
         eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[1].key);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(getLayer).toHaveBeenCalledTimes(1);
-        component.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
         expect(getLayer).toHaveBeenLastCalledWith('provider', 'alternate');
@@ -1328,6 +1328,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.currentVariants().map((variant) => variant.key)).toEqual(['EPSG:32632', 'EPSG:32633']);
         expect(getLayerCollectionItems.mock.calls.map(([, collection]) => collection)).not.toContain('v330');
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
@@ -1349,7 +1352,8 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32633');
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
+        // the reloaded catalogue shows the kept preset with its new ids
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data1', layerId: 'red33-1'});
         expect(eodysseyLayerService.selectedPresetKey()).toBe('red_band');
     });
 
@@ -1419,6 +1423,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         resolve33({items: [layer('red33')]});
@@ -1496,6 +1503,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('variant unavailable'));
@@ -1562,6 +1572,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         eodysseyLayerService.setSelectedPreset('ndvi');
         expect(eodysseyLayerService.canApplyPreset()).toBe(true);
@@ -1634,6 +1647,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('B unavailable'));

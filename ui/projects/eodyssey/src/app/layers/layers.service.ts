@@ -71,12 +71,12 @@ export class EOdysseyLayerService {
         computation: () => !untracked(this.mapCenter),
     });
     /**
-     * The imagery the map shows of the data source: none or the selected preset.
-     * None for a new data source, so choosing one loads no data.
+     * The imagery the map shows of the data source: none or the selected preset. A new data source shows its selected
+     * preset, the first one, so the map shows data at once; "None" is chosen explicitly.
      */
     readonly shown = linkedSignal<string | undefined, 'none' | 'preset'>({
         source: () => this.selectedDataSource()?.key,
-        computation: () => 'none',
+        computation: () => 'preset',
     });
     /** The map shows where the scenes of the date are, alone or over the imagery. Kept when the data source changes. */
     readonly availabilityShown = signal(false);
