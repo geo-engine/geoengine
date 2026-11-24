@@ -7,6 +7,7 @@ import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
@@ -887,7 +888,15 @@ export class LayersComponent {
         const timeRange = this.footprintsService.timeRange();
         const outside =
             timeRange && (direction === 1 ? stepped.start.valueOf() >= timeRange.end : stepped.start.valueOf() < timeRange.start);
-        if (this.footprintsService.datesReachTimeRange(direction) || outside) {
+        // loaded steps whose dates the data source cannot tell may have data, so they are stepped through
+        const now = time.start.valueOf();
+        const unknownBeyond = this.footprintsService
+            .steps()
+            .some(
+                (step) =>
+                    step.status === TimeStepFootprintStatus.Unknown && (direction === 1 ? step.time.start > now : step.time.end <= now),
+            );
+        if ((this.footprintsService.datesReachTimeRange(direction) && !unknownBeyond) || outside) {
             return {label: direction === 1 ? 'No later dates' : 'No earlier dates'};
         }
         const amount = `${timeStep.durationAmount} ${timeStep.durationUnit}`;

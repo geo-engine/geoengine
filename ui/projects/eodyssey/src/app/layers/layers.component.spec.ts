@@ -365,6 +365,7 @@ describe('LayersComponent', () => {
             selectedDateEmpty: WritableSignal<boolean>;
             timeRange: WritableSignal<{start: number; end: number} | undefined>;
             datesReachTimeRange: Mock;
+            steps: WritableSignal<unknown[]>;
             viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
@@ -557,6 +558,27 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             await fixture.componentInstance.timeBackwards();
             expect(setTime).not.toHaveBeenCalled();
+        });
+
+        it('steps on where the loaded dates reach now but the data source cannot tell them', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 10, 20)));
+            footprints().datesReachTimeRange.mockReturnValue(true);
+            footprints().steps.set(
+                [19, 20, 21, 22].map((d) => ({time: {start: Date.UTC(2026, 10, d), end: Date.UTC(2026, 10, d + 1)}, status: 'unknown'})),
+            );
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(button('forward').disabled).toBe(false);
+            expect(button('forward').textContent).toContain('1 month on');
+            expect(button('backwards').disabled).toBe(false);
+
+            // the steps after the selected one are known to be empty: there are no later dates
+            footprints().steps.update((steps) => steps.map((step, i) => (i < 2 ? step : {...(step as object), status: 'empty'})));
+            fixture.detectChanges();
+            expect(button('forward').textContent).toContain('No later dates');
+            expect(button('backwards').disabled).toBe(false);
         });
 
         it('goes to the next date with data', async () => {
