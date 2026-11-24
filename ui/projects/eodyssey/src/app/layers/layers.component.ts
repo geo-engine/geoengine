@@ -728,11 +728,13 @@ export class LayersComponent {
         if (footprints.overlayBlocked() || footprints.overlayTooLarge())
             return {kind: 'unknown', text: 'Zoom in to see where the scenes of this date are.'};
         if (footprints.hasError()) return {kind: 'unknown', text: 'Could not load the data availability.'};
+        // the boxes load some levels before the tiles, so the imagery may not show yet
+        const zoomIn = this.shownPreset() && this.eodysseyLayerService.zoomRequired() ? '. Zoom in to load the imagery.' : '';
         switch (footprints.viewCoverage()) {
             case 'full':
-                return {kind: 'full', text: 'Scenes cover this view'};
+                return {kind: 'full', text: `Scenes cover this view${zoomIn}`};
             case 'part':
-                return {kind: 'part', text: 'Scenes cover part of this view'};
+                return {kind: 'part', text: `Scenes cover part of this view${zoomIn}`};
             case 'none':
                 return {kind: 'none', text: 'No scenes in this view on this date'};
             case 'unknown':

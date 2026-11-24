@@ -391,6 +391,15 @@ describe('LayersComponent', () => {
             expect(statusLine()).toBe('Scenes cover part of this view');
             expect(element.querySelector('.status-dot.status-part')).not.toBeNull();
 
+            // the imagery is on, but its tiles load only further in than the boxes
+            eodysseyLayerService.shown.set('preset');
+            eodysseyLayerService.zoomRequired.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view. Zoom in to load the imagery.');
+            eodysseyLayerService.zoomRequired.set(false);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view');
+
             footprints().viewCoverage.set('none');
             footprints().overlayLoading.set(true);
             fixture.detectChanges();
