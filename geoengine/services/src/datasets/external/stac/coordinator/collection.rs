@@ -1,5 +1,6 @@
 //! The temporal extent of a STAC collection, the time bounds of its datasets.
 use super::StacClient;
+use crate::datasets::external::stac::common::half_open_end;
 use crate::util::retry::RetryPolicy;
 use chrono::DateTime;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
@@ -47,28 +48,22 @@ impl StacClient {
     }
 }
 
-/// The interval of `[start, end]`, or `None` if both ends are open or a time cannot be read.
-/// The end of a STAC extent is closed and that of a time interval is not, so a given end is one
-/// millisecond later: an item on the end lies within, and an extent of one instant is not empty.
+/// The time of the closed extent `[start, end]`, which ends at [`half_open_end`] of `end`. An open
+/// end is the earliest or latest instant. `None` if both ends are open or a time cannot be read.
 fn time_bounds([start, end]: &[Option<String>; 2]) -> Option<TimeInterval> {
     if start.is_none() && end.is_none() {
         return None;
     }
-    let instant = |time: &Option<String>, open: TimeInstance, shift: i64| match time {
-        None => Some(open),
-        Some(time) => TimeInstance::from_millis(
-            DateTime::parse_from_rfc3339(time)
-                .ok()?
-                .timestamp_millis()
-                .checked_add(shift)?,
-        )
-        .ok(),
+    let millis = |time: &str| Some(DateTime::parse_from_rfc3339(time).ok()?.timestamp_millis());
+    let start = match start {
+        None => TimeInstance::MIN,
+        Some(start) => TimeInstance::from_millis(millis(start)?).ok()?,
     };
-    TimeInterval::new(
-        instant(start, TimeInstance::MIN, 0)?,
-        instant(end, TimeInstance::MAX, 1)?,
-    )
-    .ok()
+    let end = match end {
+        None => TimeInstance::MAX,
+        Some(end) => half_open_end(millis(end)?)?,
+    };
+    TimeInterval::new(start, end).ok()
 }
 
 #[cfg(test)]

@@ -1132,16 +1132,18 @@ impl StacMultiBandMetaData {
             );
 
         if let Some((step, start, end)) = item_range {
-            // `end_datetime` is inclusive, the item belongs to every step its range overlaps
+            // the item belongs to every step its closed range overlaps
+            let invalid =
+                |reason: String| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("STAC item {} has an invalid time range: {reason}", item.id),
+                };
             let range = TimeInterval::new(
-                TimeInstance::from_millis_unchecked(start.timestamp_millis()),
-                TimeInstance::from_millis_unchecked(end.timestamp_millis().saturating_add(1)),
+                TimeInstance::from_millis(start.timestamp_millis())
+                    .map_err(|e| invalid(e.to_string()))?,
+                common::half_open_end(end.timestamp_millis())
+                    .ok_or_else(|| invalid("its end is too late".to_owned()))?,
             )
-            .map_err(|e| {
-                geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: format!("STAC item {} has an invalid time range: {e}", item.id),
-                }
-            })?;
+            .map_err(|e| invalid(e.to_string()))?;
             return Ok(range.intersects(&step).then_some((step, z_index)));
         }
 
