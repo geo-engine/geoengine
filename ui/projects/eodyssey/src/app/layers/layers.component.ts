@@ -762,12 +762,14 @@ export class LayersComponent {
      * A newly selected data source moves a date outside of its data to its nearest date, once its dates are known, unless
      * the date was changed meanwhile. Holds the time at the selection, undefined once done.
      */
-    private readonly moveToDataPending = linkedSignal<string | undefined, {time?: number} | undefined>({
+    private readonly moveToDataPending = linkedSignal<string | undefined, {time?: number; silently: boolean} | undefined>({
         source: () => this.eodysseyLayerService.selectedDataSource()?.key,
-        computation: (key) => (key === undefined ? undefined : {time: untracked(this.currentTime)?.start.valueOf()}),
+        computation: (key, previous) =>
+            key === undefined
+                ? undefined
+                : // the first data source moves the start date without a note, since the user chose neither
+                  {time: untracked(this.currentTime)?.start.valueOf(), silently: previous?.source === undefined},
     });
-    /** The first data source moves the start date without a note, since the user chose neither. */
-    private moveSilently = true;
     /** Where the date was moved from and to, see `moveToDataPending`. */
     private readonly moved = linkedSignal<string | undefined, {from: Time; to: number; direction: 1 | -1} | undefined>({
         source: () => this.eodysseyLayerService.selectedDataSource()?.key,
@@ -897,10 +899,8 @@ export class LayersComponent {
             const outside = footprints.selectedOutsideData();
             untracked(() => {
                 this.moveToDataPending.set(undefined);
-                const silently = this.moveSilently;
-                this.moveSilently = false;
                 if (!outside || (pending.time !== undefined && pending.time !== time.start.valueOf())) return;
-                if (!silently) this.moved.set({from: time, to: outside.step.time.start, direction: outside.direction});
+                if (!pending.silently) this.moved.set({from: time, to: outside.step.time.start, direction: outside.direction});
                 void this.projectService.setTime(new Time(outside.step.time.start));
             });
         });

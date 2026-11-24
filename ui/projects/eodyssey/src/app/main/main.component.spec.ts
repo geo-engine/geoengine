@@ -74,6 +74,7 @@ describe('EOdyssey debug reprojection', () => {
                         selectedDateEmpty: signal(false),
                         overlayLoading: signal(false),
                         selectedOutsideData: signal(undefined),
+                        datesStale: signal(false),
                         time: signal(new Time(Date.UTC(2026, 3, 10))),
                         dateWithData: vi.fn(),
                     },

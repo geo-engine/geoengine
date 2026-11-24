@@ -150,7 +150,8 @@ export class MainComponent {
         }
         // the dates of this view already tell, so zooming in would show nothing
         if (shown && footprints.selectedDateEmpty()) {
-            const nearest = this.nearestDateWithData();
+            // kept dates of an earlier view may have scenes where this view has none
+            const nearest = footprints.datesStale() ? undefined : this.nearestDateWithData();
             return {
                 icon: 'event_busy',
                 text: 'No scenes in this view on this date.',
