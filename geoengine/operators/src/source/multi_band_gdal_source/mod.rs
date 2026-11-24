@@ -1353,7 +1353,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_footprint_stream_asks_for_a_long_range_part_by_part() -> Result<()> {
+    async fn it_the_footprint_stream_asks_for_a_long_range_part_by_part() -> Result<()> {
         let (processor, query_ctx, asked) = chunked_source(true).await?;
 
         // ten steps, so four parts of at most three steps
@@ -1390,7 +1390,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_data_and_time_streams_read_a_long_range_part_by_part() -> Result<()> {
+    async fn it_the_data_and_time_streams_read_a_long_range_part_by_part() -> Result<()> {
         let steps = (0..10)
             .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS).unwrap())
             .collect::<Vec<_>>();
@@ -1427,7 +1427,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn availability_gives_the_query_bounds_to_steps_with_data() -> Result<()> {
+    async fn it_availability_gives_the_query_bounds_to_steps_with_data() -> Result<()> {
         let (processor, query_ctx, _) = chunked_source(true).await?;
         let query = ten_steps_query();
 
@@ -1466,7 +1466,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn footprints_cover_the_loaded_tiles_and_tell_empty_steps_and_bands() -> Result<()> {
+    async fn it_footprints_cover_the_loaded_tiles_and_tell_empty_steps_and_bands() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
         let query_ctx = execution_context.mock_query_context_test_default();
 

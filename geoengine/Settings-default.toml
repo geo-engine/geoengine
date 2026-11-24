@@ -397,6 +397,12 @@ max_footprint_searches = 50
 # box and chunk of `search_chunk_steps` steps, for `ttl_secs`. A kept one answers a moved window of dates in the
 # same view without a request. An entry holds the steps with items of one chunk, a few hundred bytes.
 max_aggregations = 10000
+# The temporal extent of a collection, the time of its datasets, is asked for when a source is initialized, so for
+# every map tile. It is kept this many seconds, also with `size_in_mb` or `ttl_secs` set to 0.
+collection_time_ttl_secs = 3600
+# A failed request for the temporal extent is kept this many seconds, so that a collection endpoint that fails
+# does not delay every tile with a request and its retry. Until then, the datasets have no time bounds.
+collection_time_failure_ttl_secs = 60
 
 [provider_cache]
 # maximum number of provider instances in the provider registry

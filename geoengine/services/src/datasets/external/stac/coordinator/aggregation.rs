@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn no_bucket_means_no_item() {
+    fn it_no_bucket_means_no_item() {
         assert_eq!(checked_intervals_with_items(&[], ONE_DAY), Some(vec![]));
     }
 }

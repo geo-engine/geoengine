@@ -368,7 +368,7 @@ export class FootprintsService {
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
         const steps = this.steps();
         const time = this.time()?.start.valueOf();
-        if (this.isLoading() || !steps.length || time === undefined) return undefined;
+        if (this.isLoading() || !steps.length || time === undefined || stepAt(steps, time)) return undefined;
         if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
         if (time < steps[0].time.start) return {direction: -1, step: steps[0]};
         return undefined;

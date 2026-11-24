@@ -1360,7 +1360,7 @@ mod footprint_tests {
     use crate::engine::footprint_test_util::*;
 
     #[tokio::test]
-    async fn time_shift_answers_with_the_output_times() {
+    async fn it_time_shift_answers_with_the_output_times() {
         let shifted = RasterOperator::typed(TimeShift {
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Millis,

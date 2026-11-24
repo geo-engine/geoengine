@@ -250,7 +250,6 @@ describe('LayersComponent', () => {
             key: 'sentinel',
             citation: 'Source citation',
             minTileMatrixIndex: 5,
-            defaultTime: 1775001600000,
         });
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
         expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
@@ -441,6 +440,27 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             ticks[0].click();
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 1)));
+        });
+
+        it('reaches the bars of the strip with the keyboard, the selected one first', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            footprints().time.set(new Time(Date.UTC(2026, 3, 2)));
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty'), day(3, 'unknown')]);
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
+            expect(Array.from(ticks, (tick) => tick.tabIndex)).toEqual([-1, 0, -1]);
+            ticks[1].focus();
+            ticks[1].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}));
+            expect(document.activeElement).toBe(ticks[2]);
+            ticks[2].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}));
+            expect(document.activeElement).toBe(ticks[2]);
+            ticks[2].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowLeft'}));
+            expect(document.activeElement).toBe(ticks[1]);
         });
 
         it('keeps the place of the strip while the dates load, so the panel does not move', async () => {

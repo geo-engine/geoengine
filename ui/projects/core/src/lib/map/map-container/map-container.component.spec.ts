@@ -102,7 +102,17 @@ describe('MapContainerComponent', () => {
         await fixture.whenStable();
 
         expect(redraw).toHaveBeenCalled();
-        redraw.mockRestore();
         expect(container.mapLayers).toEqual([layer]);
+
+        // a layer on the map hides and shows itself, which redraws no map
+        redraw.mockClear();
+        layer.isVisible.set(false);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        layer.isVisible.set(true);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(redraw).not.toHaveBeenCalled();
+        redraw.mockRestore();
     });
 });

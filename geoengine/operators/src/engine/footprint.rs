@@ -538,7 +538,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn zip_makes_the_steps_of_the_time_merge() {
+    async fn it_zip_makes_the_steps_of_the_time_merge() {
         let (box_a, box_b) = (grid_box(0, 1, 0, 1), grid_box(5, 6, 5, 6));
         let a = vec![step(0, 10, &[box_a]), step(10, 20, &[])];
         let b = vec![step(0, 5, &[box_b]), step(5, 20, &[box_b])];
@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn zip_intersects_the_boxes_of_a_step() {
+    async fn it_zip_intersects_the_boxes_of_a_step() {
         let a = vec![step(0, 10, &[grid_box(0, 9, 0, 9)])];
         let b = vec![step(0, 10, &[grid_box(5, 14, 5, 14)])];
 
@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn zip_treats_an_input_without_a_step_as_empty_and_passes_errors() {
+    async fn it_zip_treats_an_input_without_a_step_as_empty_and_passes_errors() {
         let some_box = grid_box(0, 1, 0, 1);
         // the second input ends early
         let a = vec![step(0, 10, &[some_box]), step(10, 20, &[some_box])];
@@ -612,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_does_not_limit_an_intersection() {
+    fn it_unknown_does_not_limit_an_intersection() {
         let known = FootprintBounds::from_boxes(
             [grid_box(0, 1, 0, 1)],
             DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,

@@ -9,7 +9,14 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
-import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
+import {
+    CoreModule,
+    FootprintCalendarHeaderComponent,
+    FootprintsService,
+    ProjectService,
+    RasterLegendViewComponent,
+    stepContains,
+} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
@@ -127,11 +134,13 @@ function formatDate(timeMs: number): string {
                         aria-label="Dates around the selected date"
                         [attr.aria-busy]="footprintsService.isLoading()"
                     >
-                        @for (tick of ticks; track tick.start) {
-                            <!-- not in the tab order: the buttons below and the calendar reach every date -->
+                        @for (tick of ticks; track tick.start; let index = $index) {
+                            <!-- one bar is in the tab order, the arrow keys go to the others -->
                             <button
                                 type="button"
-                                tabindex="-1"
+                                [attr.tabindex]="index === stripTabIndex() ? 0 : -1"
+                                (keydown.arrowleft)="focusTick($event, -1)"
+                                (keydown.arrowright)="focusTick($event, 1)"
                                 class="tick"
                                 [class.tick-data]="tick.status === 'data'"
                                 [class.tick-unknown]="tick.status === 'unknown'"
@@ -767,11 +776,19 @@ export class LayersComponent {
                 date,
                 label: `${date}: ${scenes}${isToday ? ', today' : ''}`,
                 status: step.status,
-                isSelected: step.time.start <= now && now < step.time.end,
+                isSelected: stepContains(step, now),
                 isToday,
             };
         });
     });
+
+    /** The bar of the strip in the tab order: the selected one, or else the first. */
+    readonly stripTabIndex = computed(() =>
+        Math.max(
+            0,
+            this.strip().findIndex((tick) => tick.isSelected),
+        ),
+    );
 
     /** Where the buttons below the date go, which their labels say. */
     readonly backwards = computed(() => this.jump(-1));
@@ -908,6 +925,16 @@ export class LayersComponent {
     private async stepTime(direction: 1 | -1): Promise<void> {
         const jump = this.jump(direction);
         if (jump?.time) await this.projectService.setTime(jump.time);
+    }
+
+    /** Moves the focus to the next bar of the strip in `direction`, as in a toolbar. */
+    focusTick(event: Event, direction: 1 | -1): void {
+        const tick = event.target as HTMLElement;
+        const next = direction === 1 ? tick.nextElementSibling : tick.previousElementSibling;
+        if (next instanceof HTMLElement && next.classList.contains('tick')) {
+            next.focus();
+            event.preventDefault();
+        }
     }
 
     async selectTime(start: number): Promise<void> {

@@ -950,6 +950,10 @@ pub struct StacCache {
     pub max_footprint_searches: usize,
     /// Number of aggregations of a calendar kept, one per view box and chunk.
     pub max_aggregations: u64,
+    /// TTL in seconds of the temporal extent of a collection, kept also without a query cache.
+    pub collection_time_ttl_secs: u64,
+    /// TTL in seconds of a failed request for the temporal extent of a collection.
+    pub collection_time_failure_ttl_secs: u64,
 }
 
 impl TestDefault for StacCache {
@@ -960,6 +964,8 @@ impl TestDefault for StacCache {
             search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 50,
             max_aggregations: 1_000,
+            collection_time_ttl_secs: 3_600,
+            collection_time_failure_ttl_secs: 60,
         }
     }
 }

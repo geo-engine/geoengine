@@ -51,13 +51,23 @@ export function calendarStartView(unit: string | undefined): MatCalendarView {
  */
 export function canPickDate(steps: ReadonlyArray<TimeStepFootprint>, date: Date): boolean {
     const day = calendarCellRange(date, 'month');
-    const overlapping = steps.filter((step) => step.time.start < day.end && day.start < step.time.end);
+    const overlapping = steps.filter((step) =>
+        step.time.start === step.time.end
+            ? day.start <= step.time.start && step.time.start < day.end
+            : step.time.start < day.end && day.start < step.time.end,
+    );
     return overlapping.length === 0 || overlapping.some((step) => step.status !== TimeStepFootprintStatus.Empty);
 }
 
-/** The time step containing `timeMs`, or starting there for instants. */
+/** Whether a time step contains `timeMs`. A step of an instant contains just its instant. */
+export function stepContains(step: TimeStepFootprint, timeMs: number): boolean {
+    const {start, end} = step.time;
+    return start === end ? timeMs === start : start <= timeMs && timeMs < end;
+}
+
+/** The time step containing `timeMs`, see `stepContains`. */
 export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number): TimeStepFootprint | undefined {
-    return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);
+    return steps.find((step) => stepContains(step, timeMs));
 }
 
 /**
@@ -65,11 +75,13 @@ export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number):
  * The last or first `count` where `timeMs` lies after or before all steps, e.g. after the end of the data.
  */
 export function stepsAround(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number, count: number): TimeStepFootprint[] {
-    if (!steps.length) return [];
-    if (timeMs >= steps[steps.length - 1].time.end) return steps.slice(-count);
-    if (timeMs < steps[0].time.start) return steps.slice(0, count);
-    const index = steps.findIndex((step) => step.time.start <= timeMs && timeMs < step.time.end);
-    if (index < 0) return [];
+    const index = steps.findIndex((step) => stepContains(step, timeMs));
+    if (index < 0) {
+        if (!steps.length) return [];
+        if (timeMs >= steps[steps.length - 1].time.end) return steps.slice(-count);
+        if (timeMs < steps[0].time.start) return steps.slice(0, count);
+        return [];
+    }
     const start = Math.max(0, Math.min(index - Math.floor(count / 2), steps.length - count));
     return steps.slice(start, start + count);
 }

@@ -267,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_intervals_with_the_same_start_and_different_ends() {
+    fn it_intervals_with_the_same_start_and_different_ends() {
         let long = || {
             futures::stream::iter(vec![Result::<TimeInterval, &str>::Ok(
                 TimeInterval::new_unchecked(0, 10),

@@ -167,8 +167,16 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
         effect(() => {
             this.overlayLayer();
             this.dataOverlayLayer();
-            // only a redraw adds a layer that is shown later to the map, see `redrawLayers`
-            this.mapLayersRaw().forEach((layer) => layer.isVisible());
+            this.projection$.pipe(first()).subscribe((projection) => {
+                this.redrawLayers(projection);
+            });
+        });
+
+        // A redraw adds only the visible layers, see `redrawLayers`, so one shown later needs a redraw. A hidden layer
+        // stays on the map and hides itself, so hiding needs none.
+        effect(() => {
+            const shown = this.mapLayersRaw().filter((layer) => layer.isVisible());
+            if (shown.every((layer) => this.mapLayers.includes(layer))) return;
             this.projection$.pipe(first()).subscribe((projection) => {
                 this.redrawLayers(projection);
             });
