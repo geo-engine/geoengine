@@ -25,15 +25,18 @@ pub fn half_open_end(end_millis: i64) -> Option<TimeInstance> {
     TimeInstance::from_millis(end_millis.checked_add(1)?).ok()
 }
 
-/// The closed end of a STAC search for `interval`, the inverse of [`half_open_end`]: one
-/// millisecond before its end, so an item on the end, which belongs to the next interval, is not
-/// found. An instant is searched as itself.
-pub fn closed_end(interval: TimeInterval) -> TimeInstance {
-    if interval.is_instant() {
-        interval.start()
+/// The closed end of a STAC search for `interval`, as RFC 3339 text: one microsecond before its
+/// half-open end, the inverse of [`half_open_end`]. An item on the end, which belongs to the next
+/// interval, is not found; one within the last millisecond, which STAC times may carry, still is.
+/// An instant is searched as itself.
+pub fn closed_end(interval: TimeInterval) -> Option<String> {
+    let end = chrono::DateTime::from_timestamp_millis(interval.end().inner())?;
+    let end = if interval.is_instant() {
+        end
     } else {
-        interval.end() - 1
-    }
+        end - chrono::TimeDelta::microseconds(1)
+    };
+    Some(end.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string())
 }
 
 /// STAC `fields` query parameter used to keep item responses small while including all
@@ -816,16 +819,21 @@ mod tests {
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
     #[test]
-    fn it_searches_up_to_one_millisecond_before_the_end_and_an_instant_as_itself() {
+    fn it_searches_up_to_one_microsecond_before_the_end_and_an_instant_as_itself() {
         let day = TimeInterval::new(
             TimeInstance::from_millis_unchecked(86_400_000),
             TimeInstance::from_millis_unchecked(2 * 86_400_000),
         )
         .unwrap();
-        assert_eq!(closed_end(day).inner(), 2 * 86_400_000 - 1);
-        assert_eq!(half_open_end(closed_end(day).inner()), Some(day.end()));
+        assert_eq!(
+            closed_end(day).as_deref(),
+            Some("1970-01-02T23:59:59.999999Z")
+        );
         let instant = TimeInterval::new_instant(TimeInstance::from_millis_unchecked(5)).unwrap();
-        assert_eq!(closed_end(instant).inner(), 5);
+        assert_eq!(
+            closed_end(instant).as_deref(),
+            Some("1970-01-01T00:00:00.005000Z")
+        );
     }
 
     #[test]
