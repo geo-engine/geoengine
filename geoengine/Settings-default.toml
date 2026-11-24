@@ -309,10 +309,12 @@ GDAL_NUM_THREADS = "4"
 #
 # No speculative tile search in the patched OpenJPEG of geoengine-container: for files without a
 # TLM index it would guess where a tile starts and scan for its marker, which a crafted file can
-# fool into decoding other data. Set "YES" only for trusted files. Stock OpenJPEG ignores it.
+# fool into decoding other data. Stock OpenJPEG ignores it.
 OPJ_TILE_SEARCH = "NO"
-# For trusted files (e.g. Sentinel-2 from CODE-DE or CREODIAS) without a TLM index, "YES" finds a
-# tile without reading every tile header before it. Use it with the 64 KB chunks above.
+# Set "YES" only if every file this deployment will ever read is trusted (e.g. only Sentinel-2
+# from CODE-DE or CREODIAS): OpenJPEG reads the variable from the worker's environment, so it
+# applies to all reads and cannot be set per dataset. For files without a TLM index it then finds
+# a tile without reading every tile header before it. Use it with the 64 KB chunks above.
 # OPJ_TILE_SEARCH = "YES"
 # Searches in the same part of a file wait for each other (default). "NO" lets them read in
 # parallel: faster on files with many nearly empty tiles (sea, no-data), but about 20% more
