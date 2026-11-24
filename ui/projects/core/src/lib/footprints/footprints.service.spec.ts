@@ -22,6 +22,8 @@ describe('FootprintsService overlay', () => {
 
     const getMetadata = vi.fn<(id: string) => Promise<unknown>>();
     let viewport: BehaviorSubject<unknown>;
+    /** The selected time of the project. */
+    let projectTime: BehaviorSubject<Time>;
     /** The time of the layer's data in its metadata. */
     let dataTime: Time | undefined;
 
@@ -31,6 +33,7 @@ describe('FootprintsService overlay', () => {
         vi.setSystemTime(Date.UTC(2027, 0, 1));
         dataTime = undefined;
         viewport = new BehaviorSubject<unknown>({extent: [0, 0, 1, 1], resolution: 1});
+        projectTime = new BehaviorSubject(new Time(Date.UTC(2026, 3, 1)));
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
         getMetadata.mockReset();
         registerLayer.mockReset().mockResolvedValue('graph');
@@ -54,7 +57,7 @@ describe('FootprintsService overlay', () => {
                     provide: ProjectService,
                     useValue: {
                         getSpatialReferenceStream: (): Observable<unknown> => of({srsString: 'EPSG:3857'}),
-                        getTimeStream: (): Observable<Time> => of(new Time(Date.UTC(2026, 3, 1))),
+                        getTimeStream: (): Observable<Time> => projectTime,
                         getTimeStepDurationStream: (): Observable<unknown> => of({durationAmount: 1, durationUnit: 'days'}),
                     },
                 },
@@ -420,6 +423,34 @@ describe('FootprintsService overlay', () => {
             expect(service.dateFilter(new Date(2026, 2, 19))).toBe(false);
             expect(service.dateFilter(new Date(2026, 2, 20))).toBe(true);
             expect(service.dateFilter(new Date(2026, 3, 11))).toBe(false);
+        });
+
+        it('loads the dates of a day picked in another month, although the calendar closes before the time changes', async () => {
+            // a server with data on every day, whose window of the date before the pick answers late
+            let answerLate: () => void = () => undefined;
+            getFootprints.mockImplementation((_id, query) => {
+                const [start, end] = (query.timeInterval ?? '').split('/').map((t) => Date.parse(t));
+                const answer = answerDays(100)(_id, query);
+                return start <= Date.UTC(2026, 3, 1) && Date.UTC(2026, 3, 1) < end
+                    ? new Promise((resolve) => (answerLate = (): void => resolve(answer)))
+                    : answer;
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            // the calendar shows November 2025 and loads it
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2025, 10, 1), 'month');
+            await settle();
+            // a day of it is picked: the calendar closes first, then the time changes
+            service.calendarOpen.set(false);
+            await settle();
+            projectTime.next(new Time(Date.UTC(2025, 10, 20)));
+            await settle();
+            answerLate();
+            await settle();
+            expect(service.isLoading()).toBe(false);
+            expect(service.selectedOutsideData()).toBeUndefined();
+            expect(service.stepsAround(1).map((step) => step.time.start)).toEqual([Date.UTC(2025, 10, 20)]);
         });
 
         it('loads the last dates of data that ends before the selected date, so it can tell the nearest', async () => {
