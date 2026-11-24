@@ -72,6 +72,8 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
 - **`expression`**: user expressions are compiled to Rust **at runtime** and dynamically linked.
   `expression/deps-workspace` pins the dependencies for that compilation and must stay in sync with the workspace (`geo`, `geo-types`, …).
   Update it with `.scripts/update-expression-deps.rs`.
+  `expression/build.rs` builds these dependencies once into `$OUT_DIR/expression-deps`, so at runtime the server only needs `rustc` of the toolchain in `rust-toolchain.toml`, not `cargo`.
+  A deployment copies this directory with `just backend export-expression-deps <dir>` and sets `[expression] dependencies_path`; dev runs and tests use the one in the build directory.
 - **`services`**: the actix-web server.
   - `api/handlers/`: REST endpoints.
     `api/ogc/`: WMS/WFS/WCS and OGC API.

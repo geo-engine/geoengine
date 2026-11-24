@@ -7,18 +7,43 @@ use std::fmt::{Debug, Display};
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionExecutionError {
-    #[snafu(display("Cannot create temporary directory"))]
-    TempDir { source: std::io::Error },
-
-    #[snafu(display("Cannot create workspace for dependencies"))]
-    DepsWorkspace { source: std::io::Error },
-
-    #[snafu(display("Cannot build dependencies"))]
-    DepsBuild {
-        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::config::Config`].
-        /// This is a debug print.
-        debug: String,
+    /// The `path` is only in `Debug`, since `Display` is shown to users
+    #[snafu(display("Cannot create the expression workspace"))]
+    WorkspaceDir {
+        source: std::io::Error,
+        path: std::path::PathBuf,
     },
+
+    /// The `path` is only in `Debug`, since `Display` is shown to users
+    #[snafu(display("Cannot set up the expression workspace"))]
+    Workspace {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
+
+    #[snafu(display(
+        "Cannot find the expression dependencies in {}; set `[expression] dependencies_path` to the directory built with this binary",
+        path.display()
+    ))]
+    DepsMissing {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
+
+    #[snafu(display(
+        "The expression dependencies in {} were built for another binary (fingerprint {actual} instead of {expected})",
+        path.display()
+    ))]
+    DepsMismatch {
+        path: std::path::PathBuf,
+        expected: String,
+        actual: String,
+    },
+
+    #[snafu(display(
+        "The expressions must be compiled with `{expected}`, with which their dependencies were built, but `rustc -V` returned `{actual}`"
+    ))]
+    RustcMismatch { expected: String, actual: String },
 
     #[snafu(display("Cannot store source code in temporary file"))]
     CannotGenerateSourceCodeFile { source: std::io::Error },

@@ -4,6 +4,7 @@ mod dependencies;
 pub mod error;
 mod functions;
 mod parser;
+mod toolchain;
 mod util;
 
 pub use codegen::{DataType, ExpressionAst, Parameter};
@@ -11,7 +12,7 @@ pub use compiled::LinkedExpression;
 pub use dependencies::ExpressionDependencies;
 pub use functions::FUNCTION_PREFIX;
 pub use parser::ExpressionParser;
-pub use util::write_minimal_toolchain_file;
+pub use toolchain::write_minimal_toolchain_file;
 
 pub use geoengine_expression_deps::*;
 
