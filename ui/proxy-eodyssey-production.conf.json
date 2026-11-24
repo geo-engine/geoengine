@@ -1,0 +1,8 @@
+{
+    "/api/**": {
+        "target": "https://view.code-de.org/",
+        "changeOrigin": true,
+        "secure": false,
+        "logLevel": "debug"
+    }
+}
