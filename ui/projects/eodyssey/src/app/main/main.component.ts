@@ -134,36 +134,67 @@ export class MainComponent {
     );
     /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
     readonly tilesLoadable = signal(false);
-    /** One prompt on the map for the imagery and the data availability. */
-    readonly mapPrompt = computed<{icon: string; text: string; action?: {label: string; time: Time}} | undefined>(() => {
+    /**
+     * One notice at the top of the map: why it shows nothing, or that the app moved the date, each with its way out. A bar at
+     * the edge, never over the middle, so the map never looks blocked: panning and zooming go on as usual.
+     */
+    readonly mapNotice = computed<MapNotice | undefined>(() => {
         const footprints = this.footprintsService;
+        const time = footprints.time()?.start.valueOf();
+        const unit = footprints.timeStep()?.durationUnit;
+        const source = this.eodysseyLayerService.selectedDataSource()?.name ?? 'This data source';
+        const moved = this.eodysseyLayerService.dateMoved();
+        if (moved && time === moved.to) {
+            return {
+                icon: 'event',
+                title: `Date moved to ${formatDate(moved.to, unit)}`,
+                detail: `${source} has no data ${moved.direction === 1 ? 'after' : 'before'} it.`,
+                action: {label: `Back to ${formatDate(moved.from.start.valueOf())}`, run: (): void => void this.moveBack()},
+                close: (): void => this.eodysseyLayerService.dateMoved.set(undefined),
+            };
+        }
         const shown = !!this.mapTileLayer() || footprints.overlayVisible();
         // the data has no dates there at all, e.g. after "Back to" a date of another source
         const outside = footprints.selectedOutsideData();
         if (shown && outside) {
-            const date = formatDate(outside.step.time.start, footprints.timeStep()?.durationUnit);
+            const date = formatDate(outside.step.time.start, unit);
             return {
                 icon: 'event_busy',
-                text: outside.direction === 1 ? `No data after ${date}.` : `No data before ${date}.`,
-                action: {label: `Show ${date}`, time: new Time(outside.step.time.start)},
+                title: `${source} has no data ${outside.direction === 1 ? 'after' : 'before'} ${date}`,
+                detail: 'Not here, and nowhere else on this date.',
+                action: {label: `Show ${date}`, run: (): void => void this.projectService.setTime(new Time(outside.step.time.start))},
             };
         }
         // the dates of this view already tell, so zooming in would show nothing
-        if (shown && footprints.selectedDateEmpty()) {
+        if (shown && footprints.selectedDateEmpty() && time !== undefined) {
             // kept dates of an earlier view may have scenes where this view has none
             const nearest = footprints.datesStale() ? undefined : this.nearestDateWithData();
             return {
                 icon: 'event_busy',
-                text: 'No scenes in this view on this date.',
+                title: `No scenes here on ${formatDate(time, unit)}`,
+                detail: 'Moving the map may show scenes of this date.',
                 action: nearest && {
-                    label: `Show ${formatDate(nearest.start.valueOf(), footprints.timeStep()?.durationUnit)}`,
-                    time: nearest,
+                    label: `Nearest date: ${formatDate(nearest.start.valueOf(), unit)}`,
+                    run: (): void => void this.projectService.setTime(nearest),
                 },
             };
         }
-        if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
+        const zoomIn = {label: 'Zoom in', run: (): void => this.mapComponent().zoomIn()};
+        if (this.mapTileLayer() && this.zoomRequired()) {
+            return {
+                icon: 'zoom_in',
+                title: 'The imagery shows from a closer zoom',
+                detail: 'The map is too far out to load it.',
+                action: zoomIn,
+            };
+        }
         if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
-            return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
+            return {
+                icon: 'zoom_in',
+                title: 'The data availability shows from a closer zoom',
+                detail: 'The map is too far out to tell where scenes are.',
+                action: zoomIn,
+            };
         }
         return undefined;
     });
@@ -301,9 +332,23 @@ export class MainComponent {
         return later.start.valueOf() - now <= now - earlier.start.valueOf() ? later : earlier;
     }
 
-    async showPromptDate(time: Time): Promise<void> {
-        await this.projectService.setTime(time);
+    /** Selects the date again that a newly selected data source moved, see `mapNotice`. */
+    private async moveBack(): Promise<void> {
+        const moved = this.eodysseyLayerService.dateMoved();
+        if (!moved) return;
+        this.eodysseyLayerService.dateMoved.set(undefined);
+        await this.projectService.setTime(moved.from);
     }
+}
+
+/** A notice on the map, see `MainComponent.mapNotice`. */
+interface MapNotice {
+    icon: string;
+    title: string;
+    detail?: string;
+    action?: {label: string; run: () => void};
+    /** Only for a notice of something that happened, not of a state, which goes by itself. */
+    close?: () => void;
 }
 
 export interface LayerIdPair {

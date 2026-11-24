@@ -92,6 +92,7 @@ describe('EOdyssey debug reprojection', () => {
                         appliedDataSource: vi.fn().mockReturnValue(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
                         zoomRequired: signal(false),
+                        dateMoved: signal(undefined),
                     },
                 },
             ],
@@ -202,16 +203,16 @@ describe('EOdyssey debug reprojection', () => {
     it('asks to zoom in on the map when the boxes of the coverage need too many catalog searches', () => {
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        expect(element.querySelector('.zoom-prompt')).toBeNull();
+        expect(element.querySelector('.map-notice')).toBeNull();
 
         // only while the coverage is on the map; the panel says it otherwise
         (TestBed.inject(FootprintsService).overlayTooLarge as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
-        expect(element.querySelector('.zoom-prompt')).toBeNull();
+        expect(element.querySelector('.map-notice')).toBeNull();
         TestBed.inject(FootprintsService).overlayVisible.set(true);
         fixture.detectChanges();
 
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+        expect(element.querySelector('.map-notice')?.textContent).toContain('The data availability shows from a closer zoom');
     });
 
     it('says so while the date of the layer on the map has certainly no scenes in the view, and still loads its tiles', () => {
@@ -219,13 +220,13 @@ describe('EOdyssey debug reprojection', () => {
         const element = fixture.nativeElement as HTMLElement;
         const isVisible = (): unknown => fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['isVisible'];
         expect(isVisible()).toBe(true);
-        expect(element.querySelector('.zoom-prompt')).toBeNull();
+        expect(element.querySelector('.map-notice')).toBeNull();
 
         (TestBed.inject(FootprintsService).selectedDateEmpty as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
 
         expect(isVisible()).toBe(true);
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
+        expect(element.querySelector('.map-notice')?.textContent).toContain('No scenes here on 10.04.2026');
     });
 
     it('offers the nearest date with scenes where the date has none in the view, or the nearest date of the data', () => {
@@ -241,15 +242,47 @@ describe('EOdyssey debug reprojection', () => {
         );
         footprints.selectedDateEmpty.set(true);
         fixture.detectChanges();
-        const action = (): HTMLButtonElement | null => element.querySelector('.zoom-prompt .prompt-action');
-        expect(action()?.textContent).toContain('Show 08.04.2026');
+        const action = (): HTMLButtonElement | null => element.querySelector('.map-notice .notice-action');
+        expect(action()?.textContent).toContain('Nearest date: 08.04.2026');
         action()?.click();
         expect((TestBed.inject(ProjectService) as unknown as {setTime: Mock}).setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 8)));
 
         footprints.selectedOutsideData.set({direction: 1, step: {time: {start: Date.UTC(2025, 11, 31), end: Date.UTC(2026, 0, 1)}}});
         fixture.detectChanges();
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No data after 31.12.2025');
+        expect(element.querySelector('.map-notice')?.textContent).toContain('has no data after 31.12.2025');
         expect(action()?.textContent).toContain('Show 31.12.2025');
+    });
+
+    it('tells on the map that a new data source moved the date, offers the date before, and closes', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const layers = TestBed.inject(EOdysseyLayerService);
+        const setTime = (TestBed.inject(ProjectService) as unknown as {setTime: Mock}).setTime;
+        const notice = (): string => element.querySelector('.map-notice')?.textContent ?? '';
+        // the date was moved to 10.04.2026, the selected one
+        const moved = {from: new Time(Date.UTC(2026, 10, 23)), to: Date.UTC(2026, 3, 10), direction: 1 as const};
+        layers.dateMoved.set(moved);
+        fixture.detectChanges();
+        expect(notice()).toContain('Date moved to 10.04.2026');
+        element.querySelector<HTMLButtonElement>('.map-notice .notice-action')?.click();
+        expect(setTime).toHaveBeenCalledWith(moved.from);
+        fixture.detectChanges();
+        expect(element.querySelector('.map-notice')).toBeNull();
+
+        layers.dateMoved.set(moved);
+        fixture.detectChanges();
+        element.querySelector<HTMLButtonElement>('.map-notice .notice-close')?.click();
+        fixture.detectChanges();
+        expect(element.querySelector('.map-notice')).toBeNull();
+        expect(layers.dateMoved()).toBeUndefined();
+    });
+
+    it('offers to zoom in where the imagery does not load at this zoom', () => {
+        TestBed.inject(EOdysseyLayerService).zoomRequired.set(true);
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        expect(element.querySelector('.map-notice')?.textContent).toContain('The imagery shows from a closer zoom');
+        expect(element.querySelector('.map-notice .notice-action')?.textContent).toContain('Zoom in');
     });
 
     it('shows that it loads while the boxes of the date load, also before the tiles of the layer load', () => {
@@ -269,16 +302,16 @@ describe('EOdyssey debug reprojection', () => {
         const footprints = TestBed.inject(FootprintsService);
         // blocked until a layer says that its tiles load
         expect(footprints.overlayBlocked()).toBe(true);
-        expect(element.querySelector('.zoom-prompt')).toBeNull();
+        expect(element.querySelector('.map-notice')).toBeNull();
 
         footprints.overlayVisible.set(true);
         fixture.detectChanges();
 
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+        expect(element.querySelector('.map-notice')?.textContent).toContain('The data availability shows from a closer zoom');
 
         // the dates of the view say that the date has no scenes, so zooming in is no use
         (footprints.selectedDateEmpty as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('No scenes in this view on this date');
+        expect(element.querySelector('.map-notice')?.textContent).toContain('No scenes here on 10.04.2026');
     });
 });

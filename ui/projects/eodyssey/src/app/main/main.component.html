@@ -127,13 +127,21 @@
             }
         </geoengine-map-container>
 
-        @if (mapPrompt(); as prompt) {
-            <div class="zoom-prompt" role="status">
-                <mat-icon aria-hidden="true">{{ prompt.icon }}</mat-icon>
-                <span>{{ prompt.text }}</span>
-                @if (prompt.action; as action) {
-                    <button mat-stroked-button type="button" class="prompt-action" (click)="showPromptDate(action.time)">
-                        {{ action.label }}
+        @if (mapNotice(); as notice) {
+            <div class="map-notice" role="status">
+                <mat-icon aria-hidden="true">{{ notice.icon }}</mat-icon>
+                <div class="notice-text">
+                    <span class="notice-title">{{ notice.title }}</span>
+                    @if (notice.detail) {
+                        <span class="notice-detail">{{ notice.detail }}</span>
+                    }
+                </div>
+                @if (notice.action; as action) {
+                    <button mat-stroked-button type="button" class="notice-action" (click)="action.run()">{{ action.label }}</button>
+                }
+                @if (notice.close; as close) {
+                    <button mat-icon-button type="button" class="notice-close" aria-label="Close" (click)="close()">
+                        <mat-icon>close</mat-icon>
                     </button>
                 }
             </div>

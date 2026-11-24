@@ -510,7 +510,7 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.strip-stale')).toBeNull();
         });
 
-        it('says that the data has no date there where the selected one lies after its last date', async () => {
+        it('shows the last dates of the data, none of them selected, where the selected one lies after them', async () => {
             const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
                 time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
                 status,
@@ -524,11 +524,9 @@ describe('LayersComponent', () => {
             // the last dates of the data, none of them selected
             expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
             expect(element.querySelector('.date-strip .tick-selected')).toBeNull();
-            expect(element.querySelector('.dates-outside')?.textContent).toContain('The last date of the data is 02.04.2026');
-            expect(element.querySelector('.dates-of')).toBeNull();
         });
 
-        it('moves a date after the data of a new source to its last date, silently at start, else with a way back', async () => {
+        it('moves a date after the data of a new source to its last date, silently at start, else telling the map', async () => {
             const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
                 time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
                 status,
@@ -549,9 +547,9 @@ describe('LayersComponent', () => {
             // the start date, which the user did not choose, moves without a note
             expect(setTime).toHaveBeenCalledTimes(1);
             expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
-            expect(element.querySelector('.dates-moved')).toBeNull();
+            expect(eodysseyLayerService.dateMoved()).toBeUndefined();
 
-            // a date the user chose moves with a note, and back on request
+            // a date the user chose moves with a note on the map, which offers the date before
             footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
             (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
             await vi.waitFor(() => {
@@ -559,13 +557,11 @@ describe('LayersComponent', () => {
                 expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
                 expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
             });
-            fixture.detectChanges();
-            expect(element.querySelector('.dates-moved')?.textContent).toContain('Radar has no data after 02.04.2026');
-            element.querySelector<HTMLButtonElement>('.move-back')?.click();
-            await fixture.whenStable();
-            fixture.detectChanges();
-            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 9));
-            expect(element.querySelector('.dates-moved')).toBeNull();
+            expect(eodysseyLayerService.dateMoved()).toEqual({
+                from: new Time(Date.UTC(2026, 3, 9)),
+                to: Date.UTC(2026, 3, 2),
+                direction: 1,
+            });
         });
 
         it('says that the dates could not be loaded and loads them again on retry', async () => {
