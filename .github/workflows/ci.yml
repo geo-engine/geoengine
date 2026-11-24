@@ -142,7 +142,13 @@ jobs:
         with:
           shared-key: "test"
       - name: Testsuite
-        uses: ./.github/actions/test
+        # GDAL reads remote NetCDF files through userfaultfd, which the default seccomp profile blocks
+        run: >
+          podman run --rm --security-opt seccomp=unconfined
+          -v "$GITHUB_WORKSPACE:/github/workspace" -w /github/workspace
+          -e CI -e GITHUB_ACTIONS -e CARGO_TERM_COLOR -e CARGO_NET_RETRY -e RUSTUP_MAX_RETRIES
+          -e CARGO_INCREMENTAL -e CACHE_ON_FAILURE
+          quay.io/geoengine/devcontainer:latest ./.github/scripts/backend-test.sh
       - id: upload-coverage-artifact
         uses: actions/upload-artifact@v7
         with:

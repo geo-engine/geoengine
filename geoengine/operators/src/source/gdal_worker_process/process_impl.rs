@@ -1,11 +1,11 @@
 use super::{
-    GdalDatasetParameters, GdalMetadataMapping,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
         RasterInfo, level_of_factor,
     },
 };
-use crate::util::gdal::band_levels;
+use crate::util::gdal::{band_levels, identify_spatial_reference};
 use crate::{
     source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
     util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
@@ -23,7 +23,7 @@ use geoengine_datatypes::{
         GridSize, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
         RasterPropertiesEntryType,
     },
-    spatial_reference::{SpatialReference, SpatialReferenceOption},
+    spatial_reference::SpatialReferenceOption,
     util::helpers::equals_or_both_nan,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -439,8 +439,18 @@ impl GdalHandling {
                     }
                 })
             },
-            // If the file explicitly does not exist, do not waste time retrying
-            |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
+            // If the file explicitly does not exist or cannot be read in this environment, do
+            // not waste time retrying
+            |e| {
+                matches!(
+                    e,
+                    IpcProcessError::GdalError {
+                        kind: IpcProcessGdalErrorKind::FileNotFound
+                            | IpcProcessGdalErrorKind::UserfaultfdUnavailable,
+                        details: _,
+                    }
+                )
+            },
         )
     }
 
@@ -480,15 +490,22 @@ impl GdalHandling {
             })?;
             // GDAL reports a file without a CRS as an error
             let spatial_reference = match ds.spatial_ref() {
-                Ok(spatial_ref) => SpatialReference::try_from(spatial_ref)
+                Ok(spatial_ref) => identify_spatial_reference(spatial_ref)
                     .map_err(|e| IpcProcessError::IpcOther { msg: e.to_string() })?
                     .into(),
                 Err(_) => SpatialReferenceOption::Unreferenced,
             };
+            // GDAL reports a file without a geo transform as an error
+            let geo_transform = ds
+                .geo_transform()
+                .ok()
+                .and_then(|geo_transform| GdalDatasetGeoTransform::try_from(geo_transform).ok());
 
             Ok(RasterInfo {
                 data_type,
                 spatial_reference,
+                geo_transform,
+                no_data_value: band.no_data_value(),
                 levels: band_levels(&band)?,
             })
         })
@@ -856,6 +873,7 @@ mod tests {
             GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType, RasterPropertiesKey,
             SpatialGridDefinition, TileInformation,
         },
+        spatial_reference::SpatialReference,
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
@@ -2041,6 +2059,50 @@ mod tests {
         let mut missing = get_params();
         missing.file_path = test_data!("raster/does_not_exist.tif").into();
         assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
+    }
+
+    #[test]
+    fn it_reads_the_grid_and_crs_of_a_netcdf_header() {
+        let mut params = get_params();
+        params.file_path = test_data!("raster/netcdf_stac/s3_syn_v10_ndvi.nc").into();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::new(),
+            &params,
+        )
+        .expect("the NetCDF fixture opens");
+
+        assert_eq!(info.data_type, RasterDataType::U8);
+        // an unnamed geographic CRS on the WGS 84 ellipsoid
+        assert_eq!(info.spatial_reference, SpatialReference::epsg_4326().into());
+        assert_eq!(info.no_data_value, Some(255.));
+        assert_eq!((info.levels[0].size_x, info.levels[0].size_y), (16, 8));
+        let geo_transform = info.geo_transform.expect("the fixture has a geo transform");
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.x,
+            -10.995_535_714_285_715,
+            epsilon = 1e-12
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.y,
+            75.004_464_285_714_29,
+            epsilon = 1e-12
+        );
+        // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits
+        assert_approx_eq!(
+            f64,
+            geo_transform.x_pixel_size.get(),
+            0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.y_pixel_size.get(),
+            -0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
     }
 
     /// A 64x64 u16 `GeoTIFF` in 16x16 blocks. Its overviews (2, 4) hold 7, its full resolution 9.

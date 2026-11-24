@@ -48,6 +48,12 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(rename = "maxConcurrentCellSearches", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub max_concurrent_cell_searches: Option<Option<i32>>,
+    /// Which item time decides the layer time steps an item belongs to; omitted values use `datetime`.
+    #[serde(rename = "itemTime", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub item_time: Option<Option<models::StacItemTime>>,
+    /// Asset file headers one STAC search reads in parallel to complete grid metadata the STAC items lack, as for `NetCDF` assets; omitted values use 8.
+    #[serde(rename = "maxConcurrentAssetProbes", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_asset_probes: Option<Option<i32>>,
 }
 
 impl StacDataProviderDefinition {
@@ -69,6 +75,8 @@ impl StacDataProviderDefinition {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         }
     }
 }

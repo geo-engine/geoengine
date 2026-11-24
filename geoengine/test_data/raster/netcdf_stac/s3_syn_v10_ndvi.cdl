@@ -1,0 +1,32 @@
+// A 16 x 8 pixel cut-out of a Sentinel-3 SYN V10 `NDVI.nc` with the same structure:
+// a CF `latitude_longitude` grid mapping on the WGS 84 ellipsoid without a datum name,
+// 1/112 degree pixel centers as coordinate vectors, and an unsigned byte variable with
+// `_FillValue` 255. Generate the `.nc` file with:
+//   ncgen -k nc4 -o s3_syn_v10_ndvi.nc s3_syn_v10_ndvi.cdl
+netcdf s3_syn_v10_ndvi {
+dimensions:
+    latitude = 8 ;
+    longitude = 16 ;
+variables:
+    int crs ;
+        crs:grid_mapping_name = "latitude_longitude" ;
+        crs:semi_major_axis = 6378137. ;
+        crs:inverse_flattening = 298.257223563 ;
+        crs:longitude_of_prime_meridian = 0. ;
+    double latitude(latitude) ;
+        latitude:standard_name = "latitude" ;
+        latitude:units = "degrees_north" ;
+    double longitude(longitude) ;
+        longitude:standard_name = "longitude" ;
+        longitude:units = "degrees_east" ;
+    ubyte NDVI(latitude, longitude) ;
+        NDVI:_FillValue = 255UB ;
+        NDVI:grid_mapping = "crs" ;
+        NDVI:scale_factor = 0.004f ;
+        NDVI:add_offset = -0.08f ;
+        NDVI:standard_name = "normalized_difference_vegetation_index" ;
+data:
+    latitude = 75.0, 74.99107142857143, 74.98214285714286, 74.97321428571429, 74.96428571428571, 74.95535714285714, 74.94642857142857, 74.9375 ;
+    longitude = -10.991071428571429, -10.982142857142858, -10.973214285714286, -10.964285714285715, -10.955357142857142, -10.946428571428571, -10.9375, -10.928571428571429, -10.919642857142858, -10.910714285714286, -10.901785714285715, -10.892857142857142, -10.883928571428571, -10.875, -10.866071428571429, -10.857142857142858 ;
+    NDVI = 255, 16, 32, 48, 64, 80, 96, 255, 128, 144, 160, 176, 192, 208, 255, 240, 8, 24, 40, 56, 72, 88, 255, 120, 136, 152, 168, 184, 200, 255, 232, 248, 16, 32, 48, 64, 80, 255, 112, 128, 144, 160, 176, 192, 255, 224, 240, 5, 24, 40, 56, 72, 255, 104, 120, 136, 152, 168, 184, 255, 216, 232, 248, 13, 32, 48, 64, 255, 96, 112, 128, 144, 160, 176, 255, 208, 224, 240, 5, 21, 40, 56, 255, 88, 104, 120, 136, 152, 168, 255, 200, 216, 232, 248, 13, 29, 48, 255, 80, 96, 112, 128, 144, 160, 255, 192, 208, 224, 240, 5, 21, 255, 255, 72, 88, 104, 120, 136, 152, 255, 184, 200, 216, 232, 248, 13, 255, 45 ;
+}

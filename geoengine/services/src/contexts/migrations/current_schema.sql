@@ -917,6 +917,11 @@ CREATE TYPE "StacGrid" AS (
     target_number_of_cells integer
 );
 
+CREATE TYPE "StacItemTime" AS ENUM (
+    'Datetime',
+    'Range'
+);
+
 CREATE TYPE "StacDataProviderDefinition" AS (
     "name" text,
     id uuid,
@@ -932,7 +937,9 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     authentication "StacProviderAuthentication",
     cache_ttl_secs int,
     stac_grid "StacGrid",
-    max_concurrent_cell_searches int
+    max_concurrent_cell_searches int,
+    item_time "StacItemTime",
+    max_concurrent_asset_probes int
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

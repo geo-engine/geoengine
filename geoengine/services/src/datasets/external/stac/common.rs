@@ -20,11 +20,14 @@ use super::StacProviderS3Config;
 /// STAC `fields` query parameter used to keep item responses small while including all
 /// metadata needed by the provider (loading info) and the harvester (discovery/mapping).
 ///
+/// Includes the item's time range (`start_datetime`/`end_datetime`) and the asset media type
+/// (`assets.*.type`), which select `NetCDF` assets and JPEG 2000 open options.
+///
 /// Includes both the STAC 1.1.0 metadata (`assets.*.data_type`, `assets.*.bands`,
 /// `assets.*.proj:code`) and the STAC 1.0.0 metadata (`assets.*.raster:bands`,
 /// item-level projection fields, and `assets.*.proj:epsg`) so that items of either version
 /// survive the field filter.
-pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.start_datetime,properties.end_datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.type,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types
@@ -633,6 +636,68 @@ pub fn is_jp2_media_type(media_type: Option<&str>) -> bool {
     media_type == Some("image/jp2")
 }
 
+/// Check if a media type is `NetCDF` (`application/netcdf` or the older `application/x-netcdf`).
+///
+/// STAC catalogs usually omit the projection and raster metadata of `NetCDF` assets, so their
+/// grid, data type and CRS are read from the file header instead.
+pub fn is_netcdf_media_type(media_type: Option<&str>) -> bool {
+    matches!(
+        media_type,
+        Some("application/netcdf" | "application/x-netcdf")
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Grid metadata helpers
+// ---------------------------------------------------------------------------
+
+/// Extract the data type of an asset of any STAC version: the STAC 1.1.0 `data_type`, typed or
+/// raw, then the STAC 1.0.0 `raster:bands[0].data_type`.
+pub fn data_type_from_asset(asset: &stac::Asset) -> Option<RasterDataType> {
+    data_type_from_asset_v1_1_0_fallback(asset)
+        .or_else(|| data_type_from_asset_v1_0_0_fallback(asset))
+}
+
+/// The grid metadata of an asset as its STAC metadata declares it, each part from the asset or
+/// its item.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AssetGridMetadata {
+    pub data_type: Option<RasterDataType>,
+    pub epsg: Option<u32>,
+    pub geo_transform: Option<GeoTransform>,
+    /// `(height, width)`
+    pub shape: Option<(usize, usize)>,
+}
+
+impl AssetGridMetadata {
+    /// The grid metadata of `asset` of `item`, where `item_epsg` is the CRS the item declares.
+    pub fn from_asset_or_item(
+        asset: &stac::Asset,
+        item: &stac::Item,
+        item_epsg: Option<u32>,
+    ) -> Self {
+        Self {
+            data_type: data_type_from_asset(asset),
+            epsg: epsg_code_from_asset_or_item(asset, item_epsg, StacExtensionMajorVersion::V2),
+            geo_transform: geo_transform_from_asset_or_item(asset, item),
+            shape: proj_shape_from_asset_or_item(asset, item),
+        }
+    }
+
+    /// Whether the missing metadata of `asset` must be read from its file header: only
+    /// `NetCDF` assets are probed, as STAC catalogs usually omit their grid metadata.
+    ///
+    /// Discovery and provider both decide with this, so discovery never writes a mapping for
+    /// assets the provider does not probe.
+    pub fn needs_header_probe(&self, asset: &stac::Asset) -> bool {
+        is_netcdf_media_type(asset.r#type.as_deref())
+            && (self.data_type.is_none()
+                || self.epsg.is_none()
+                || self.geo_transform.is_none()
+                || self.shape.is_none())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Time helpers
 // ---------------------------------------------------------------------------
@@ -710,7 +775,7 @@ pub fn gdal_config_options_for_file_path(
         ),
         (
             "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-            ".tif,.tiff,.jp2".to_owned(),
+            ".tif,.tiff,.jp2,.nc".to_owned(),
         ),
     ];
 
@@ -1444,5 +1509,79 @@ mod tests {
         });
         let asset: stac::Asset = serde_json::from_value(json).unwrap();
         assert_eq!(data_type_from_asset_v1_1_0(&asset), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // AssetGridMetadata
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn it_reads_the_data_type_of_any_stac_version() {
+        for (asset, expected) in [
+            (
+                serde_json::json!({"data_type": "uint16"}),
+                Some(RasterDataType::U16),
+            ),
+            (
+                serde_json::json!({"raster:bands": [{"data_type": "int16"}]}),
+                Some(RasterDataType::I16),
+            ),
+            (serde_json::json!({}), None),
+        ] {
+            let mut asset = asset;
+            asset["href"] = serde_json::json!("https://example.com/file.nc");
+            let asset: stac::Asset = serde_json::from_value(asset).unwrap();
+            assert_eq!(data_type_from_asset(&asset), expected);
+        }
+    }
+
+    #[test]
+    fn it_probes_only_netcdf_assets_with_missing_grid_metadata() {
+        let complete = serde_json::json!({
+            "href": "https://example.com/file.nc",
+            "type": "application/netcdf",
+            "raster:bands": [{"data_type": "uint8"}]
+        });
+        let item = item_with_projection_properties(&complete);
+        let metadata = AssetGridMetadata::from_asset_or_item(
+            &item.assets["WCD"],
+            &item,
+            epsg_code_from_item(&item, StacExtensionMajorVersion::V2),
+        );
+        assert_eq!(metadata.data_type, Some(RasterDataType::U8));
+        assert_eq!(metadata.epsg, Some(3035));
+        assert!(!metadata.needs_header_probe(&item.assets["WCD"]));
+
+        for incomplete in [
+            AssetGridMetadata {
+                data_type: None,
+                ..metadata
+            },
+            AssetGridMetadata {
+                epsg: None,
+                ..metadata
+            },
+            AssetGridMetadata {
+                geo_transform: None,
+                ..metadata
+            },
+            AssetGridMetadata {
+                shape: None,
+                ..metadata
+            },
+        ] {
+            assert!(incomplete.needs_header_probe(&item.assets["WCD"]));
+        }
+
+        let mut cog = complete;
+        cog["type"] = serde_json::json!("image/tiff; application=geotiff; profile=cloud-optimized");
+        let cog: stac::Asset = serde_json::from_value(cog).unwrap();
+        let empty = AssetGridMetadata {
+            data_type: None,
+            epsg: None,
+            geo_transform: None,
+            shape: None,
+        };
+        assert!(!empty.needs_header_probe(&cog));
     }
 }

@@ -388,6 +388,7 @@ pub mod tests {
             },
             Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
             crate::datasets::external::stac::StacRequestRegistry::new(),
+            crate::util::tests::gdal_process_pool_without_workers(),
         );
 
         let projects = db
