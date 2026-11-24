@@ -36,6 +36,7 @@ import {
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
+import {formatDate} from '../layers/layers.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
 
 @Component({
@@ -134,11 +135,28 @@ export class MainComponent {
     /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
     readonly tilesLoadable = signal(false);
     /** One prompt on the map for the imagery and the data availability. */
-    readonly mapPrompt = computed<{icon: string; text: string} | undefined>(() => {
+    readonly mapPrompt = computed<{icon: string; text: string; action?: {label: string; time: Time}} | undefined>(() => {
         const footprints = this.footprintsService;
+        const shown = !!this.mapTileLayer() || footprints.overlayVisible();
+        // the data has no dates there at all, e.g. after "Back to" a date of another source
+        const outside = footprints.selectedOutsideData();
+        if (shown && outside) {
+            const date = formatDate(outside.step.time.start);
+            return {
+                icon: 'event_busy',
+                text: outside.direction === 1 ? `No data after ${date}.` : `No data before ${date}.`,
+                action: {label: `Show ${date}`, time: new Time(outside.step.time.start)},
+            };
+        }
         // the dates of this view already tell, so zooming in would show nothing
-        if ((this.mapTileLayer() || footprints.overlayVisible()) && footprints.selectedDateEmpty())
-            return {icon: 'event_busy', text: 'No scenes in this view on this date.'};
+        if (shown && footprints.selectedDateEmpty()) {
+            const nearest = this.nearestDateWithData();
+            return {
+                icon: 'event_busy',
+                text: 'No scenes in this view on this date.',
+                action: nearest && {label: `Show ${formatDate(nearest.start.valueOf())}`, time: nearest},
+            };
+        }
         if (this.mapTileLayer() && this.zoomRequired()) return {icon: 'zoom_in', text: 'Zoom in further to load the selected layer.'};
         if (footprints.overlayVisible() && (footprints.overlayTooLarge() || footprints.overlayBlocked())) {
             return {icon: 'zoom_in', text: 'Zoom in further to see the data availability.'};
@@ -274,7 +292,21 @@ export class MainComponent {
             this.mapImageLoading.set(false);
         }
     }
+
+    /** The loaded date with scenes nearest to the selected one, the later one of two as near. */
+    private nearestDateWithData(): Time | undefined {
+        const now = this.footprintsService.time()?.start.valueOf();
+        const later = this.footprintsService.dateWithData(1);
+        const earlier = this.footprintsService.dateWithData(-1);
+        if (now === undefined || !later || !earlier) return later ?? earlier;
+        return later.start.valueOf() - now <= now - earlier.start.valueOf() ? later : earlier;
+    }
+
+    async showPromptDate(time: Time): Promise<void> {
+        await this.projectService.setTime(time);
+    }
 }
+
 export interface LayerIdPair {
     dataConnectorId: string;
     layerId: string;

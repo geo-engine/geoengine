@@ -202,12 +202,12 @@ export class FootprintsService {
             abortSignal,
         }): Promise<Footprints | undefined> => {
             this.partialFootprints.set(undefined);
-            // no dates before the data starts or after now, where there cannot be any
-            const minimalEnd = new Time(new Date(requested.start)).add(
-                timeStep.durationAmount * windowSteps(timeStep.durationUnit, timeStep.durationAmount),
-                timeStep.durationUnit,
-            );
-            const window = {start: Math.max(requested.start, timeRange.start), end: requested.end};
+            // no dates before the data starts or after now, where there cannot be any; a window wholly after the data loads
+            // its last steps and one before it its first ones, which are the nearest to the time, see `selectedOutsideData`
+            const count = windowSteps(timeStep.durationUnit, timeStep.durationAmount);
+            const start = requested.start >= timeRange.end ? minusSteps(timeRange.end, timeStep, count) : requested.start;
+            const window = {start: Math.max(start, timeRange.start), end: requested.end};
+            const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * count, timeStep.durationUnit);
             const end = Math.min(Math.max(requested.end, minimalEnd.start.valueOf()), timeRange.end);
             if (window.start >= end) return undefined;
             const query = await this.queryOf(layer, mapSpatialReference, viewport);

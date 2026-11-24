@@ -516,6 +516,46 @@ describe('LayersComponent', () => {
             expect(element.querySelector('.dates-of')).toBeNull();
         });
 
+        it('moves a date after the data of a new source to its last date, silently at start, else with a way back', async () => {
+            const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            setTime.mockImplementation((time: Time) => {
+                footprints().time.set(time);
+                return Promise.resolve();
+            });
+            mockCategorizedCatalogue();
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().stepsOfSelection.set([day(1, 'data'), day(2, 'data')]);
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'data')]);
+            footprints().selectedOutsideData.set({direction: 1, step: day(2, 'data')});
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            // the start date, which the user did not choose, moves without a note
+            expect(setTime).toHaveBeenCalledTimes(1);
+            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
+            expect(element.querySelector('.dates-moved')).toBeNull();
+
+            // a date the user chose moves with a note, and back on request
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
+            await vi.waitFor(() => {
+                fixture.detectChanges();
+                expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
+                expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
+            });
+            fixture.detectChanges();
+            expect(element.querySelector('.dates-moved')?.textContent).toContain('Radar has no data after 02.04.2026');
+            element.querySelector<HTMLButtonElement>('.move-back')?.click();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 9));
+            expect(element.querySelector('.dates-moved')).toBeNull();
+        });
+
         it('says that the dates could not be loaded and loads them again on retry', async () => {
             const element = fixture.nativeElement as HTMLElement;
             footprints().datesFailed.set(true);

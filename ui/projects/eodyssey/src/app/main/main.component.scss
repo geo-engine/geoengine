@@ -43,6 +43,10 @@ mat-toolbar {
     @include mat.elevation(3);
     pointer-events: none;
 
+    .prompt-action {
+        pointer-events: auto;
+    }
+
     mat-icon {
         flex-shrink: 0;
     }

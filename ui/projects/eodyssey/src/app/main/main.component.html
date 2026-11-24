@@ -131,6 +131,11 @@
             <div class="zoom-prompt" role="status">
                 <mat-icon aria-hidden="true">{{ prompt.icon }}</mat-icon>
                 <span>{{ prompt.text }}</span>
+                @if (prompt.action; as action) {
+                    <button mat-stroked-button type="button" class="prompt-action" (click)="showPromptDate(action.time)">
+                        {{ action.label }}
+                    </button>
+                }
             </div>
         }
 
