@@ -64,6 +64,16 @@ const STEPS_BEFORE_SELECTED = 7;
 /** Opacity of the boxes of an earlier view while those of the current view load, like the faded dates of a strip. */
 const STALE_OVERLAY_OPACITY = 0.4;
 
+/**
+ * The view to ask for: `viewport` grown by `margin`, or the `kept` one while the view stays inside it at the same zoom,
+ * so small pans ask nothing again.
+ */
+function keptViewport(viewport: ViewportSize | undefined, kept: ViewportSize | undefined, margin: number): ViewportSize | undefined {
+    if (!viewport) return undefined;
+    if (kept?.resolution === viewport.resolution && containsExtent(kept.extent, viewport.extent)) return kept;
+    return {...viewport, extent: bufferedExtent(viewport.extent, margin)};
+}
+
 /** `extent` grown by `margin` of its width and height on each side. */
 function bufferedExtent([minX, minY, maxX, maxY]: ViewportSize['extent'], margin: number): ViewportSize['extent'] {
     const [width, height] = [maxX - minX, maxY - minY];
@@ -121,12 +131,12 @@ export class FootprintsService {
     /** The view the dates are asked for: the view and its buffer, kept while the view stays inside it at the same zoom. */
     private readonly datesViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
         source: () => this.viewport(),
-        computation: (viewport, previous) => {
-            const kept = previous?.value;
-            if (!viewport) return undefined;
-            if (kept?.resolution === viewport.resolution && containsExtent(kept.extent, viewport.extent)) return kept;
-            return {...viewport, extent: bufferedExtent(viewport.extent, DATES_BUFFER)};
-        },
+        computation: (viewport, previous) => keptViewport(viewport, previous?.value, DATES_BUFFER),
+    });
+    /** The view the boxes of a date are asked for, like `datesViewport` with the margin of the overlay. */
+    private readonly overlayViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
+        source: () => this.viewport(),
+        computation: (viewport, previous) => keptViewport(viewport, previous?.value, OVERLAY_MARGIN),
     });
 
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
@@ -248,13 +258,13 @@ export class FootprintsService {
         params: () => {
             const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
-            const viewport = this.viewport();
+            const viewport = this.overlayViewport();
             const time = this.time();
             if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
-            const query = await this.queryOf(layer, mapSpatialReference, viewport, OVERLAY_MARGIN);
+            const query = await this.queryOf(layer, mapSpatialReference, viewport);
             if (!query) return undefined;
             return await footprintsOrTooLarge(
                 this.processingGraphsService.getFootprints(
@@ -525,7 +535,6 @@ export class FootprintsService {
         layer: FootprintLayer,
         mapSpatialReference: SpatialReference,
         viewport: ViewportSize,
-        margin = 0,
     ): Promise<{processingGraphId: UUID; spatialBounds: string} | undefined> {
         const {processingGraphId, metadata} = await this.graphOf(layer);
         if (!metadata) return undefined;
@@ -533,7 +542,7 @@ export class FootprintsService {
         // makes the layer's spatial reference known to OpenLayers
         await firstValueFrom(this.spatialReferenceService.getSpatialReferenceSpecification(metadata.spatialReference.srsString));
 
-        const extent = bufferedExtent(viewport.extent, margin);
+        const extent = viewport.extent;
         const spatialBounds = this.spatialReferenceService.reprojectExtent(
             this.spatialReferenceService.clipBoundsIfAvailable(extent, mapSpatialReference),
             mapSpatialReference,

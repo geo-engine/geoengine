@@ -178,6 +178,22 @@ describe('FootprintsService overlay', () => {
         expect(datesRequests()).toBeGreaterThan(asked);
     });
 
+    it('asks no boxes for a view moved inside the margin of the asked one, but for a view leaving it', async () => {
+        const service = createService();
+        service.overlayVisible.set(true);
+        await settle();
+        const asked = boxesRequests();
+        expect(asked).toBe(1);
+
+        viewport.next({extent: [0.1, 0, 1.1, 1], resolution: 1});
+        await settle();
+        expect(boxesRequests()).toBe(asked);
+
+        viewport.next({extent: [0.5, 0, 1.5, 1], resolution: 1});
+        await settle();
+        expect(boxesRequests()).toBe(asked + 1);
+    });
+
     it('keeps the boxes of the date while those of a moved view load', async () => {
         const box = {upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}};
         getFootprints.mockResolvedValueOnce({
