@@ -264,10 +264,16 @@ describe('EOdyssey debug reprojection', () => {
         layers.dateMoved.set(moved);
         fixture.detectChanges();
         expect(notice()).toContain('Date moved to 10.04.2026');
+        expect(notice()).toContain('Back to 23.11.2026');
         element.querySelector<HTMLButtonElement>('.map-notice .notice-action')?.click();
         expect(setTime).toHaveBeenCalledWith(moved.from);
         fixture.detectChanges();
         expect(element.querySelector('.map-notice')).toBeNull();
+
+        // a date with a time of day, e.g. of hourly data, keeps it
+        layers.dateMoved.set({...moved, from: new Time(Date.UTC(2026, 2, 12, 14))});
+        fixture.detectChanges();
+        expect(notice()).toContain('Back to 12.03.2026 14:00');
 
         layers.dateMoved.set(moved);
         fixture.detectChanges();

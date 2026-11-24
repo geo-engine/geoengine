@@ -149,7 +149,11 @@ export class MainComponent {
                 icon: 'event',
                 title: `Date moved to ${formatDate(moved.to, unit)}`,
                 detail: `${source} has no data ${moved.direction === 1 ? 'after' : 'before'} it.`,
-                action: {label: `Back to ${formatDate(moved.from.start.valueOf())}`, run: (): void => void this.moveBack()},
+                // the date of the previous source, whose time step may differ: as a day, with its time if it has one
+                action: {
+                    label: `Back to ${formatDate(moved.from.start.valueOf(), moved.from.start.valueOf() % 86_400_000 ? 'minute' : undefined)}`,
+                    run: (): void => void this.moveBack(),
+                },
                 close: (): void => this.eodysseyLayerService.dateMoved.set(undefined),
             };
         }
