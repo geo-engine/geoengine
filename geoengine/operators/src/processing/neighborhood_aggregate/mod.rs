@@ -358,7 +358,7 @@ where
             self.result_descriptor(),
             query,
             tiling_grid.generate_data_tiling_strategy(),
-            &NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone()),
+            NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone()),
             precision,
             ctx,
             output_bounds,

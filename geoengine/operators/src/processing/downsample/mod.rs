@@ -270,7 +270,7 @@ where
             self.result_descriptor(),
             query,
             tiling_grid.generate_data_tiling_strategy(),
-            &self.sub_query(ctx),
+            self.sub_query(ctx),
             precision,
             ctx,
             output_bounds,

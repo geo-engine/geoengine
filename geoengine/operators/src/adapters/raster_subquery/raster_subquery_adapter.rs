@@ -338,15 +338,18 @@ pub async fn subquery_footprints<'a, PixelType, RasterProcessor, SubQuery>(
     output: &RasterResultDescriptor,
     query: RasterQueryRectangle,
     tiling_strategy: TilingStrategy,
-    sub_query: &SubQuery,
+    sub_query: SubQuery,
     precision: FootprintPrecision,
     query_ctx: &'a dyn QueryContext,
-    output_bounds: impl Fn(&[GridBoundingBox2D]) -> Option<Vec<GridBoundingBox2D>> + Send + 'a,
+    output_bounds: impl Fn(&[GridBoundingBox2D]) -> Option<Vec<GridBoundingBox2D>>
+    + Send
+    + Sync
+    + 'static,
 ) -> Result<BoxStream<'a, Result<Footprint>>>
 where
     PixelType: Pixel,
     RasterProcessor: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: SubQueryTileAggregator<'a, PixelType>,
+    SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     let query_bounds = query.spatial_bounds();
     let data_bounds = source_data_bounds(source, tiling_strategy);
@@ -367,19 +370,21 @@ where
             .boxed());
     }
     let source_bounds = match visited {
-        Some(visited) => hull(
-            tile_source_bounds(
-                sub_query,
-                tiling_strategy,
-                &RasterQueryRectangle::new(
-                    visited,
-                    query.time_interval(),
-                    query.attributes().clone(),
-                ),
-            )?
-            .into_iter()
-            .map(|(_, source_bounds)| source_bounds),
-        ),
+        Some(visited) => {
+            let visited_query = RasterQueryRectangle::new(
+                visited,
+                query.time_interval(),
+                query.attributes().clone(),
+            );
+            // up to `footprint_tiles_limit` sub-queries, each projected for a reprojection: CPU work,
+            // which runs on the thread pool, not on the async runtime
+            let tiles = crate::util::spawn_blocking_with_thread_pool(
+                query_ctx.thread_pool().clone(),
+                move || tile_source_bounds(&sub_query, tiling_strategy, &visited_query),
+            )
+            .await??;
+            hull(tiles.into_iter().map(|(_, source_bounds)| source_bounds))
+        }
         None => None,
     }
     .and_then(|source_bounds| source_bounds.intersection(&data_bounds));
@@ -409,30 +414,42 @@ where
         )
         .await?;
     let max_boxes = query_ctx.footprint_boxes_per_step_limit();
+    let output_bounds = Arc::new(output_bounds);
+    let thread_pool = query_ctx.thread_pool().clone();
 
     Ok(footprints
-        .map_ok(
+        .and_then(
             move |Footprint {
                       time,
                       bounds,
                       cache_ttl,
                   }| {
-                let bounds = match bounds {
-                    FootprintBounds::Unknown => FootprintBounds::Unknown,
-                    FootprintBounds::Boxes(source_boxes) => match output_bounds(&source_boxes) {
-                        Some(boxes) => FootprintBounds::from_boxes(
-                            boxes
-                                .iter()
-                                .filter_map(|bounds| bounds.intersection(&query_bounds)),
-                            max_boxes,
-                        ),
-                        None => FootprintBounds::from_boxes([query_bounds], max_boxes),
-                    },
-                };
-                Footprint {
-                    time,
-                    bounds,
-                    cache_ttl,
+                let output_bounds = output_bounds.clone();
+                let thread_pool = thread_pool.clone();
+                async move {
+                    let bounds = match bounds {
+                        FootprintBounds::Unknown => FootprintBounds::Unknown,
+                        // projecting the edges of the boxes is CPU work, see above
+                        FootprintBounds::Boxes(source_boxes) => {
+                            crate::util::spawn_blocking_with_thread_pool(thread_pool, move || {
+                                match output_bounds(&source_boxes) {
+                                    Some(boxes) => FootprintBounds::from_boxes(
+                                        boxes.iter().filter_map(|bounds| {
+                                            bounds.intersection(&query_bounds)
+                                        }),
+                                        max_boxes,
+                                    ),
+                                    None => FootprintBounds::from_boxes([query_bounds], max_boxes),
+                                }
+                            })
+                            .await?
+                        }
+                    };
+                    Ok(Footprint {
+                        time,
+                        bounds,
+                        cache_ttl,
+                    })
                 }
             },
         )

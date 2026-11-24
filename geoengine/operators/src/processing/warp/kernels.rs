@@ -976,7 +976,7 @@ where
             self.result_descriptor(),
             query,
             tiling_strategy,
-            &sub_query,
+            sub_query,
             precision,
             ctx,
             output_bounds,

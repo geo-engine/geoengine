@@ -562,7 +562,7 @@ where
             self.result_descriptor(),
             query,
             self.tiling_strategy(ctx),
-            &self.sub_query(),
+            self.sub_query(),
             precision,
             ctx,
             output_bounds,
