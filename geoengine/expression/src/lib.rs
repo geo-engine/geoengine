@@ -49,7 +49,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_variable_names() {
+    fn it_valid_variable_names() {
         for name in [
             "A", "nir", "band_1", "B04", "type", "None", "iff", "nodata2",
         ] {

@@ -1406,7 +1406,7 @@ mod tests {
         "spatialBounds=0,-10,10,0&timeInterval=1970-01-01T00:00:00.000Z/1970-01-01T00:00:01.000Z";
 
     #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
-    async fn footprints(app_ctx: PostgresContext<NoTls>) {
+    async fn it_footprints(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let id = register_footprints_test_graph(&ctx).await;
@@ -1432,7 +1432,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
-    async fn footprints_in_pages(app_ctx: PostgresContext<NoTls>) {
+    async fn it_footprints_in_pages(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let id = register_footprints_test_graph(&ctx).await;
@@ -1479,7 +1479,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn footprints_missing_header(app_ctx: PostgresContext<NoTls>) {
+    async fn it_footprints_missing_header(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::get().uri(&format!(
             "/processingGraphs/{}/footprints?{FOOTPRINTS_QUERY}&attributes=0",
             ServicesProcessingGraphId::new()
@@ -1496,7 +1496,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
-    async fn footprints_of_a_band_that_does_not_exist(app_ctx: PostgresContext<NoTls>) {
+    async fn it_footprints_of_a_band_that_does_not_exist(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let id = register_footprints_test_graph(&ctx).await;

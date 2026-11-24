@@ -1230,7 +1230,7 @@ mod footprint_tests {
     use geoengine_datatypes::primitives::TimeInterval;
 
     #[tokio::test]
-    async fn raster_stacker_unions_the_sources_of_the_selected_bands() {
+    async fn it_raster_stacker_unions_the_sources_of_the_selected_bands() {
         let both = checked_footprints(stack(stack_inputs()), &[0, 1]).await;
         assert_eq!(
             step_boxes(&both),
@@ -1245,7 +1245,7 @@ mod footprint_tests {
     }
 
     #[tokio::test]
-    async fn raster_stacker_zips_sources_with_other_time_steps() {
+    async fn it_raster_stacker_zips_sources_with_other_time_steps() {
         // the first source has one step of ten, the second two of five: the stack splits at 5
         let ten = TimeInterval::new_unchecked(0, 10);
         let slow = source(
