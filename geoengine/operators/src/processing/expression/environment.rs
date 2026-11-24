@@ -22,6 +22,8 @@ pub struct ExpressionCacheConfig {
     pub max_concurrent_compilations: NonZeroUsize,
     /// The directory that holds the workspaces of all processes using it
     pub workspace_path: PathBuf,
+    /// The directory with the dependencies built with this binary, see [`ExpressionDependencies::new`]
+    pub dependencies_path: PathBuf,
 }
 
 struct Inner {
@@ -36,17 +38,19 @@ struct Inner {
     compilations: Arc<Semaphore>,
     sweep_interval: Duration,
     workspace_path: PathBuf,
+    dependencies_path: PathBuf,
 }
 
 impl Inner {
-    /// Returns the cargo workspace with the pre-built dependencies, which every compilation links against.
-    /// It is built by the first caller. A failed build is not stored, so the next caller tries again.
+    /// Returns the workspace for the compilations, which link against the pre-built dependencies.
+    /// It is created by the first caller. A failure is not stored, so the next caller tries again.
     async fn dependencies(&self) -> Result<&Arc<ExpressionDependencies>, LinkExpressionError> {
         self.dependencies
             .get_or_try_init(|| async {
                 let workspace_path = self.workspace_path.clone();
+                let dependencies_path = self.dependencies_path.clone();
                 let dependencies = crate::util::spawn_blocking(move || {
-                    ExpressionDependencies::new(&workspace_path)
+                    ExpressionDependencies::new(&workspace_path, &dependencies_path)
                 })
                 .await??;
                 Ok::<_, LinkExpressionError>(Arc::new(dependencies))
@@ -59,7 +63,7 @@ impl Inner {
 /// Libraries are unloaded and deleted according to the [`ExpressionCacheConfig`].
 ///
 /// Create one `ExpressionEnvironment` per application and clone it into every execution context.
-/// Creating it lazily avoids compiling the dependencies if no expression is used.
+/// The workspace is created lazily, so it does not exist if no expression is used.
 #[derive(Clone)]
 pub struct ExpressionEnvironment(Arc<Inner>);
 
@@ -85,6 +89,7 @@ impl ExpressionEnvironment {
             compilations: Arc::new(Semaphore::new(config.max_concurrent_compilations.get())),
             sweep_interval: config.sweep_interval,
             workspace_path: config.workspace_path,
+            dependencies_path: config.dependencies_path,
         }))
     }
 

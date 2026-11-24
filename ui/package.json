@@ -34,6 +34,7 @@
         "serve:dashboards/nfdi-portal-demo:nightly": "ng serve --configuration development nfdi-portal-demo --proxy-config proxy-nfdi-portal-demo.conf.json",
         "serve:eodyssey:local": "npm run ng-serve-local eodyssey",
         "serve:eodyssey:staging": "ng serve --configuration development eodyssey --proxy-config proxy-eodyssey-staging.json",
+        "serve:eodyssey:production": "ng serve --configuration development eodyssey --proxy-config proxy-eodyssey-production.conf.json",
         "serve:gis:local": "npm run ng-serve-local gis",
         "serve:gis:nightly": "ng serve --configuration development gis --proxy-config proxy-geoengine.conf.json",
         "serve:manager:local": "npm run ng-serve-local manager",

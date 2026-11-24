@@ -96,12 +96,28 @@ pub struct IpcChannelMessagePayload {
 }
 
 impl IpcChannelMessagePayload {
-    /// The pixel window a read targets; `None` for header reads.
-    pub fn read_window_bounds(&self) -> Option<GridBoundingBox2D> {
-        match &self.request {
-            GdalRequest::Read { read_advise, .. } => Some(read_advise.read_window_bounds),
-            GdalRequest::Header => None,
-        }
+    /// The pixels of the file a read covers, in full-resolution pixels, so that reads of different
+    /// levels compare; `None` for header reads.
+    pub fn full_resolution_read_bounds(&self) -> Option<GridBoundingBox2D> {
+        let (read_advise, level_factor) = match &self.request {
+            GdalRequest::Read {
+                read_advise,
+                level_factor,
+                ..
+            } => (read_advise, level_factor),
+            GdalRequest::Header => return None,
+        };
+        // a resampled read (`None`) reads its window from the full resolution
+        let factor = level_factor.map_or(1, |factor| factor.get() as isize);
+        let (x, y) = read_advise.gdal_read_widow.gdal_window_start();
+        let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
+        GridBoundingBox2D::new_min_max(
+            y * factor,
+            (y + size_y as isize) * factor - 1,
+            x * factor,
+            (x + size_x as isize) * factor - 1,
+        )
+        .ok()
     }
 }
 

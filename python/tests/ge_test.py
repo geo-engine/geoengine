@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 
 TEST_CODE_PATH_VAR = "GEOENGINE_TEST_CODE_PATH"
 TEST_BUILD_TYPE_VAR = "GEOENGINE_TEST_BUILD_TYPE"
+# Set to `true` to use pre-built binaries in `target/<build type>/` instead of building them with cargo, e.g., in CI
+SKIP_BUILD_VAR = "GEOENGINE_TEST_SKIP_BUILD"
 
 POSTGRES_HOST = "localhost"
 POSTGRES_PORT = 5432
@@ -110,11 +112,16 @@ class GeoEngineBinaries:
                 cls._instance._build_type = build_type
 
                 cls._instance._build_geo_engine()
+                cls._instance._locate_binaries()
 
         return cls._instance
 
     def _build_geo_engine(self) -> None:
         """Build the Geo Engine binaries."""
+
+        if os.environ.get(SKIP_BUILD_VAR, "false").lower() == "true":
+            logging.info("Skipping the build of the Geo Engine binaries, since %s is set.", SKIP_BUILD_VAR)
+            return
 
         cargo_bin = shutil.which("cargo")
 
@@ -134,6 +141,9 @@ class GeoEngineBinaries:
             check=True,
             cwd=self._code_path,
         )
+
+    def _locate_binaries(self) -> None:
+        """Locate the Geo Engine binaries in the target directory and check that they exist."""
 
         self._server_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-server"
         self._cli_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-cli"

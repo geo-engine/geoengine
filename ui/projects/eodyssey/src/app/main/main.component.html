@@ -18,11 +18,11 @@
         </mat-button-toggle-group>
     }
 
-    <a matIconButton aria-label="Help" href="https://knowledgebase.code-de.org/">
+    <a matIconButton aria-label="Help" href="https://knowledgebase.code-de.org/" target="_blank" rel="noopener noreferrer">
         <mat-icon>help</mat-icon>
     </a>
 
-    <a matIconButton aria-label="Contact" href="https://code-de.org/contact">
+    <a matIconButton aria-label="Contact" href="https://code-de.org/contact" target="_blank" rel="noopener noreferrer">
         <mat-icon>chat_bubble</mat-icon>
     </a>
 
@@ -179,6 +179,7 @@
                 type="button"
                 matMiniFab
                 aria-label="Box"
+                matTooltip="Click two opposite corners to draw a box"
                 [disabled]="measureButton.isActive()"
                 [color]="boxButton.isActive() ? 'primary' : null"
                 [geoengineMeasure]="map"
