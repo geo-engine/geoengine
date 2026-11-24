@@ -139,20 +139,6 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = Self::stac_request_registry()?;
-        let db = PostgresDb::new(
-            pool.clone(),
-            UserSession::admin_session(),
-            provider_registry.clone(),
-            stac_request_registry.clone(),
-        );
-        let quota = initialize_quota_tracking(
-            quota_config.mode,
-            db,
-            quota_config.increment_quota_buffer_size,
-            quota_config.increment_quota_buffer_timeout_seconds,
-        );
-
         gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
@@ -160,6 +146,20 @@ where
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
+        );
+        let stac_request_registry = Self::stac_request_registry()?;
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+            stac_request_registry.clone(),
+            gdal_process_pool.clone(),
+        );
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
         );
 
         // tests run the new raster cache and block reads when the settings enable them
@@ -220,20 +220,6 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = Self::stac_request_registry()?;
-        let db = PostgresDb::new(
-            pool.clone(),
-            UserSession::admin_session(),
-            provider_registry.clone(),
-            stac_request_registry.clone(),
-        );
-        let quota = initialize_quota_tracking(
-            quota_config.mode,
-            db,
-            quota_config.increment_quota_buffer_size,
-            quota_config.increment_quota_buffer_timeout_seconds,
-        );
-
         gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
@@ -241,6 +227,20 @@ where
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
+        );
+        let stac_request_registry = Self::stac_request_registry()?;
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+            stac_request_registry.clone(),
+            gdal_process_pool.clone(),
+        );
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
         );
 
         let new_raster_cache = cache_config.new_raster_cache();
@@ -313,20 +313,6 @@ where
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = Self::stac_request_registry()?;
-        let db = PostgresDb::new(
-            pool.clone(),
-            UserSession::admin_session(),
-            provider_registry.clone(),
-            stac_request_registry.clone(),
-        );
-        let quota = initialize_quota_tracking(
-            quota_config.mode,
-            db,
-            quota_config.increment_quota_buffer_size,
-            quota_config.increment_quota_buffer_timeout_seconds,
-        );
-
         gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
@@ -334,6 +320,20 @@ where
             gdal_process_pool_config.max_dataset_processes as usize,
             gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
+        );
+        let stac_request_registry = Self::stac_request_registry()?;
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession::admin_session(),
+            provider_registry.clone(),
+            stac_request_registry.clone(),
+            gdal_process_pool.clone(),
+        );
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
         );
 
         let new_raster_cache = cache_config.new_raster_cache();
@@ -588,6 +588,7 @@ where
             self.session.clone(),
             self.context.provider_registry.clone(),
             self.context.stac_request_registry.clone(),
+            self.context.gdal_process_pool.clone(),
         )
     }
 
@@ -687,6 +688,7 @@ where
     pub(crate) session: UserSession,
     pub(crate) provider_registry: Arc<DataConnectorRegistry>,
     pub(crate) stac_request_registry: StacRequestRegistry,
+    pub(crate) gdal_process_pool: Arc<GdalProcessPool>,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -701,12 +703,14 @@ where
         session: UserSession,
         provider_registry: Arc<DataConnectorRegistry>,
         stac_request_registry: StacRequestRegistry,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         Self {
             conn_pool,
             session,
             provider_registry,
             stac_request_registry,
+            gdal_process_pool,
         }
     }
 

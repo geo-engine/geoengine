@@ -47,6 +47,8 @@ Name | Type
 `maxConcurrentCellSearches` | number
 `datetimeFrequencyAggregation` | boolean
 `timeBounds` | [TimeInterval](TimeInterval.md)
+`itemTime` | [StacItemTime](StacItemTime.md)
+`maxConcurrentAssetProbes` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -99,6 +101,8 @@ const example = {
   "maxConcurrentCellSearches": null,
   "datetimeFrequencyAggregation": null,
   "timeBounds": null,
+  "itemTime": null,
+  "maxConcurrentAssetProbes": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

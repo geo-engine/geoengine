@@ -54,6 +54,13 @@ import {
     TimeDimensionToJSON,
     TimeDimensionToJSONTyped,
 } from './TimeDimension';
+import type { StacItemTime } from './StacItemTime';
+import {
+    StacItemTimeFromJSON,
+    StacItemTimeFromJSONTyped,
+    StacItemTimeToJSON,
+    StacItemTimeToJSONTyped,
+} from './StacItemTime';
 
 /**
  * 
@@ -143,6 +150,16 @@ export interface StacDataProviderDefinition {
      * the data starts.
      */
     timeBounds?: TimeInterval | null;
+    /**
+     * Which item time decides the layer time steps an item belongs to; omitted values use
+     * `datetime`.
+     */
+    itemTime?: StacItemTime | null;
+    /**
+     * Asset file headers one STAC search reads in parallel to complete grid metadata the STAC
+     * items lack, as for `NetCDF` assets; omitted values use 8.
+     */
+    maxConcurrentAssetProbes?: number | null;
 }
 
 
@@ -200,6 +217,8 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
         'timeBounds': json['timeBounds'] === undefined ? undefined : json['timeBounds'] === null ? null : TimeIntervalFromJSON(json['timeBounds']),
+        'itemTime': json['itemTime'] === undefined ? undefined : json['itemTime'] === null ? null : StacItemTimeFromJSON(json['itemTime']),
+        'maxConcurrentAssetProbes': json['maxConcurrentAssetProbes'] === undefined ? undefined : json['maxConcurrentAssetProbes'] === null ? null : json['maxConcurrentAssetProbes'],
     };
 }
 
@@ -232,6 +251,8 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
         'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
         'timeBounds': TimeIntervalToJSON(value['timeBounds']),
+        'itemTime': StacItemTimeToJSON(value['itemTime']),
+        'maxConcurrentAssetProbes': value['maxConcurrentAssetProbes'],
     };
 }
 

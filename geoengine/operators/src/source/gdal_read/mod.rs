@@ -5,6 +5,7 @@
 mod blocks;
 
 pub use blocks::BlockIo;
+pub use blocks::file_id;
 pub use blocks::{UnitRead, UnitResult};
 
 use crate::cache::new_raster_cache::SupportedRasterDataType;

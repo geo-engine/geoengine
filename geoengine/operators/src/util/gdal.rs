@@ -17,6 +17,7 @@ use crate::{
     util::Result,
 };
 use gdal::raster::RasterBand;
+use gdal::spatial_ref::SpatialRef;
 use gdal::{Dataset, DatasetOptions, DriverManager, errors::GdalError};
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
@@ -29,7 +30,7 @@ use geoengine_datatypes::{
         VectorQueryRectangle,
     },
     raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
-    spatial_reference::SpatialReference,
+    spatial_reference::{SpatialReference, SpatialReferenceAuthority},
     util::Identifier,
 };
 use itertools::Itertools;
@@ -479,6 +480,60 @@ pub fn raster_descriptor_from_dataset_and_sref(
     })
 }
 
+/// EPSG code of WGS 84, which geographic CRSs on the WGS 84 ellipsoid are identified as.
+const EPSG_WGS84: u32 = 4326;
+const WGS84_SEMI_MAJOR: f64 = 6_378_137.0;
+const WGS84_SEMI_MINOR: f64 = 6_356_752.314_245_179;
+/// Tolerance in meters for comparing ellipsoid axes.
+const ELLIPSOID_AXIS_TOLERANCE: f64 = 1e-3;
+
+/// The CRS of a file: its declared authority and code, else the EPSG code GDAL identifies, else
+/// EPSG:4326 for a geographic CRS on the WGS 84 ellipsoid.
+///
+/// `NetCDF` files often declare a CF `latitude_longitude` grid mapping with the WGS 84 ellipsoid
+/// but no datum name, which GDAL reports as an unnamed CRS without an authority.
+///
+/// # Errors
+/// Returns the error of the authority lookup if the CRS cannot be identified.
+pub fn identify_spatial_reference(
+    spatial_ref: SpatialRef,
+) -> std::result::Result<SpatialReference, geoengine_datatypes::error::Error> {
+    let error = match SpatialReference::try_from(spatial_ref.clone()) {
+        Ok(spatial_reference) => return Ok(spatial_reference),
+        Err(error) => error,
+    };
+    epsg_of_unnamed_spatial_ref(spatial_ref)
+        .map(|code| SpatialReference::new(SpatialReferenceAuthority::Epsg, code))
+        .ok_or(error)
+}
+
+fn epsg_of_unnamed_spatial_ref(mut spatial_ref: SpatialRef) -> Option<u32> {
+    if spatial_ref.auto_identify_epsg().is_ok()
+        && let Some(code) = epsg_authority_code(&spatial_ref)
+    {
+        return Some(code);
+    }
+    is_geographic_wgs84(&spatial_ref).then_some(EPSG_WGS84)
+}
+
+fn epsg_authority_code(spatial_ref: &SpatialRef) -> Option<u32> {
+    let authority = spatial_ref.auth_name()?;
+    if !authority.eq_ignore_ascii_case("EPSG") {
+        return None;
+    }
+    u32::try_from(spatial_ref.auth_code().ok()?).ok()
+}
+
+fn is_geographic_wgs84(spatial_ref: &SpatialRef) -> bool {
+    spatial_ref.is_geographic()
+        && spatial_ref
+            .semi_major()
+            .is_ok_and(|axis| (axis - WGS84_SEMI_MAJOR).abs() < ELLIPSOID_AXIS_TOLERANCE)
+        && spatial_ref
+            .semi_minor()
+            .is_ok_and(|axis| (axis - WGS84_SEMI_MINOR).abs() < ELLIPSOID_AXIS_TOLERANCE)
+}
+
 /// The size and block size of the full resolution and then of each overview of a band.
 pub fn band_levels(band: &RasterBand) -> std::result::Result<Vec<RasterLevelLayout>, GdalError> {
     let layout = |band: &RasterBand| {
@@ -577,5 +632,35 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
         warn!("Could not register drivers: {remaining_drivers}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_identifies_an_unnamed_geographic_wgs84_crs_as_4326() {
+        // a CF `latitude_longitude` grid mapping with the WGS 84 ellipsoid, as GDAL reads it
+        // from Sentinel-3 SYN NetCDF files
+        let spatial_ref = SpatialRef::from_proj4("+proj=longlat +a=6378137 +rf=298.257223563")
+            .expect("PROJ string should be valid");
+        assert_eq!(
+            identify_spatial_reference(spatial_ref).ok(),
+            Some(SpatialReference::epsg_4326())
+        );
+
+        let utm = SpatialRef::from_epsg(32632).expect("EPSG:32632 should exist");
+        assert_eq!(
+            identify_spatial_reference(utm).ok(),
+            Some(SpatialReference::new(
+                SpatialReferenceAuthority::Epsg,
+                32632
+            ))
+        );
+
+        let sphere = SpatialRef::from_proj4("+proj=longlat +R=6371000")
+            .expect("PROJ string should be valid");
+        assert!(identify_spatial_reference(sphere).is_err());
     }
 }

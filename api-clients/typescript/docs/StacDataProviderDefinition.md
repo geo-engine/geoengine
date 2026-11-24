@@ -24,6 +24,8 @@ Name | Type
 `maxConcurrentCellSearches` | number
 `datetimeFrequencyAggregation` | boolean
 `timeBounds` | [TimeInterval](TimeInterval.md)
+`itemTime` | [StacItemTime](StacItemTime.md)
+`maxConcurrentAssetProbes` | number
 
 ## Example
 
@@ -50,6 +52,8 @@ const example = {
   "maxConcurrentCellSearches": null,
   "datetimeFrequencyAggregation": null,
   "timeBounds": null,
+  "itemTime": null,
+  "maxConcurrentAssetProbes": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

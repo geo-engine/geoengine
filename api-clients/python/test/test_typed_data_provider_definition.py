@@ -162,6 +162,8 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 time_bounds = geoengine_api_client.models.time_interval.TimeInterval(
                     start = 56, 
                     end = 56, ),
+                item_time = 'datetime',
+                max_concurrent_asset_probes = 1,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')

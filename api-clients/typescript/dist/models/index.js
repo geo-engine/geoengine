@@ -355,6 +355,7 @@ __exportStar(require("./StacAssetBand"), exports);
 __exportStar(require("./StacCoarserAsset"), exports);
 __exportStar(require("./StacDataProviderDefinition"), exports);
 __exportStar(require("./StacGrid"), exports);
+__exportStar(require("./StacItemTime"), exports);
 __exportStar(require("./StacProviderAuthentication"), exports);
 __exportStar(require("./StacProviderDataset"), exports);
 __exportStar(require("./StacProviderDatasetBand"), exports);

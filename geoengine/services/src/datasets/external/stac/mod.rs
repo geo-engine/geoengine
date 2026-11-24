@@ -10,10 +10,16 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
+use geoengine_operators::source::gdal_worker_process::GdalProcessPool;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::{fmt, num::NonZeroU32, sync::Arc};
+use std::{
+    fmt,
+    num::{NonZeroU32, NonZeroUsize},
+    sync::Arc,
+};
 
+pub(crate) mod asset_probe;
 mod auth;
 mod cache;
 pub(crate) mod common;
@@ -30,18 +36,20 @@ pub use loading_info::{StacMultiBandMetaData, StacTileFile};
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
-const DEFAULT_MAX_CONCURRENT_CELL_SEARCHES: usize = 8;
+/// The default of the limits of parallel cell searches and asset header probes
+const DEFAULT_MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(8).expect("not zero");
 
-/// The positive number of parallel cell searches, since a limit of zero would never make progress
-fn validate_max_concurrent_cell_searches(limit: Option<i32>) -> crate::error::Result<usize> {
+/// The positive number of parallel `what`, e.g. cell searches, since a limit of zero would never
+/// make progress
+fn positive_limit(limit: Option<i32>, what: &str) -> crate::error::Result<NonZeroUsize> {
     let Some(limit) = limit else {
-        return Ok(DEFAULT_MAX_CONCURRENT_CELL_SEARCHES);
+        return Ok(DEFAULT_MAX_CONCURRENCY);
     };
     usize::try_from(limit)
         .ok()
-        .filter(|limit| *limit > 0)
+        .and_then(NonZeroUsize::new)
         .ok_or_else(|| crate::error::Error::InvalidConfig {
-            reason: "STAC max concurrent cell searches must be positive".to_owned(),
+            reason: format!("STAC max concurrent {what} must be positive"),
         })
 }
 
@@ -147,6 +155,27 @@ pub struct StacDataProviderDefinition {
     /// the data starts.
     #[serde(default)]
     pub time_bounds: Option<TimeInterval>,
+    /// Which item time decides the layer time steps an item belongs to; omitted values use
+    /// [`StacItemTime::Datetime`].
+    #[serde(default)]
+    pub item_time: Option<StacItemTime>,
+    /// Asset file headers one STAC search reads in parallel to complete missing grid
+    /// metadata; omitted values use 8.
+    #[serde(default)]
+    pub max_concurrent_asset_probes: Option<i32>,
+}
+
+/// Which time of a STAC item decides the layer time steps it belongs to.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, ToSql, FromSql)]
+#[postgres(name = "StacItemTime")]
+#[serde(rename_all = "camelCase")]
+pub enum StacItemTime {
+    /// The item `datetime`, snapped to the time step that contains it.
+    #[default]
+    Datetime,
+    /// The item's `start_datetime`/`end_datetime` range: the item belongs to every time step it
+    /// overlaps, as composites over several days do. Items without a range use their `datetime`.
+    Range,
 }
 
 fn default_query_timeout() -> i64 {
@@ -375,6 +404,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         let mut provider = StacDataProvider::from_definition_with_request_registry(
             definition,
             db.stac_request_registry().clone(),
+            db.gdal_process_pool().clone(),
         )?;
 
         provider.client = provider.client.with_authentication(authentication).await?;
@@ -432,7 +462,8 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                 validate_authentication(new.authentication.as_ref())?;
                 validate_s3_config(new.s3_config.as_ref())?;
                 new.stac_grid.unwrap_or_default().validate()?;
-                validate_max_concurrent_cell_searches(new.max_concurrent_cell_searches)?;
+                positive_limit(new.max_concurrent_cell_searches, "cell searches")?;
+                positive_limit(new.max_concurrent_asset_probes, "asset probes")?;
                 validate_time_dimension(new.time_dimension)?;
                 validate_coarser_assets(&new.datasets)?;
 
@@ -461,12 +492,17 @@ pub struct StacDataProvider {
     /// projected-grid index, and regular layer time step.
     query_cache: Arc<StacQueryCache>,
     /// STAC searches one loading info request runs in parallel
-    max_concurrent_cell_searches: usize,
+    max_concurrent_cell_searches: NonZeroUsize,
+    /// Asset file headers one STAC search reads in parallel
+    max_concurrent_asset_probes: NonZeroUsize,
+    item_time: StacItemTime,
     /// Whether the server answers `datetime_frequency` aggregations in the size asked for
     datetime_frequency_aggregation: bool,
     /// The time of the datasets from the definition, which overrides that of the collection
     time_bounds: Option<TimeInterval>,
     grid: StacGrid,
+    /// Reads the headers of assets that lack grid metadata
+    asset_prober: asset_probe::AssetProber,
 }
 
 impl StacDataProvider {
@@ -476,21 +512,31 @@ impl StacDataProvider {
     /// [`Self::from_definition_with_request_registry`] to share quotas across providers.
     ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
-    pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
-        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new())
+    pub fn from_definition(
+        definition: StacDataProviderDefinition,
+        gdal_process_pool: Arc<GdalProcessPool>,
+    ) -> crate::error::Result<Self> {
+        Self::from_definition_with_request_registry(
+            definition,
+            StacRequestRegistry::new(),
+            gdal_process_pool,
+        )
     }
 
     /// Builds a provider with the registry shared by its application or standalone operation.
     pub fn from_definition_with_request_registry(
         definition: StacDataProviderDefinition,
         request_registry: StacRequestRegistry,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
         validate_coarser_assets(&definition.datasets)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
         let max_concurrent_cell_searches =
-            validate_max_concurrent_cell_searches(definition.max_concurrent_cell_searches)?;
+            positive_limit(definition.max_concurrent_cell_searches, "cell searches")?;
+        let max_concurrent_asset_probes =
+            positive_limit(definition.max_concurrent_asset_probes, "asset probes")?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(
@@ -518,7 +564,10 @@ impl StacDataProvider {
                 .datetime_frequency_aggregation
                 .unwrap_or(false),
             time_bounds: definition.time_bounds,
+            max_concurrent_asset_probes,
+            item_time: definition.item_time.unwrap_or_default(),
             grid,
+            asset_prober: asset_probe::AssetProber::new(gdal_process_pool),
         })
     }
 
@@ -571,6 +620,7 @@ mod tests {
             crate::users::UserSession::admin_session(),
             Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
             request_registry.clone(),
+            crate::util::tests::gdal_process_pool_without_workers(),
         );
         let mut definition: StacDataProviderDefinition =
             serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
@@ -629,6 +679,7 @@ mod tests {
         let configured = StacDataProvider::from_definition_with_request_registry(
             definition,
             StacRequestRegistry::new().with_config(config),
+            crate::util::tests::gdal_process_pool_without_workers(),
         )
         .unwrap();
 
@@ -1054,6 +1105,8 @@ mod tests {
             serde_json::from_value(serde_json::json!({"targetNumberOfCells":259_200})).unwrap(),
         );
         api.max_concurrent_cell_searches = Some(4);
+        api.item_time = Some(crate::api::model::services::StacItemTime::Range);
+        api.max_concurrent_asset_probes = std::num::NonZeroU16::new(2);
         let mut definition = StacDataProviderDefinition::from(api);
         let id = db
             .add_layer_provider(definition.clone().into())
@@ -1100,11 +1153,17 @@ mod tests {
     }
 
     #[test]
-    fn it_validates_max_concurrent_cell_searches() {
-        assert_eq!(validate_max_concurrent_cell_searches(None).unwrap(), 8);
-        assert_eq!(validate_max_concurrent_cell_searches(Some(4)).unwrap(), 4);
-        assert!(validate_max_concurrent_cell_searches(Some(0)).is_err());
-        assert!(validate_max_concurrent_cell_searches(Some(-1)).is_err());
+    fn it_validates_positive_limits() {
+        assert_eq!(positive_limit(None, "cell searches").unwrap().get(), 8);
+        assert_eq!(positive_limit(Some(4), "cell searches").unwrap().get(), 4);
+        assert!(positive_limit(Some(-1), "cell searches").is_err());
+
+        let Err(crate::error::Error::InvalidConfig { reason }) =
+            positive_limit(Some(0), "asset probes")
+        else {
+            panic!("a limit of zero must be invalid");
+        };
+        assert_eq!(reason, "STAC max concurrent asset probes must be positive");
     }
 
     #[tokio::test]

@@ -636,6 +636,8 @@ pub struct GdalProcessPoolWorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    #[serde(default)]
+    pub retry: geoengine_operators::source::gdal_worker_process::WorkerRetryConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -714,6 +716,7 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
+            retry: config.retry,
         }
     }
 }
@@ -1153,6 +1156,40 @@ mod tests {
             .into_iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
             .collect()
+    }
+
+    #[test]
+    fn it_reads_the_worker_retry_limits() {
+        use geoengine_operators::source::gdal_worker_process::WorkerRetryConfig;
+
+        let retry = |local: Option<&str>, env: Option<&str>| {
+            worker_config(local, "RETRY__MAX_DURATION_SECONDS", env).retry
+        };
+
+        assert_eq!(retry(None, None), WorkerRetryConfig::default());
+        assert_eq!(
+            retry(None, None),
+            WorkerRetryConfig {
+                max_backoff_seconds: 8,
+                max_duration_seconds: 180,
+            }
+        );
+        // a local file may set one limit and keeps the other; the environment wins
+        let local = "[gdal_process_pool.worker.retry]\nmax_backoff_seconds = 2\n";
+        assert_eq!(
+            retry(Some(local), None),
+            WorkerRetryConfig {
+                max_backoff_seconds: 2,
+                max_duration_seconds: 180,
+            }
+        );
+        assert_eq!(
+            retry(Some(local), Some("20")),
+            WorkerRetryConfig {
+                max_backoff_seconds: 2,
+                max_duration_seconds: 20,
+            }
+        );
     }
 
     #[test]

@@ -54,6 +54,12 @@ pub struct StacDataProviderDefinition {
     /// The time of the datasets. Omitted values come from the temporal extent of the collection, so this is only needed where that is missing or wrong. Apps use it to ask no dates before the data starts.
     #[serde(rename = "timeBounds", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub time_bounds: Option<Option<Box<models::TimeInterval>>>,
+    /// Which item time decides the layer time steps an item belongs to; omitted values use `datetime`.
+    #[serde(rename = "itemTime", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub item_time: Option<Option<models::StacItemTime>>,
+    /// Asset file headers one STAC search reads in parallel to complete grid metadata the STAC items lack, as for `NetCDF` assets; omitted values use 8.
+    #[serde(rename = "maxConcurrentAssetProbes", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_asset_probes: Option<Option<i32>>,
 }
 
 impl StacDataProviderDefinition {
@@ -77,6 +83,8 @@ impl StacDataProviderDefinition {
             max_concurrent_cell_searches: None,
             datetime_frequency_aggregation: None,
             time_bounds: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         }
     }
 }
