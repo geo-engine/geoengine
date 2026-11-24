@@ -278,7 +278,7 @@ mod test {
     }
 
     #[test]
-    fn integer_multiple_of() {
+    fn it_integer_multiple_of() {
         let native = SpatialResolution::new_unchecked(10., 10.);
         let factor = |x: f64, y: f64| {
             SpatialResolution::new_unchecked(x, y)

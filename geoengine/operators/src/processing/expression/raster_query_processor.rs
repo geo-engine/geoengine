@@ -783,7 +783,7 @@ mod footprint_tests {
     }
 
     #[tokio::test]
-    async fn expression_has_data_only_where_all_inputs_have() {
+    async fn it_expression_has_data_only_where_all_inputs_have() {
         // the inputs have data in different tiles, so no pixel has data in both
         let footprints = checked_footprints(expression(false), &[0]).await;
         assert_eq!(step_boxes(&footprints), [[].as_slice(), [].as_slice()]);
@@ -830,7 +830,7 @@ mod footprint_tests {
     }
 
     #[tokio::test]
-    async fn expression_with_map_no_data_has_data_where_any_input_has() {
+    async fn it_expression_with_map_no_data_has_data_where_any_input_has() {
         // `A + B` gives no data for inputs without data, so there is data where an input has some
         let footprints = checked_footprints(expression(true), &[0]).await;
 
@@ -841,7 +841,7 @@ mod footprint_tests {
     }
 
     #[tokio::test]
-    async fn expression_that_makes_data_of_no_data_cannot_tell() {
+    async fn it_expression_that_makes_data_of_no_data_cannot_tell() {
         let footprints =
             checked_footprints(expression_of("if A IS NODATA { 1 } else { A }", true), &[0]).await;
 

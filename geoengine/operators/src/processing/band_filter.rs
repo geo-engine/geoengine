@@ -749,7 +749,7 @@ mod footprint_tests {
     use crate::engine::footprint_test_util::*;
 
     #[tokio::test]
-    async fn band_filter_answers_for_the_selected_input_band() {
+    async fn it_band_filter_answers_for_the_selected_input_band() {
         let band_filter = BandFilter {
             params: BandFilterParams {
                 bands: BandsByNameOrIndex::Name(vec!["band1".to_string()]),

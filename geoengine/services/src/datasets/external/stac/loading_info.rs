@@ -3686,7 +3686,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn chunk_search_fills_the_step_entries_of_its_cell() {
+    async fn it_chunk_search_fills_the_step_entries_of_its_cell() {
         let server = Server::run();
         expect_aggregation_unsupported(&server);
         let starts = new_starts();
@@ -3732,7 +3732,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn without_a_cache_a_window_is_searched_only_step_by_step() {
+    async fn it_without_a_cache_a_window_is_searched_only_step_by_step() {
         let server = Server::run();
         expect_aggregation_unsupported(&server);
         // one search per step, no window search before them, whose result could not be kept
@@ -3761,7 +3761,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn chunk_search_leaves_an_item_on_its_end_to_the_next_chunk() {
+    async fn it_chunk_search_leaves_an_item_on_its_end_to_the_next_chunk() {
         let server = Server::run();
         expect_aggregation_unsupported(&server);
         let starts = new_starts();
@@ -3793,7 +3793,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn window_search_covers_only_the_missing_steps_of_a_chunk() {
+    async fn it_window_search_covers_only_the_missing_steps_of_a_chunk() {
         let server = Server::run();
         expect_aggregation_unsupported(&server);
         let starts = new_starts();
@@ -3856,7 +3856,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn one_step_window_query_searches_only_that_step() {
+    async fn it_one_step_window_query_searches_only_that_step() {
         let server = Server::run();
         let starts = new_starts();
         expect_search_at(
@@ -3885,7 +3885,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn aggregation_skips_the_searches_of_steps_without_items() {
+    async fn it_aggregation_skips_the_searches_of_steps_without_items() {
         let server = Server::run();
         let starts = new_starts();
         // one aggregation per chunk of 30 days: 2025-12-08, 2026-01-07 and 2026-02-06 up to 2026-03-08
@@ -3952,7 +3952,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_window_search_answers_chunk_by_chunk() {
+    async fn it_a_window_search_answers_chunk_by_chunk() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation_unsupported(&server);
@@ -4020,7 +4020,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_seeds_the_days_without_items_and_nothing_else() {
+    async fn it_availability_seeds_the_days_without_items_and_nothing_else() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation(
@@ -4076,7 +4076,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_aggregates_a_chunk_of_a_view_once() {
+    async fn it_availability_aggregates_a_chunk_of_a_view_once() {
         let server = Server::run();
         // a second aggregation of the chunk would be unexpected and fail; nothing is seeded, as
         // the view lies inside its cell, so only the kept aggregation answers the second window
@@ -4110,7 +4110,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_of_a_view_inside_a_cell_aggregates_the_view_and_seeds_nothing() {
+    async fn it_availability_of_a_view_inside_a_cell_aggregates_the_view_and_seeds_nothing() {
         let server = Server::run();
         let starts = new_starts();
         // only the view is counted, not the cell around it
@@ -4153,7 +4153,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_over_too_many_cells_seeds_nothing() {
+    async fn it_availability_over_too_many_cells_seeds_nothing() {
         let server = Server::run();
         let starts = new_starts();
         // any area: one day with items
@@ -4198,7 +4198,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_without_aggregation_answers_with_the_files() {
+    async fn it_availability_without_aggregation_answers_with_the_files() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation_unsupported(&server);
@@ -4230,7 +4230,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_provider_that_does_not_aggregate_never_asks_for_an_aggregation() {
+    async fn it_a_provider_that_does_not_aggregate_never_asks_for_an_aggregation() {
         let server = Server::run();
         let starts = new_starts();
         // an aggregation request would be unexpected and fail
@@ -4263,7 +4263,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn availability_of_a_cached_view_asks_nothing() {
+    async fn it_availability_of_a_cached_view_asks_nothing() {
         // an aggregation request would be unexpected and fail
         let server = Server::run();
         let starts = new_starts();
@@ -4309,7 +4309,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_warm_window_does_not_ask_for_aggregation() {
+    async fn it_a_warm_window_does_not_ask_for_aggregation() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation(
@@ -4344,7 +4344,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn concurrent_window_searches_of_a_cell_share_one_search() {
+    async fn it_concurrent_window_searches_of_a_cell_share_one_search() {
         let server = Server::run();
         expect_aggregation_unsupported(&server);
         let starts = new_starts();
@@ -4377,7 +4377,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn chunk_search_rejects_too_many_searches_without_requests() {
+    async fn it_chunk_search_rejects_too_many_searches_without_requests() {
         // no requests are expected, not even the aggregation that plans the searches
         let server = Server::run();
         let provider = provider(
@@ -4399,7 +4399,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_window_runs_only_the_counted_searches_when_the_cache_keeps_nothing() {
+    async fn it_a_window_runs_only_the_counted_searches_when_the_cache_keeps_nothing() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation_unsupported(&server);
@@ -4437,7 +4437,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn the_time_of_the_datasets_comes_from_the_collection_once() {
+    async fn it_the_time_of_the_datasets_comes_from_the_collection_once() {
         let server = Server::run();
         // a second request would be unexpected and fail
         server.expect(
@@ -4507,7 +4507,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn the_time_of_the_datasets_in_the_provider_definition_overrides_the_collection() {
+    async fn it_the_time_of_the_datasets_in_the_provider_definition_overrides_the_collection() {
         // no requests are expected
         let server = Server::run();
         let bounds = TimeInterval::new(0, 1_000).unwrap();
@@ -4530,7 +4530,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn one_step_runs_only_the_counted_searches_when_a_cached_step_expires() {
+    async fn it_one_step_runs_only_the_counted_searches_when_a_cached_step_expires() {
         let server = Server::run();
         let starts = new_starts();
         let day = "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z";
@@ -4578,7 +4578,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_window_without_a_cache_counts_the_searches_of_every_step() {
+    async fn it_a_window_without_a_cache_counts_the_searches_of_every_step() {
         // no requests are expected
         let server = Server::run();
         let mut provider = provider(
@@ -4607,7 +4607,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn footprints_count_the_searches_they_still_need() {
+    async fn it_footprints_count_the_searches_they_still_need() {
         let server = Server::run();
         // only the data query below searches
         server.expect(

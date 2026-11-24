@@ -1515,7 +1515,7 @@ mod tests {
     /// A file without any overview stays on the block path: its level 4 and 8 are resampled
     /// from blocks of the full resolution, with the pixels of GDAL's window read.
     #[tokio::test]
-    async fn files_without_overviews_are_resampled_from_full_resolution_blocks() {
+    async fn it_files_without_overviews_are_resampled_from_full_resolution_blocks() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff(dir.path(), 64, &[]);
         let file_grid = params.spatial_grid_definition();
@@ -1573,7 +1573,7 @@ mod tests {
     /// overviews spans the whole file, 131 kB of pixels, and reads it through a block cache of
     /// 20 kB with the pixels of GDAL's window read.
     #[tokio::test]
-    async fn resampling_reads_do_not_need_their_window_in_the_cache() {
+    async fn it_resampling_reads_do_not_need_their_window_in_the_cache() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff(dir.path(), 256, &[]);
         let file_grid = params.spatial_grid_definition();
@@ -1613,7 +1613,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reads_of_a_level_the_file_lacks_give_the_same_pixels_on_both_paths() {
+    async fn it_reads_of_a_level_the_file_lacks_give_the_same_pixels_on_both_paths() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
@@ -1661,7 +1661,7 @@ mod tests {
     /// or later starts one pixel later in the level. Blocks resample such a level from itself:
     /// each tile pixel takes the level pixel under its center, in every tile alike.
     #[tokio::test]
-    async fn levels_whose_size_does_not_fit_are_resampled_from_themselves() {
+    async fn it_levels_whose_size_does_not_fit_are_resampled_from_themselves() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff(dir.path(), 61, &[4]);
         let file_grid = params.spatial_grid_definition();
@@ -1754,7 +1754,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn whole_number_levels_are_resampled_alike_in_every_tile() {
+    async fn it_whole_number_levels_are_resampled_alike_in_every_tile() {
         let dir = tempfile::tempdir().unwrap();
         // only the level 3, whose 22 px are 2.9 times smaller than the file's 64 px
         let params = tiled_tiff(dir.path(), 64, &[3]);
@@ -1843,7 +1843,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn levels_a_file_lacks_are_subsampled_from_its_coarsest_level_through_blocks() {
+    async fn it_levels_a_file_lacks_are_subsampled_from_its_coarsest_level_through_blocks() {
         for (overviews, levels) in [(vec![2, 4], vec![8_u32, 16])] {
             let dir = tempfile::tempdir().unwrap();
             let params = tiled_tiff(dir.path(), 64, &overviews);
@@ -1925,7 +1925,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn files_shifted_against_the_tile_grid_read_their_levels_through_blocks() {
+    async fn it_files_shifted_against_the_tile_grid_read_their_levels_through_blocks() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
