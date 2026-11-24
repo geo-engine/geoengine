@@ -395,15 +395,17 @@ export class FootprintsService {
     readonly datesFailed = computed(() => this.footprintsResource.status() === 'error');
     /**
      * The selected time lies after (1) or before (-1) all time steps of the data, e.g. after switching to a source whose data
-     * ends earlier, with the nearest step there. The dates of a window are those of the data within it, so outside of them
-     * there are none.
+     * ends earlier, with the nearest step there that may have scenes in the view, else the nearest one. The dates of a window
+     * are those of the data within it, so outside of them there are none.
      */
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
         const steps = this.stepsOfSelection();
         const time = this.time()?.start.valueOf();
         if (this.isLoading() || !steps.length || time === undefined || stepAt(steps, time)) return undefined;
-        if (time >= steps[steps.length - 1].time.end) return {direction: 1, step: steps[steps.length - 1]};
-        if (time < steps[0].time.start) return {direction: -1, step: steps[0]};
+        const mayHaveScenes = (step: TimeStepFootprint): boolean => step.status !== TimeStepFootprintStatus.Empty;
+        if (time >= steps[steps.length - 1].time.end)
+            return {direction: 1, step: [...steps].reverse().find(mayHaveScenes) ?? steps[steps.length - 1]};
+        if (time < steps[0].time.start) return {direction: -1, step: steps.find(mayHaveScenes) ?? steps[0]};
         return undefined;
     });
     readonly hasError = computed(
