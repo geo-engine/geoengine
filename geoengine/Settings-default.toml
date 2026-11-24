@@ -322,6 +322,18 @@ filename_prefix = "geo_engine_worker"
 enabled = false
 endpoint = "http://127.0.0.1:4317"
 
+[gdal_process_pool.worker.retry]
+# Limits for retrying a failed open or read of a file in a GDAL worker. A dataset sets how often
+# its files are retried (STAC: 99 times); pauses start at 1 s and double. A missing file or a
+# denied access is never retried. A worker that retries holds one of `max_active_processes`, also
+# after the request was cancelled, so retries are capped in time.
+# Longest pause between two attempts.
+max_backoff_seconds = 8
+# No retry starts after this time from the first attempt. A tile waiting for its files longer
+# than a reverse proxy's timeout (e.g. nginx's `proxy_read_timeout`) fails anyway, so keep it
+# at most that timeout.
+max_duration_seconds = 180
+
 [data]
 volumes = { test_data = "test_data/" }
 

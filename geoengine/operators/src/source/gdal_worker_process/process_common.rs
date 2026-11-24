@@ -623,6 +623,23 @@ impl IpcProcessError {
             }
         )
     }
+
+    /// Whether retrying cannot help: the file does not exist, access to it is denied, or it
+    /// cannot be read in this environment.
+    pub fn is_permanent(&self) -> bool {
+        self.is_file_not_found()
+            || matches!(
+                self,
+                Self::GdalError {
+                    kind: IpcProcessGdalErrorKind::AccessDenied
+                        | IpcProcessGdalErrorKind::UserfaultfdUnavailable,
+                    ..
+                } | Self::Io {
+                    kind: IpcProcessIoErrorKind::PermissionDenied,
+                    ..
+                }
+            )
+    }
 }
 
 impl From<std::io::Error> for IpcProcessError {
@@ -642,6 +659,37 @@ impl From<std::io::Error> for IpcProcessError {
     }
 }
 
+/// Whether the message of a failed `GDALOpenEx` says that the file does not exist: a local file,
+/// an HTTP 404, or a missing object or bucket in an object store (GDAL's `CPLE_ObjectNotFound`
+/// and `CPLE_BucketNotFound`, e.g. `ObjectNotFound: NoSuchKey` from S3).
+fn is_open_file_not_found_message(msg: &str) -> bool {
+    msg == "HTTP response code: 404"
+        || msg.ends_with("No such file or directory")
+        || [
+            "ObjectNotFound",
+            "NoSuchKey",
+            "BucketNotFound",
+            "NoSuchBucket",
+        ]
+        .iter()
+        .any(|pattern| msg.contains(pattern))
+}
+
+/// Whether the message of a failed `GDALOpenEx` says that access to the file was denied, as
+/// object stores report it (GDAL's `CPLE_AccessDenied`, `CPLE_InvalidCredentials` and
+/// `CPLE_SignatureDoesNotMatch`), or an HTTP 403.
+fn is_open_access_denied_message(msg: &str) -> bool {
+    msg == "HTTP response code: 403"
+        || [
+            "AccessDenied",
+            "InvalidCredentials",
+            "InvalidAccessKeyId",
+            "SignatureDoesNotMatch",
+        ]
+        .iter()
+        .any(|pattern| msg.contains(pattern))
+}
+
 impl From<gdal::errors::GdalError> for IpcProcessError {
     /// Maps a raw GDAL library error into a strongly-typed structural variant
     /// before serialization across the IPC channel.
@@ -654,11 +702,14 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
                 IpcProcessGdalErrorKind::UserfaultfdUnavailable
             }
             gdal::errors::GdalError::NullPointer { method_name, msg }
-                if *method_name == "GDALOpenEx"
-                    && (*msg == "HTTP response code: 404"
-                        || msg.ends_with("No such file or directory")) =>
+                if *method_name == "GDALOpenEx" && is_open_file_not_found_message(msg) =>
             {
                 IpcProcessGdalErrorKind::FileNotFound
+            }
+            gdal::errors::GdalError::NullPointer { method_name, msg }
+                if *method_name == "GDALOpenEx" && is_open_access_denied_message(msg) =>
+            {
+                IpcProcessGdalErrorKind::AccessDenied
             }
             gdal::errors::GdalError::NullPointer { .. }
             | gdal::errors::GdalError::OgrError { .. } => IpcProcessGdalErrorKind::InvalidDataset,

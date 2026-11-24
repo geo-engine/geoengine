@@ -5,10 +5,10 @@ use super::{
         RasterInfo, level_of_factor,
     },
 };
-use crate::util::gdal::{band_levels, identify_spatial_reference};
-use crate::{
-    source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
-    util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
+use crate::util::{
+    GdalConfigOptions,
+    gdal::{band_levels, gdal_open_ex_gdal_error, identify_spatial_reference},
+    retry::{RetryDecision, SyncRetryLimits, retry_sync},
 };
 use float_cmp::approx_eq;
 use gdal::{
@@ -36,7 +36,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::OnceLock,
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tracing::debug;
 
@@ -47,9 +47,23 @@ static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
 const GDAL_DATA_COVERAGE_STATUS_DATA: i32 = 0x02;
 const GDAL_DATA_COVERAGE_STATUS_EMPTY: i32 = 0x04;
 
-static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
-static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
-static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
+const GDAL_RETRY_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+const GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
+
+/// The retry limits of this process, set once at the start of a worker.
+static WORKER_RETRY_CONFIG: OnceLock<WorkerRetryConfig> = OnceLock::new();
+
+/// Sets the limits for retrying failed GDAL opens and reads in this process. Only the first call
+/// takes effect; without one, the defaults apply.
+pub fn set_worker_retry_config(config: WorkerRetryConfig) {
+    if WORKER_RETRY_CONFIG.set(config).is_err() {
+        tracing::warn!("The GDAL retry limits of this process were already set");
+    }
+}
+
+fn worker_retry_config() -> WorkerRetryConfig {
+    WORKER_RETRY_CONFIG.get().copied().unwrap_or_default()
+}
 
 /// Returns a reference to the cached `gdalsource-process` path.
 /// The detection logic runs exactly once on the very first call.
@@ -124,6 +138,30 @@ pub struct WorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    #[serde(default)]
+    pub retry: WorkerRetryConfig,
+}
+
+/// Limits for retrying a failed GDAL open or read in a worker. They apply on top of the number
+/// of retries of a dataset (`GdalDatasetParameters::retry`), and a missing file or a denied
+/// access is never retried. `[gdal_process_pool.worker.retry]` in the settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkerRetryConfig {
+    /// The longest pause between two attempts. Pauses start at 1 s and double.
+    pub max_backoff_seconds: u64,
+    /// No retry starts if its pause would end later than this after the first attempt.
+    pub max_duration_seconds: u64,
+}
+
+impl Default for WorkerRetryConfig {
+    fn default() -> Self {
+        // as `Settings-default.toml`
+        Self {
+            max_backoff_seconds: 8,
+            max_duration_seconds: 180,
+        }
+    }
 }
 
 impl Default for WorkerConfig {
@@ -138,6 +176,7 @@ impl Default for WorkerConfig {
             ],
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
+            retry: WorkerRetryConfig::default(),
         }
     }
 }
@@ -384,17 +423,6 @@ impl GdalDatasetHolder {
 pub struct GdalHandling;
 
 impl GdalHandling {
-    pub fn error_is_gdal_file_not_found(error: &GdalError) -> bool {
-        matches!(
-            error,
-            GdalError::NullPointer {
-                    method_name,
-                    msg
-                }
-             if *method_name == "GDALOpenEx" && (*msg == "HTTP response code: 404" || msg.ends_with("No such file or directory"))
-        )
-    }
-
     fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
         unsafe {
             if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
@@ -403,25 +431,60 @@ impl GdalHandling {
         }
     }
 
+    /// The limits of retrying `dataset_params` under `config`.
+    fn retry_limits(
+        dataset_params: &GdalDatasetParameters,
+        config: WorkerRetryConfig,
+    ) -> SyncRetryLimits {
+        SyncRetryLimits {
+            max_retries: dataset_params.max_retries().unwrap_or(0),
+            initial_delay: GDAL_RETRY_INITIAL_BACKOFF,
+            backoff_factor: GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
+            max_delay: Some(Duration::from_secs(config.max_backoff_seconds)),
+            max_duration: Some(Duration::from_secs(config.max_duration_seconds)),
+        }
+    }
+
+    /// Logs a failed attempt of [`Self::open_with_retry`]. A first attempt that is not retried
+    /// is only logged at debug level, since the caller handles its error.
+    fn log_retry_decision(
+        dataset_params: &GdalDatasetParameters,
+        limits: &SyncRetryLimits,
+        error: &IpcProcessError,
+        decision: RetryDecision,
+    ) {
+        let path = dataset_params.file_path.display();
+        let max_attempts = limits.max_retries.saturating_add(1);
+        match decision {
+            RetryDecision::RetryAfter { attempt, delay } => tracing::warn!(
+                "GDAL attempt {attempt}/{max_attempts} for {path} failed, retrying in {delay:?}: {error}"
+            ),
+            RetryDecision::GiveUp { attempt: 1, reason } => {
+                tracing::debug!("GDAL access to {path} failed ({reason:?}): {error}");
+            }
+            RetryDecision::GiveUp { attempt, reason } => tracing::warn!(
+                "GDAL attempt {attempt}/{max_attempts} for {path} failed, giving up ({reason:?}): {error}"
+            ),
+        }
+    }
+
     /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
-    /// open and the read with backoff. Remote paths clear their VSI cache on failure, and a
-    /// file that explicitly does not exist is never retried.
+    /// open and the read with backoff within the dataset's number of retries and the process'
+    /// [`WorkerRetryConfig`]. Remote paths clear their VSI cache on failure. A missing file or a
+    /// denied access is never retried.
     fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
     ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
-        let max_retries = dataset_params.max_retries().unwrap_or(0);
+        let limits = Self::retry_limits(dataset_params, worker_retry_config());
         let dp = &dataset_params;
 
         // Wrap both OPEN and READ actions inside the retry loop
 
         retry_sync(
-            max_retries,
-            GDAL_RETRY_INITIAL_BACKOFF_MS,
-            GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
-            Some(GDAL_RETRY_MAX_BACKOFF_MS),
+            &limits,
             || {
                 let ds = match cache.get_or_open(dp) {
                     Ok(dataset) => dataset,
@@ -439,18 +502,8 @@ impl GdalHandling {
                     }
                 })
             },
-            // If the file explicitly does not exist or cannot be read in this environment, do
-            // not waste time retrying
-            |e| {
-                matches!(
-                    e,
-                    IpcProcessError::GdalError {
-                        kind: IpcProcessGdalErrorKind::FileNotFound
-                            | IpcProcessGdalErrorKind::UserfaultfdUnavailable,
-                        details: _,
-                    }
-                )
-            },
+            IpcProcessError::is_permanent,
+            |error, decision| Self::log_retry_decision(dp, &limits, error, decision),
         )
     }
 
@@ -1430,6 +1483,153 @@ mod tests {
         }
     }
 
+    /// Parameters of `s3://bucket/{key}` on the S3 mock `server`, retried as often as STAC does.
+    fn s3_mock_params(server: &Server, key: &str) -> GdalDatasetParameters {
+        GdalDatasetParameters {
+            file_path: format!("s3://bucket/{key}").into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(
+                [
+                    ("AWS_S3_ENDPOINT", server.addr().to_string()),
+                    ("AWS_HTTPS", "NO".to_string()),
+                    ("AWS_VIRTUAL_HOSTING", "FALSE".to_string()),
+                    ("AWS_NO_SIGN_REQUEST", "YES".to_string()),
+                    ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif".to_string()),
+                    ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR".to_string()),
+                    ("GDAL_HTTP_NETRC", "NO".to_string()),
+                    ("GDAL_HTTP_MAX_RETRY", "0".to_string()),
+                ]
+                .map(|(name, value)| (name.to_string(), value))
+                .to_vec(),
+            ),
+            allow_alphaband_as_mask: true,
+            retry: Some(super::super::GdalRetryOptions { max_retries: 99 }),
+        }
+    }
+
+    /// An S3 error response as object stores send it.
+    fn s3_error(status: u16, code: &str) -> responders::ResponseBuilder<String> {
+        responders::status_code(status)
+            .insert_header("Content-Type", "application/xml")
+            .body(format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>{code}</Code><Message>{code}</Message></Error>"
+            ))
+    }
+
+    /// Answers the listings with which GDAL checks whether a missing object is a directory with
+    /// an empty listing, as S3 does.
+    fn expect_empty_s3_listings(server: &Server) {
+        server.expect(
+            Expectation::matching(request::path("/bucket/"))
+                .times(..)
+                .respond_with(
+                    responders::status_code(200)
+                        .insert_header("Content-Type", "application/xml")
+                        .body(
+                            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult><Name>bucket</Name><KeyCount>0</KeyCount><MaxKeys>100</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>",
+                        ),
+                ),
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_does_not_retry_a_missing_s3_object() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::path("/bucket/missing.tif"))
+                .times(1..)
+                .respond_with(s3_error(404, "NoSuchKey")),
+        );
+
+        expect_empty_s3_listings(&server);
+
+        let start = Instant::now();
+        let result = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::new(),
+            &s3_mock_params(&server, "missing.tif"),
+        );
+
+        let error = result.expect_err("the object does not exist");
+        assert!(error.is_file_not_found(), "{error:?}");
+        // a retry would pause for 1 s first
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_does_not_retry_a_denied_s3_object() {
+        hide_gdal_errors();
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::path("/bucket/denied.tif"))
+                .times(1..)
+                .respond_with(s3_error(403, "AccessDenied")),
+        );
+
+        expect_empty_s3_listings(&server);
+
+        let start = Instant::now();
+        let result = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::new(),
+            &s3_mock_params(&server, "denied.tif"),
+        );
+
+        let error = result.expect_err("access is denied");
+        assert!(
+            matches!(
+                error,
+                IpcProcessError::GdalError {
+                    kind: IpcProcessGdalErrorKind::AccessDenied,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn it_limits_retries_by_the_worker_config() {
+        let params = GdalDatasetParameters {
+            retry: Some(super::super::GdalRetryOptions { max_retries: 99 }),
+            ..get_params()
+        };
+
+        let limits = GdalHandling::retry_limits(
+            &params,
+            WorkerRetryConfig {
+                max_backoff_seconds: 8,
+                max_duration_seconds: 180,
+            },
+        );
+
+        assert_eq!(
+            limits,
+            SyncRetryLimits {
+                max_retries: 99,
+                initial_delay: Duration::from_secs(1),
+                backoff_factor: 2.,
+                max_delay: Some(Duration::from_secs(8)),
+                max_duration: Some(Duration::from_secs(180)),
+            }
+        );
+        assert_eq!(
+            GdalHandling::retry_limits(&get_params(), WorkerRetryConfig::default()).max_retries,
+            0
+        );
+    }
+
     #[test]
     #[serial_test::serial]
     fn it_creates_no_data_only_for_http_404() {
@@ -1602,7 +1802,7 @@ mod tests {
         // it failed, but not with file not found
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(!GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(!IpcProcessError::from(error).is_file_not_found());
         }
 
         // second fail doesn't even try, so still not "file not found", even though it should be now
@@ -1616,7 +1816,7 @@ mod tests {
 
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(!GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(!IpcProcessError::from(error).is_file_not_found());
         }
 
         GdalHandling::clear_gdal_vsi_cache_for_path(file_path.as_path());
@@ -1633,7 +1833,7 @@ mod tests {
         // now we get the file not found error
         assert!(result.is_err());
         if let Err(error) = result {
-            assert!(GdalHandling::error_is_gdal_file_not_found(&error));
+            assert!(IpcProcessError::from(error).is_file_not_found());
         }
     }
 

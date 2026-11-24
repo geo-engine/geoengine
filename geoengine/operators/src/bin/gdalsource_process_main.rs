@@ -9,7 +9,7 @@ use geoengine_operators::source::gdal_worker_process::{
         GdalIpcBytePayload, GdalReadAdvise, GdalRequest, IpcChannelMessagePayload,
         IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
-    process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
+    process_impl::{GdalDatasetHolder, GdalHandling, set_worker_retry_config, setup_client},
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -242,6 +242,7 @@ fn main() {
     if let Some(ref opts) = worker_config.gdal_config_options {
         set_gdal_process_global_options(opts);
     }
+    set_worker_retry_config(worker_config.retry);
     reroute_gdal_logging();
     run(token);
 
