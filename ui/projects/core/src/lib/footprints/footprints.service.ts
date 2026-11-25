@@ -404,6 +404,8 @@ export class FootprintsService {
         const time = this.time()?.start.valueOf();
         if (this.isLoading() || time === undefined) return undefined;
         if (!steps.length) {
+            // dates of a month the open calendar shows without the time tell nothing about it, see `stepsOfSelection`
+            if (this.steps().length) return undefined;
             // no dates came, e.g. in a view that needs too many searches: the time of the data tells, at its start or at
             // the start of the unit of its end; not before the dates came, which tell the nearest date with scenes
             const status = this.footprintsResource.status();
