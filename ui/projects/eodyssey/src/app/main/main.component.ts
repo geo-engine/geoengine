@@ -36,7 +36,7 @@ import {
     TMSId,
     WGS_84,
 } from '@geoengine/core';
-import {mapExtentMaxResolution} from './map-extent';
+import {mapExtentMaxResolution, zoomBelowResolution} from './map-extent';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -182,7 +182,7 @@ export class MainComponent {
                 },
             };
         }
-        const zoomIn = {label: 'Zoom in', run: (): void => this.mapComponent().zoomIn()};
+        const zoomIn = {label: 'Zoom in', run: (): void => this.zoomIn()};
         if (this.mapTileLayer() && this.zoomRequired()) {
             return {
                 icon: 'zoom_in',
@@ -350,6 +350,17 @@ export class MainComponent {
         const earlier = this.footprintsService.dateWithData(-1);
         if (now === undefined || !later || !earlier) return later ?? earlier;
         return later.start.valueOf() - now <= now - earlier.start.valueOf() ? later : earlier;
+    }
+
+    /**
+     * Zooms in to the level where the imagery and the boxes load, see `maxResolution`, or one level where the boxes need too
+     * many searches there.
+     */
+    private zoomIn(): void {
+        const view = this.mapService.view();
+        const zoom = zoomBelowResolution(view, this.maxResolution());
+        if (zoom !== undefined && zoom > (view.getZoom() ?? Infinity)) view.setZoom(zoom);
+        else this.mapComponent().zoomIn();
     }
 
     /** Selects the date again that a newly selected data source moved, see `mapNotice`. */
