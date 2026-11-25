@@ -253,6 +253,95 @@ describe('LayersComponent', () => {
         );
     }
 
+    function mockInitialSelectionCatalogue(categoryName = 'Sentinel-2', sourceName = 'Sentinel-2 Global Mosaics'): void {
+        const collection = (key: string, name: string): CollectionItem => ({
+            type: 'collection',
+            name,
+            description: '',
+            id: {providerId: 'provider', collectionId: key},
+        });
+        const source = (key: string, name: string): CollectionItem => ({
+            ...collection(key, name),
+            properties: [['edv:dataset', key]],
+        });
+        const pages: Record<string, unknown[]> = {
+            [LAYER_DB_ROOT_COLLECTION_ID]: listings[LAYER_DB_ROOT_COLLECTION_ID].items,
+            // Both preferred entries sort after another entry. Their ids do not resemble their names.
+            edv: [collection('optical', categoryName), collection('land', 'CLMS')],
+            optical: [source('sentinelFirst', 'A Sentinel source'), source('dataset', sourceName)],
+            // A matching source name in a different category must not affect selection.
+            land: [source('clmsFirst', 'A CLMS source'), source('decoy', 'Sentinel-2 Global Mosaics')],
+            sentinelFirst: listings.dataset.items,
+            clmsFirst: listings.dataset.items,
+            decoy: listings.dataset.items,
+            dataset: [
+                ...(listings.dataset.items as CollectionItem[]),
+                {
+                    ...collection('secondRegion', 'Z Region'),
+                    properties: [['edv:crs', 'EPSG:3857']],
+                },
+            ],
+            region: listings.region.items,
+            secondRegion: listings.region.items,
+        };
+        getLayerCollectionItems.mockImplementation((_provider, key, offset = 0, limit = 20) =>
+            Promise.resolve({items: (pages[key] ?? []).slice(offset, offset + limit)}),
+        );
+    }
+
+    it('preselects the named category and source, then their first variant and preset, using server-provided ids', async () => {
+        mockInitialSelectionCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(eodysseyLayerService.selectedCategory()).toMatchObject({key: 'optical', name: 'Sentinel-2'});
+        expect(eodysseyLayerService.selectedDataSource()).toMatchObject({key: 'dataset', name: 'Sentinel-2 Global Mosaics'});
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
+        expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        const panels = (fixture.nativeElement as HTMLElement).querySelectorAll('mat-expansion-panel');
+        expect(panels[0].classList.contains('mat-expanded')).toBe(false);
+        expect(panels[1].classList.contains('mat-expanded')).toBe(true);
+        expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('secondRegion');
+    });
+
+    it.each([
+        {category: 'Other imagery', source: 'Sentinel-2 Global Mosaics', expectedCategory: 'land', expectedSource: 'clmsFirst'},
+        {category: 'Sentinel-2', source: 'Other mosaics', expectedCategory: 'optical', expectedSource: 'sentinelFirst'},
+    ])('falls back to the first entry when the configured path is missing: $category / $source', async (testCase) => {
+        mockInitialSelectionCatalogue(testCase.category, testCase.source);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(eodysseyLayerService.selectedCategory()?.key).toBe(testCase.expectedCategory);
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe(testCase.expectedSource);
+        expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
+    });
+
+    it('preserves a manually selected source on catalogue reload and chooses the first source in another category', async () => {
+        mockInitialSelectionCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        eodysseyLayerService.setSelectedDataSource('sentinelFirst');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        eodysseyLayerService.retryCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(eodysseyLayerService.selectedCategory()?.key).toBe('optical');
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('sentinelFirst');
+        eodysseyLayerService.setSelectedCategory('land');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('clmsFirst');
+        eodysseyLayerService.retryCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedCategory()?.key).toBe('land');
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('clmsFirst');
+    });
+
     it('expands the first category and preselects its first source, variant and preset with their metadata', async () => {
         mockCategorizedCatalogue();
         fixture.detectChanges();
