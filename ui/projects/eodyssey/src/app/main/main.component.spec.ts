@@ -1,3 +1,4 @@
+import {ESCAPE} from '@angular/cdk/keycodes';
 import {NO_ERRORS_SCHEMA, signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
@@ -5,6 +6,7 @@ import {MatIconRegistry} from '@angular/material/icon';
 import {MatListModule} from '@angular/material/list';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
+import {MatDrawer} from '@angular/material/sidenav';
 import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
 import OlLayerVector from 'ol/layer/Vector';
@@ -411,5 +413,16 @@ describe('EOdyssey debug reprojection', () => {
         (footprints.selectedDateEmpty as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
         expect(element.querySelector('.map-notice')?.textContent).toContain('No scenes here on 10.04.2026');
+    });
+
+    it('keeps the sidebar open when Escape is pressed inside it', () => {
+        fixture.detectChanges();
+        const drawer = fixture.debugElement.query(By.directive(MatDrawer));
+        // An open select keeps focus on its trigger in the drawer, so its Escape bubbles up to the drawer.
+        (drawer.nativeElement as HTMLElement)
+            .querySelector('.drawer-main')!
+            .dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', keyCode: ESCAPE, bubbles: true}));
+        fixture.detectChanges();
+        expect(drawer.injector.get(MatDrawer).opened).toBe(true);
     });
 });
