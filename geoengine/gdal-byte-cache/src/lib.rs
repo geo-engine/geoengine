@@ -26,10 +26,12 @@
 //!
 //! A path is `/vsigecache/<key>/vsicurl/...`: the key is a SHA-256 of the dataset's path and GDAL
 //! options, which may carry credentials, so a dataset never reads bytes another dataset was
-//! allowed to download but it is not. The version adds the file's size and, if the remote file
-//! system reports them, its `ETag` and `Last-Modified`, so a changed file gets a new file. A
-//! worker checks a file's version again after [`VERSION_CHECK_INTERVAL`], and at once after
-//! [`ByteCache::forget`].
+//! allowed to download but it is not. The version adds the file's size and modification time
+//! (`Last-Modified`), so a changed file gets a new file. The worker that asked the remote file
+//! system for a version shares it with the others through a symbolic link `<hash>.version` whose
+//! target is the version. For [`VERSION_CHECK_INTERVAL`], opening a known file costs no request,
+//! and the remote file is only opened when a chunk is missing. After that time, or at once after
+//! [`ByteCache::forget`], a worker asks again.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -57,6 +59,9 @@ const KEY_LEN: usize = 64;
 
 /// The extension of the cache's files.
 const EXTENSION: &str = "cache";
+
+/// The extension of the links through which workers share the versions of remote files.
+const VERSION_EXTENSION: &str = "version";
 
 /// Remote GDAL file systems whose files are read through the cache.
 const REMOTE_FILE_SYSTEMS: [&str; 7] = [
@@ -118,8 +123,18 @@ pub struct ByteCacheCounts {
     pub write_failures: u64,
 }
 
-/// A file as the cache tells versions apart: key, inner path and size.
-type FileId = (String, Vec<u8>, u64);
+/// A remote file as the cache tells them apart: key and inner path.
+type FileId = (String, Vec<u8>);
+
+/// A version of a remote file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Version {
+    size: u64,
+    /// seconds since the epoch, from the remote file system's `Last-Modified`; 0 if unknown
+    mtime: i64,
+    /// the name stem of its cache file
+    stem: String,
+}
 
 /// The cache of this process.
 #[derive(Debug)]
@@ -130,8 +145,8 @@ pub struct ByteCache {
     misses: AtomicU64,
     waited: AtomicU64,
     write_failures: AtomicU64,
-    /// file name stem and when it was checked, by key, inner path and size
-    versions: std::sync::Mutex<lru::LruCache<FileId, (String, Instant)>>,
+    /// version and when it was checked, by key and inner path
+    versions: std::sync::Mutex<lru::LruCache<FileId, (Version, Instant)>>,
 }
 
 impl ByteCache {
@@ -153,10 +168,12 @@ impl ByteCache {
         let mut versions = lock(&self.versions);
         let ids: Vec<FileId> = versions
             .iter()
-            .filter(|((_, path, _), _)| path == inner)
+            .filter(|((_, path), _)| path == inner)
             .map(|(id, _)| id.clone())
             .collect();
         for id in ids {
+            // the other workers must not take the version from the link either
+            let _ = std::fs::remove_file(version_link(self, &id.0, &id.1));
             versions.pop(&id);
         }
     }
@@ -297,7 +314,8 @@ unsafe fn inner_path(filename: *const c_char) -> Option<CString> {
 /// Deletes the least recently used remote files while the directory holds more than
 /// `size_bytes`, down to [`LOW_WATERMARK_PERCENT`] of it; with a size of 0, all of them. Counts
 /// the allocated blocks, not the length, as the files are sparse. Touches only files the cache
-/// names ([`is_cache_stem`]). Returns the bytes kept and the files deleted.
+/// names ([`is_cache_stem`]). Also deletes version links older than [`VERSION_CHECK_INTERVAL`].
+/// Returns the bytes kept and the files deleted.
 ///
 /// # Errors
 /// Fails if the directory cannot be listed.
@@ -308,6 +326,22 @@ pub fn sweep(directory: &Path, size_bytes: u64) -> std::io::Result<(u64, u64)> {
         let Ok(meta) = entry.metadata() else {
             continue;
         };
+        let stem_ok = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .is_some_and(is_cache_stem);
+        if meta.is_symlink() && stem_ok && path.extension().is_some_and(|e| e == VERSION_EXTENSION)
+        {
+            let outdated = meta
+                .modified()
+                .ok()
+                .and_then(|m| m.elapsed().ok())
+                .is_none_or(|age| age >= VERSION_CHECK_INTERVAL);
+            if outdated || size_bytes == 0 {
+                let _ = std::fs::remove_file(&path);
+            }
+            continue;
+        }
         let ours = meta.is_file()
             && path.extension().is_some_and(|e| e == EXTENSION)
             && path
@@ -456,7 +490,10 @@ fn fcntl_lock(
 /// An open file: the inner handle, its cache file, and the position.
 struct Handle {
     cache: &'static ByteCache,
-    inner: *mut gdal_sys::VSILFILE,
+    /// the remote file's path for the inner file system
+    path: CString,
+    /// opened at the first missing chunk, null before: reads from the cache need no request
+    inner: std::cell::Cell<*mut gdal_sys::VSILFILE>,
     /// `None` if it could not be opened, e.g. a full directory: reads then go to the inner file
     file: Option<CacheFile>,
     size: u64,
@@ -548,14 +585,29 @@ impl Handle {
         CHUNK_SIZE.min(self.size - index * CHUNK_SIZE)
     }
 
-    /// Reads exactly `buffer.len()` bytes at `start` from the inner file.
+    /// Reads exactly `buffer.len()` bytes at `start` from the inner file, which it opens first if
+    /// this handle has not yet.
     fn inner_read(&self, start: u64, buffer: &mut [u8]) -> Result<(), ()> {
-        // SAFETY: `inner` is open until `close`, and `buffer` holds `buffer.len()` bytes
-        let got = unsafe {
-            if gdal_sys::VSIFSeekL(self.inner, start, 0 /* SEEK_SET */) != 0 {
+        if self.inner.get().is_null() {
+            // SAFETY: a valid path; the handle is closed in `close`. The size is known, so the open
+            // need not download the file's start (`GDAL_INGESTED_BYTES_AT_OPEN`, at least one chunk)
+            let inner = unsafe {
+                with_thread_local_option(c"GDAL_INGESTED_BYTES_AT_OPEN", c"1024", || {
+                    gdal_sys::VSIFOpenExL(self.path.as_ptr(), c"rb".as_ptr(), 0)
+                })
+            };
+            if inner.is_null() {
                 return Err(());
             }
-            gdal_sys::VSIFReadL(buffer.as_mut_ptr().cast(), 1, buffer.len(), self.inner)
+            self.inner.set(inner);
+        }
+        let inner = self.inner.get();
+        // SAFETY: `inner` is open until `close`, and `buffer` holds `buffer.len()` bytes
+        let got = unsafe {
+            if gdal_sys::VSIFSeekL(inner, start, 0 /* SEEK_SET */) != 0 {
+                return Err(());
+            }
+            gdal_sys::VSIFReadL(buffer.as_mut_ptr().cast(), 1, buffer.len(), inner)
         };
         (got == buffer.len()).then_some(()).ok_or(())
     }
@@ -586,48 +638,103 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The file name stem of a remote file version, remembered per process for
-/// [`VERSION_CHECK_INTERVAL`].
-fn version(cache: &ByteCache, key: &str, inner: &CStr, size: u64) -> String {
-    let id = (key.to_string(), inner.to_bytes().to_vec(), size);
-    if let Some((stem, checked)) = lock(&cache.versions).get(&id)
+/// The link through which workers share the version of a remote file: a SHA-256 of key and inner
+/// path.
+fn version_link(cache: &ByteCache, key: &str, inner: &[u8]) -> PathBuf {
+    let mut hash = Sha256::new();
+    hash.update(key.as_bytes());
+    hash.update([0]);
+    hash.update(inner);
+    cache
+        .directory
+        .join(format!("{}.{VERSION_EXTENSION}", hex(&hash.finalize())))
+}
+
+/// The version of a remote file that this or another worker checked less than
+/// [`VERSION_CHECK_INTERVAL`] ago.
+fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
+    let id = (key.to_string(), inner.to_bytes().to_vec());
+    if let Some((version, checked)) = lock(&cache.versions).get(&id)
         && checked.elapsed() < VERSION_CHECK_INTERVAL
     {
-        return stem.clone();
+        return Some(version.clone());
     }
+    let link = version_link(cache, key, inner.to_bytes());
+    let age = std::fs::symlink_metadata(&link)
+        .ok()?
+        .modified()
+        .ok()?
+        .elapsed()
+        .ok()?;
+    if age >= VERSION_CHECK_INTERVAL {
+        return None;
+    }
+    let target = std::fs::read_link(&link).ok()?;
+    let mut parts = target.to_str()?.split(' ');
+    let version = Version {
+        size: parts.next()?.parse().ok()?,
+        mtime: parts.next()?.parse().ok()?,
+        stem: parts.next().filter(|stem| is_cache_stem(stem))?.to_string(),
+    };
+    let checked = Instant::now().checked_sub(age).unwrap_or_else(Instant::now);
+    lock(&cache.versions).put(id, (version.clone(), checked));
+    Some(version)
+}
+
+/// Remembers the version of a remote file that the inner file system just reported, for this
+/// worker and, through its link, for the others.
+fn remember(cache: &ByteCache, key: &str, inner: &CStr, stat: &libc::stat64) -> Version {
+    static TEMPORARY: AtomicU64 = AtomicU64::new(0);
+    let (size, mtime) = (stat.st_size as u64, stat.st_mtime);
     let mut hash = Sha256::new();
     hash.update(key.as_bytes());
     hash.update([0]);
     hash.update(inner.to_bytes());
     hash.update([0]);
     hash.update(size.to_be_bytes());
-    // SAFETY: GDAL returns a list owned by the caller or null; it is freed below. Asking may cost
-    // a request, hence the memo.
-    unsafe {
-        let headers =
-            gdal_sys::VSIGetFileMetadata(inner.as_ptr(), c"HEADERS".as_ptr(), std::ptr::null_mut());
-        if !headers.is_null() {
-            let mut entry = headers;
-            while !(*entry).is_null() {
-                let header = CStr::from_ptr(*entry).to_bytes();
-                let name_len = header
-                    .iter()
-                    .position(|&c| c == b'=')
-                    .unwrap_or(header.len());
-                let name = &header[..name_len];
-                if name.eq_ignore_ascii_case(b"etag") || name.eq_ignore_ascii_case(b"last-modified")
-                {
-                    hash.update(header);
-                    hash.update([0]);
-                }
-                entry = entry.add(1);
-            }
-            gdal_sys::CSLDestroy(headers);
-        }
+    hash.update(mtime.to_be_bytes());
+    let version = Version {
+        size,
+        mtime,
+        stem: hex(&hash.finalize()),
+    };
+    lock(&cache.versions).put(
+        (key.to_string(), inner.to_bytes().to_vec()),
+        (version.clone(), Instant::now()),
+    );
+    // replaced at once by a rename, so another worker reads the old or the new version
+    let link = version_link(cache, key, inner.to_bytes());
+    let temporary = link.with_extension(format!(
+        "{}-{}",
+        std::process::id(),
+        TEMPORARY.fetch_add(1, Ordering::Relaxed)
+    ));
+    let target = format!("{size} {mtime} {}", version.stem);
+    if std::os::unix::fs::symlink(target, &temporary).is_ok()
+        && std::fs::rename(&temporary, &link).is_err()
+    {
+        let _ = std::fs::remove_file(&temporary);
     }
-    let stem = hex(&hash.finalize());
-    lock(&cache.versions).put(id, (stem.clone(), Instant::now()));
-    stem
+    version
+}
+
+/// Runs `f` with the GDAL config option `name` set to `value` in this thread.
+///
+/// # Safety
+/// `f` must not change the option itself.
+unsafe fn with_thread_local_option<R>(name: &CStr, value: &CStr, f: impl FnOnce() -> R) -> R {
+    // SAFETY: valid strings; GDAL copies them, and the old value is copied before it is replaced
+    unsafe {
+        let old = gdal_sys::CPLGetThreadLocalConfigOption(name.as_ptr(), std::ptr::null());
+        let old = (!old.is_null()).then(|| CStr::from_ptr(old).to_owned());
+        gdal_sys::CPLSetThreadLocalConfigOption(name.as_ptr(), value.as_ptr());
+        let result = f();
+        gdal_sys::CPLSetThreadLocalConfigOption(
+            name.as_ptr(),
+            old.as_ref().map_or(std::ptr::null(), |old| old.as_ptr()),
+        );
+        result
+    }
 }
 
 unsafe extern "C" fn open(
@@ -652,28 +759,38 @@ unsafe extern "C" fn open(
     let Ok(inner) = CString::new(inner) else {
         return std::ptr::null_mut();
     };
-    // SAFETY: valid strings; the handle is closed in `close` or below
-    let (handle, size) = unsafe {
-        // with errors reported, so that a missing file stays "not found" (see `open_failed`)
-        VSIErrorReset();
-        let handle = gdal_sys::VSIFOpenExL(inner.as_ptr(), c"rb".as_ptr(), 1);
-        if handle.is_null() {
-            open_failed();
-            return std::ptr::null_mut();
+    let (version, handle) = match known(cache, key, &inner) {
+        Some(version) => (version, std::ptr::null_mut()),
+        None => {
+            // SAFETY: a valid path and buffer; the handle is closed in `close` or below. Opened as
+            // without the cache, with errors reported, so that a missing file stays "not found"
+            // (see `open_failed`); the stat after it is answered from what the open learned.
+            unsafe {
+                VSIErrorReset();
+                let handle = gdal_sys::VSIFOpenExL(inner.as_ptr(), c"rb".as_ptr(), 1);
+                if handle.is_null() {
+                    open_failed();
+                    return std::ptr::null_mut();
+                }
+                let mut stat: libc::stat64 = std::mem::zeroed();
+                if gdal_sys::VSIStatExL(inner.as_ptr(), (&raw mut stat).cast(), 0) != 0
+                    || stat.st_mode & libc::S_IFMT != libc::S_IFREG
+                {
+                    gdal_sys::VSIFCloseL(handle);
+                    return std::ptr::null_mut();
+                }
+                (remember(cache, key, &inner, &stat), handle)
+            }
         }
-        if gdal_sys::VSIFSeekL(handle, 0, 2 /* SEEK_END */) != 0 {
-            gdal_sys::VSIFCloseL(handle);
-            return std::ptr::null_mut();
-        }
-        (handle, gdal_sys::VSIFTellL(handle))
     };
-    let stem = version(cache, key, &inner, size);
-    let file = CacheFile::open(&cache.directory, &stem, size)
+    let size = version.size;
+    let file = CacheFile::open(&cache.directory, &version.stem, size)
         .inspect_err(|_| cache.failed_write())
         .ok();
     Box::into_raw(Box::new(Handle {
         cache,
-        inner: handle,
+        path: inner,
+        inner: std::cell::Cell::new(handle),
         file,
         size,
         position: 0,
@@ -704,18 +821,42 @@ unsafe fn open_failed() {
     unsafe { *libc::__errno_location() = if not_found { libc::ENOENT } else { libc::EIO } };
 }
 
+/// The size and modification time of a file whose version is known, without a request; else what
+/// the inner file system says, and the version is remembered.
 unsafe extern "C" fn stat(
-    _user_data: *mut c_void,
+    user_data: *mut c_void,
     filename: *const c_char,
     stat_buf: *mut gdal_sys::VSIStatBufL,
     flags: c_int,
 ) -> c_int {
-    // SAFETY: GDAL passes a null-terminated string
-    let Some(inner) = (unsafe { inner_path(filename) }) else {
+    // SAFETY: GDAL passes the pointer given at install and a null-terminated string
+    let (cache, filename) = unsafe { (&*user_data.cast::<ByteCache>(), CStr::from_ptr(filename)) };
+    let Some((key, inner)) = filename.to_str().ok().and_then(unwrap) else {
         return -1;
     };
+    let Ok(inner) = CString::new(inner) else {
+        return -1;
+    };
+    // `VSIStatBufL` is `stat64` on Linux, opaque in the bindings
+    let buffer = stat_buf.cast::<libc::stat64>();
+    if let Some(version) = known(cache, key, &inner) {
+        // SAFETY: GDAL passes a buffer for one stat
+        unsafe {
+            let stat_buf = buffer;
+            std::ptr::write_bytes(stat_buf, 0, 1);
+            (*stat_buf).st_size = version.size as _;
+            (*stat_buf).st_mtime = version.mtime;
+            (*stat_buf).st_mode = libc::S_IFREG | 0o444;
+        }
+        return 0;
+    }
     // SAFETY: the buffer is GDAL's, filled by the inner file system
-    unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) }
+    let result = unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) };
+    // SAFETY: filled, as the stat succeeded
+    if result == 0 && unsafe { (*buffer).st_mode } & libc::S_IFMT == libc::S_IFREG {
+        remember(cache, key, &inner, unsafe { &*buffer });
+    }
+    result
 }
 
 /// The listing of the inner directory, so that drivers find sibling files (`.ovr`, `.aux.xml`)
@@ -819,7 +960,11 @@ unsafe extern "C" fn eof(file: *mut c_void) -> c_int {
 unsafe extern "C" fn close(file: *mut c_void) -> c_int {
     // SAFETY: GDAL closes each handle once
     let h = unsafe { Box::from_raw(file.cast::<Handle>()) };
-    unsafe { gdal_sys::VSIFCloseL(h.inner) }
+    let inner = h.inner.get();
+    if inner.is_null() {
+        return 0;
+    }
+    unsafe { gdal_sys::VSIFCloseL(inner) }
 }
 
 /// The operators' bench HTTP range server, for tests of remote reads.
@@ -890,16 +1035,26 @@ mod tests {
         buffer
     }
 
+    /// The version of a test file, as an open finds it.
+    fn version_of(path: &Path, n: u64) -> Version {
+        let (_dir, cache) = cache();
+        let inner = CString::new(path.to_str().unwrap()).unwrap();
+        // SAFETY: a valid path and buffer
+        let stat = unsafe {
+            let mut stat: libc::stat64 = std::mem::zeroed();
+            assert_eq!(
+                gdal_sys::VSIStatExL(inner.as_ptr(), (&raw mut stat).cast(), 0),
+                0
+            );
+            stat
+        };
+        remember(cache, &key(n), &inner, &stat)
+    }
+
     /// The cache file of a test file, opened as a handle opens it.
     fn file_of(path: &Path, n: u64, size: u64) -> CacheFile {
         let (_dir, cache) = cache();
-        let inner = CString::new(path.to_str().unwrap()).unwrap();
-        CacheFile::open(
-            &cache.directory,
-            &version(cache, &key(n), &inner, size),
-            size,
-        )
-        .unwrap()
+        CacheFile::open(&cache.directory, &version_of(path, n).stem, size).unwrap()
     }
 
     /// A handle on a local file through a cache file, as `open` builds it for a remote one.
@@ -911,7 +1066,8 @@ mod tests {
         assert!(!file.is_null());
         Handle {
             cache,
-            inner: file,
+            path: inner,
+            inner: std::cell::Cell::new(file),
             file: Some(file_of(path, n, size)),
             size,
             position: 0,
@@ -922,7 +1078,7 @@ mod tests {
 
     fn close(handle: &Handle) {
         // SAFETY: opened in `handle_on`, closed once
-        unsafe { gdal_sys::VSIFCloseL(handle.inner) };
+        unsafe { gdal_sys::VSIFCloseL(handle.inner.get()) };
     }
 
     #[test]
@@ -1103,8 +1259,7 @@ mod tests {
         let len = 3 * CHUNK_SIZE as usize;
         let (_dir, path, bytes) = file(len);
         let cached = cached_path(&path, 9);
-        let inner = CString::new(path.to_str().unwrap()).unwrap();
-        let stem = version(cache, &key(9), &inner, len as u64);
+        let stem = version_of(&path, 9).stem;
         unsafe {
             let file = gdal_sys::VSIFOpenL(cached.as_ptr(), c"rb".as_ptr());
             let mut buffer = vec![0_u8; 100];
@@ -1148,7 +1303,7 @@ mod tests {
     }
 
     /// The case the cache is for: a remote file, read again by a process whose curl cache does not
-    /// hold it, downloads nothing but what it asks the server about the file.
+    /// hold it, costs no request, as another worker shared the file's version.
     #[test]
     #[serial_test::serial]
     fn it_downloads_nothing_when_reading_a_remote_file_again() {
@@ -1180,13 +1335,18 @@ mod tests {
         let direct = read(&test_data("raster/landcover/landcover.tif"));
 
         assert_eq!(read(&cached), direct);
-        let gets = server.gets();
-        assert!(gets > 0);
+        let (requests, _) = server.totals();
+        assert!(requests > 0);
 
-        // as a new worker: GDAL's own cache of the file is gone
+        // as a new worker: GDAL's own cache of the file and this worker's versions are gone
         unsafe { gdal_sys::VSICurlClearCache() };
+        lock(&cache().1.versions).clear();
         assert_eq!(read(&cached), direct);
-        assert_eq!(server.gets(), gets, "no chunk downloaded again");
+        assert_eq!(
+            server.totals().0,
+            requests,
+            "no request: the version is shared"
+        );
     }
 
     /// The inner directory's listing, so that drivers find sibling files by one listing.
@@ -1269,14 +1429,18 @@ mod tests {
     #[test]
     fn it_asks_for_a_forgotten_version_again() {
         let (_, cache) = cache();
-        let inner = CString::new("/nonexistent/file.bin").unwrap();
-        let stem = version(cache, &key(16), &inner, 10);
-        assert_eq!(version(cache, &key(16), &inner, 10), stem, "remembered");
-        cache.forget(Path::new("/nonexistent/file.bin"));
-        assert!(
-            lock(&cache.versions)
-                .iter()
-                .all(|((_, path, _), _)| path != inner.to_bytes())
+        let (_dir, path, _) = file(10);
+        let inner = CString::new(path.to_str().unwrap()).unwrap();
+        let version = version_of(&path, 16);
+        assert_eq!(known(cache, &key(16), &inner), Some(version.clone()));
+        // as another worker: only the link knows it
+        lock(&cache.versions).pop(&(key(16), inner.to_bytes().to_vec()));
+        assert_eq!(known(cache, &key(16), &inner), Some(version), "shared");
+        cache.forget(&path);
+        assert_eq!(
+            known(cache, &key(16), &inner),
+            None,
+            "forgotten by all workers"
         );
     }
 
