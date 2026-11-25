@@ -632,6 +632,10 @@ impl StacMultiBandMetaData {
     /// over the view's search box `view_bbox`, if the server can tell. Nothing is searched. A step
     /// without items is empty for every cell inside that box, so it is stored as such for them,
     /// unless they are so many that storing them would flood the cache.
+    ///
+    /// An aggregation counts an item at its `datetime`, which for an item with a time range is its
+    /// start. A later step of the range would look empty, so for such items a step without one
+    /// is not known (`None`) and nothing is stored as empty.
     async fn steps_with_items(
         &self,
         items_url: &Url,
@@ -640,13 +644,13 @@ impl StacMultiBandMetaData {
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
         spatial_bounds: SpatialPartition2D,
         view_bbox: BoundingBox2D,
-    ) -> Option<Vec<bool>> {
+    ) -> Option<Vec<Option<bool>>> {
         // what is cached already needs no request at all, not even the aggregation
         if let Some(has_data) = self
             .cached_steps_with_items(time_steps, cell_bboxes, spatial_bounds)
             .await
         {
-            return Some(has_data);
+            return Some(has_data.into_iter().map(Some).collect());
         }
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return None;
@@ -673,14 +677,18 @@ impl StacMultiBandMetaData {
             .filter(|(_, bbox)| view_bbox.contains_bbox(bbox))
             .copied()
             .collect();
-        if inside.len() <= self.query_cache.max_footprint_searches() {
+        let ranges = self.item_time == StacItemTime::Range;
+        if !ranges && inside.len() <= self.query_cache.max_footprint_searches() {
             self.store_empty_steps(dataset_id, time_steps, &with_items, &inside)
                 .await;
         }
         Some(
             time_steps
                 .iter()
-                .map(|step| step_has_items(*step, &with_items))
+                .map(|step| {
+                    let has_items = step_has_items(*step, &with_items);
+                    (has_items || !ranges).then_some(has_items)
+                })
                 .collect(),
         )
     }
@@ -694,10 +702,9 @@ impl StacMultiBandMetaData {
         range: TimeInterval,
         bbox: BoundingBox2D,
     ) -> BoxFuture<'static, Option<Vec<TimeInterval>>> {
-        // An aggregation counts an item at its `datetime` only. An item whose time range covers
-        // several steps would leave the others empty, which the cache would then keep.
-        let request = (self.datetime_frequency_aggregation
-            && self.item_time == StacItemTime::Datetime)
+        // for items with a time range only the step of their start, see `steps_with_items`
+        let request = self
+            .datetime_frequency_aggregation
             .then(|| items_url.join("aggregate").ok())
             .flatten()
             .map(|aggregate_url| (self.client.clone(), aggregate_url));
@@ -4780,6 +4787,51 @@ mod grid_request_tests {
             .unwrap();
         assert_eq!(rest.has_data(0), Some(false));
         assert_eq!(rest.has_data(1), Some(true));
+    }
+
+    #[tokio::test]
+    async fn it_availability_of_items_with_a_time_range_tells_only_the_steps_of_their_start() {
+        let server = Server::run();
+        // the aggregation counts an item at its start: a range from the 5th to the 6th is in the
+        // bucket of the 5th only
+        expect_aggregation_in(
+            &server,
+            "0.10000,0.00000,0.40000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999999Z",
+            &["2026-01-05T00:00:00.000Z"],
+        );
+        // so a step without a bucket is not stored as empty: a map tile of it searches
+        let starts = new_starts();
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-06T00:00:00.000Z/2026-01-06T23:59:59.999999Z",
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.item_time = StacItemTime::Range;
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(5, 7)))
+            .await
+            .unwrap();
+        assert!(info.tells_availability());
+        assert_eq!(info.has_data(0), Some(true));
+        assert_eq!(info.has_data(1), None);
+
+        meta.first_part(query(bounds(0.1, 0.4), interval(6)))
+            .await
+            .unwrap();
+        assert_eq!(starts.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
