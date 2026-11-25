@@ -864,9 +864,11 @@ export class LayersComponent {
             const pending = this.moveToDataPending();
             const footprints = this.footprintsService;
             const time = this.currentTime();
-            // the dates of the new source: no layer is set while its presets load, see `MainComponent`
-            if (!pending || !time || !footprints.layer() || footprints.isLoading() || !footprints.stepsOfSelection().length) return;
+            // the dates of the new source: no layer is set while its presets load, see `MainComponent`; without dates,
+            // e.g. in a view that needs too many searches, the time of its data tells whether the date lies outside it
+            if (!pending || !time || !footprints.layer() || footprints.isLoading()) return;
             const outside = footprints.selectedOutsideData();
+            if (!footprints.stepsOfSelection().length && !outside) return;
             untracked(() => {
                 this.moveToDataPending.set(undefined);
                 if (!outside || (pending.time !== undefined && pending.time !== time.start.valueOf())) return;

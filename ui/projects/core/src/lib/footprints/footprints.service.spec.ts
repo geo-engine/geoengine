@@ -682,6 +682,28 @@ describe('FootprintsService overlay', () => {
             expect(service.selectedOutsideData()).toEqual({direction: 1, step: day(-3, TimeStepFootprintStatus.Unknown)});
         });
 
+        it('tells by the time of the data that the selected date lies before it where no dates are loaded', async () => {
+            // the data starts on 1 June 2026, after the selected date, and the view has no dates, e.g. too many searches
+            dataTime = new Time(Date.UTC(2026, 5, 1), Date.UTC(2030, 0, 1));
+            vi.setSystemTime(Date.UTC(2026, 8, 1));
+            getFootprints.mockResolvedValue({...FOOTPRINTS, steps: []});
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.steps()).toEqual([]);
+            expect(service.selectedOutsideData()).toMatchObject({direction: -1, step: {time: {start: Date.UTC(2026, 5, 1)}}});
+        });
+
+        it('tells by the time of the data that the selected date lies after it, at the start of the day of its end', async () => {
+            // the data ends at noon on 15 February 2026, before the selected date, and the view has no dates
+            dataTime = new Time(Date.UTC(2020, 0, 1), Date.UTC(2026, 1, 15, 12));
+            getFootprints.mockResolvedValue({...FOOTPRINTS, steps: []});
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedOutsideData()).toMatchObject({direction: 1, step: {time: {start: Date.UTC(2026, 1, 15)}}});
+        });
+
         it('points after the data to its last date where no date of the view has scenes', async () => {
             answerDates([day(-3, TimeStepFootprintStatus.Empty), day(-2, TimeStepFootprintStatus.Empty)]);
             const service = createService();

@@ -17,6 +17,7 @@ import {
     SpatialReference,
     Time,
     TimeStepDuration,
+    timeStepDurationToDurationInputArg2,
     UUID,
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle, viewCoverage, ViewCoverage} from './footprint-overlay';
@@ -401,7 +402,24 @@ export class FootprintsService {
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
         const steps = this.stepsOfSelection();
         const time = this.time()?.start.valueOf();
-        if (this.isLoading() || !steps.length || time === undefined || stepAt(steps, time)) return undefined;
+        if (this.isLoading() || time === undefined) return undefined;
+        if (!steps.length) {
+            // no dates came, e.g. in a view that needs too many searches: the time of the data tells, at its start or at
+            // the start of the unit of its end; not before the dates came, which tell the nearest date with scenes
+            const status = this.footprintsResource.status();
+            const range = this.timeRange();
+            if (!range || (status !== 'resolved' && status !== 'error')) return undefined;
+            const unit = timeStepDurationToDurationInputArg2(this.timeStep()?.durationUnit ?? 'day');
+            const at = (start: number): TimeStepFootprint => ({
+                time: {start, end: start + 1},
+                status: TimeStepFootprintStatus.Unknown,
+                bounds: [],
+            });
+            if (time >= range.end) return {direction: 1, step: at(new Time(range.end - 1).start.startOf(unit).valueOf())};
+            if (time < range.start) return {direction: -1, step: at(range.start)};
+            return undefined;
+        }
+        if (stepAt(steps, time)) return undefined;
         const mayHaveScenes = (step: TimeStepFootprint): boolean => step.status !== TimeStepFootprintStatus.Empty;
         if (time >= steps[steps.length - 1].time.end)
             return {direction: 1, step: [...steps].reverse().find(mayHaveScenes) ?? steps[steps.length - 1]};
