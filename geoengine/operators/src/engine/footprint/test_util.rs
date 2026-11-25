@@ -13,8 +13,8 @@ use futures::TryStreamExt;
 use geoengine_datatypes::{
     primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval, TimeStep},
     raster::{
-        EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
-        RasterTile2D, RenameBands,
+        EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, GridSize,
+        RasterDataType, RasterTile2D, RenameBands,
     },
     spatial_reference::SpatialReference,
     util::test::TestDefault,
@@ -87,6 +87,24 @@ pub(crate) fn source(
     band_count: u32,
     time: TimeDescriptor,
 ) -> TypedRasterOperator {
+    source_of_tiles(data, band_count, time, 2)
+}
+
+/// Four tiles in a row. Only tile 0 has data, and only in the first of the two time steps.
+pub(crate) fn one_of_four_tiles_source() -> TypedRasterOperator {
+    let tiles = [0, 5]
+        .into_iter()
+        .flat_map(|start| (0..4).map(move |x| tile(start, x, 0, start == 0 && x == 0)))
+        .collect();
+    source_of_tiles(tiles, 1, regular_time(), 4)
+}
+
+fn source_of_tiles(
+    data: Vec<RasterTile2D<u8>>,
+    band_count: u32,
+    time: TimeDescriptor,
+    tiles_in_row: isize,
+) -> TypedRasterOperator {
     let bands = (0..band_count)
         .map(|band| RasterBandDescriptor::new_unitless(format!("band{band}")))
         .collect();
@@ -100,7 +118,7 @@ pub(crate) fn source(
                 time,
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
-                    grid_box(-2, -1, 0, 3),
+                    grid_box(-2, -1, 0, tiles_in_row * 2 - 1),
                 ),
                 bands: RasterBandDescriptors::new(bands).unwrap(),
             },
@@ -134,6 +152,37 @@ pub(crate) async fn checked_footprints(
     operator: TypedRasterOperator,
     bands: &[u32],
 ) -> Vec<Footprint> {
+    checked_footprints_and_bounds(operator, bands).await.0
+}
+
+/// For an operator over [`one_of_four_tiles_source`] that keeps the time steps: checks the footprints
+/// like [`checked_footprints`], and that they tell where the data is, i.e. the first step has boxes
+/// that leave out the end of the row, and the second step is empty.
+pub(crate) async fn assert_footprints_follow_the_data(operator: TypedRasterOperator) {
+    let (footprints, bounds) = checked_footprints_and_bounds(operator, &[0]).await;
+    assert_eq!(footprints.len(), 2);
+
+    let with_data = boxes(&footprints[0].bounds);
+    assert_ne!(with_data, []);
+    let end_of_row = grid_box(
+        bounds.y_min(),
+        bounds.y_max(),
+        bounds.x_max(),
+        bounds.x_max(),
+    );
+    assert!(
+        !footprints[0].bounds.intersects(&end_of_row),
+        "{with_data:?} covers the end of the row of {bounds:?}"
+    );
+
+    assert!(footprints[1].bounds.is_empty());
+}
+
+/// [`checked_footprints`], with the pixel bounds of the operator that were queried.
+async fn checked_footprints_and_bounds(
+    operator: TypedRasterOperator,
+    bands: &[u32],
+) -> (Vec<Footprint>, GridBoundingBox2D) {
     let mut exe_ctx = MockExecutionContext::test_default();
     exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
     let query_ctx = exe_ctx.mock_query_context_test_default();
@@ -147,8 +196,14 @@ pub(crate) async fn checked_footprints(
         .get_u8()
         .unwrap();
 
+    // all of the operator's data, on whole tiles
+    let bounds = processor
+        .result_descriptor()
+        .spatial_grid_descriptor()
+        .tiling_grid_definition(exe_ctx.tiling_specification)
+        .tiling_grid_bounds();
     let query = RasterQueryRectangle::new(
-        grid_box(-2, -1, 0, 3),
+        bounds,
         TimeInterval::new_unchecked(0, 10),
         BandSelection::new(bands.to_vec()).unwrap(),
     );
@@ -183,23 +238,85 @@ pub(crate) async fn checked_footprints(
         .unwrap();
     assert_ne!(tiles.len(), 0);
 
+    assert_data_within_footprints(&tiles, &footprints);
+
+    (footprints, bounds)
+}
+
+/// Checks that every valid pixel of `tiles` lies in the footprint of its time step: a footprint that is
+/// too tight would silently hide data, also by less than a tile.
+pub(crate) fn assert_data_within_footprints(tiles: &[RasterTile2D<u8>], footprints: &[Footprint]) {
     for tile in tiles.iter().filter(|tile| !tile.is_empty()) {
         let footprint = footprints
             .iter()
             .find(|footprint| footprint.time == tile.time)
             .expect("every time step of the data has a footprint");
-        assert!(
-            footprint
-                .bounds
-                .intersects(&tile.tile_information().global_pixel_bounds()),
-            "tile {:?} at {:?} is outside of {:?}",
-            tile.tile_position,
-            tile.time,
-            footprint.bounds
-        );
+        let upper_left = tile.tile_information().global_upper_left_pixel_idx();
+        let [y_min, x_min] = upper_left.inner();
+        let width = tile.tile_information().tile_size_in_pixels().axis_size_x();
+        let materialized = tile.clone().into_materialized_tile();
+        for (index, _) in materialized
+            .grid_array
+            .validity_mask
+            .data
+            .iter()
+            .enumerate()
+            .filter(|(_, valid)| **valid)
+        {
+            let pixel = [
+                y_min + (index / width) as isize,
+                x_min + (index % width) as isize,
+            ];
+            assert!(
+                footprint
+                    .bounds
+                    .intersects(&GridBoundingBox2D::new_unchecked(pixel, pixel)),
+                "pixel {pixel:?} at {:?} is outside of {:?}",
+                tile.time,
+                footprint.bounds
+            );
+        }
     }
+}
 
-    footprints
+/// All tiles of the operator, with footprint skipping off or on.
+pub(crate) async fn tiles_with_skipping(
+    operator: TypedRasterOperator,
+    footprint_skipping: bool,
+) -> Vec<RasterTile2D<u8>> {
+    let mut exe_ctx = MockExecutionContext::test_default();
+    exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+    let mut query_ctx = exe_ctx.mock_query_context_test_default();
+    query_ctx.footprint_skipping = footprint_skipping;
+
+    let processor = operator
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+    let bounds = processor
+        .result_descriptor()
+        .spatial_grid_descriptor()
+        .tiling_grid_definition(exe_ctx.tiling_specification)
+        .tiling_grid_bounds();
+
+    processor
+        .raster_query(
+            RasterQueryRectangle::new(
+                bounds,
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::first(),
+            ),
+            &query_ctx,
+        )
+        .await
+        .unwrap()
+        .try_collect()
+        .await
+        .unwrap()
 }
 
 pub(crate) fn step_boxes(footprints: &[Footprint]) -> Vec<&[GridBoundingBox2D]> {

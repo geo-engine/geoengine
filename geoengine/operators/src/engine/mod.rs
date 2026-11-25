@@ -7,8 +7,8 @@ pub use execution_context::{
     MockExecutionContext, StaticMetaData, StatisticsWrappingMockExecutionContext,
 };
 pub use footprint::{
-    DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT, Footprint, FootprintBounds, FootprintCombine,
-    FootprintPrecision, unknown_footprints, zip_footprints,
+    DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT, DEFAULT_FOOTPRINT_TILES_LIMIT, Footprint,
+    FootprintBounds, FootprintCombine, FootprintPrecision, unknown_footprints, zip_footprints,
 };
 pub use initialized_sources::{
     InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,

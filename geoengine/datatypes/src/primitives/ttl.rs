@@ -8,7 +8,7 @@ pub const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
 /// Config parameter to indicate how long a value may be cached (0 = must not be cached)
 ///
 /// The serializer outputs the concrete cache ttl; deserialization also accepts "max".
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct CacheTtlSeconds(u32);
 
 impl CacheTtlSeconds {

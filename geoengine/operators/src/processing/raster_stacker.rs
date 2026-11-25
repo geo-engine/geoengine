@@ -17,7 +17,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialResolution,
+};
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
 };
@@ -455,6 +457,8 @@ where
                         .map_ok(|time| Footprint {
                             time,
                             bounds: FootprintBounds::empty(),
+                            // no band of it is selected, whatever its data
+                            cache_ttl: CacheTtlSeconds::max(),
                         })
                         .boxed(),
                 );

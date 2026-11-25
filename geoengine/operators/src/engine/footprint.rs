@@ -5,7 +5,7 @@ use futures::{
     stream::{self, BoxStream},
 };
 use geoengine_datatypes::{
-    primitives::TimeInterval,
+    primitives::{CacheTtlSeconds, TimeInterval},
     raster::{GridBoundingBox2D, GridBoundingBoxExt, GridContains, GridIntersection, GridSize},
 };
 use std::sync::Arc;
@@ -14,6 +14,10 @@ use std::sync::Arc;
 /// query context. Footprints with more boxes are merged, so that intersecting and combining them
 /// stays cheap: it takes the product of the numbers of boxes.
 pub const DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT: usize = 64;
+
+/// The most output tiles whose source an operator visits for a footprint query if nothing else is
+/// configured, see `footprint_tiles_limit` of the query context.
+pub const DEFAULT_FOOTPRINT_TILES_LIMIT: usize = 10_000;
 
 /// Where a raster may contain data in one time step of a query, in the raster's pixel space.
 ///
@@ -160,6 +164,9 @@ fn merge_cheapest_pair(kept: &mut Vec<GridBoundingBox2D>) {
 pub struct Footprint {
     pub time: TimeInterval,
     pub bounds: FootprintBounds,
+    /// How long the answer holds, as the cache hint of the data it tells about. A tile skipped
+    /// because of it may be cached only that long, as the empty tile loaded instead would be.
+    pub cache_ttl: CacheTtlSeconds,
 }
 
 /// How the footprints of several inputs make the footprint of one step of their output.
@@ -242,20 +249,29 @@ pub fn zip_footprints(
             return Ok(None);
         };
 
-        let bounds = {
-            let covering = zip
-                .heads
-                .iter()
-                .map(|head| {
-                    head.as_ref()
-                        .filter(|head| {
-                            head.time.start() <= time.start() && time.end() <= head.time.end()
-                        })
-                        .map(|head| &head.bounds)
+        let covering = zip
+            .heads
+            .iter()
+            .map(|head| {
+                head.as_ref().filter(|head| {
+                    head.time.start() <= time.start() && time.end() <= head.time.end()
                 })
-                .collect::<Vec<_>>();
-            combine_bounds(combine, &covering, max_boxes)
-        };
+            })
+            .collect::<Vec<_>>();
+        let bounds = combine_bounds(
+            combine,
+            &covering
+                .iter()
+                .map(|head| head.map(|head| &head.bounds))
+                .collect::<Vec<_>>(),
+            max_boxes,
+        );
+        let cache_ttl = covering
+            .iter()
+            .flatten()
+            .map(|head| head.cache_ttl)
+            .min()
+            .unwrap_or_else(CacheTtlSeconds::max);
 
         for head in &mut zip.heads {
             if head
@@ -267,7 +283,14 @@ pub fn zip_footprints(
         }
         zip.current = Some(time);
 
-        Ok::<_, crate::error::Error>(Some((Footprint { time, bounds }, zip)))
+        Ok::<_, crate::error::Error>(Some((
+            Footprint {
+                time,
+                bounds,
+                cache_ttl,
+            },
+            zip,
+        )))
     })
     .boxed()
 }
@@ -298,6 +321,7 @@ pub fn unknown_footprints(
             time.map(|time| Footprint {
                 time,
                 bounds: FootprintBounds::Unknown,
+                cache_ttl: CacheTtlSeconds::max(),
             })
         })
         .boxed()
@@ -495,6 +519,7 @@ mod tests {
                 boxes.iter().copied(),
                 DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             ),
+            cache_ttl: CacheTtlSeconds::max(),
         }
     }
 

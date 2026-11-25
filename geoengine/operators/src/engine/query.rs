@@ -77,6 +77,17 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
 
     /// The most boxes a footprint of one time step keeps. More are merged.
     fn footprint_boxes_per_step_limit(&self) -> usize;
+    /// The most output tiles whose source an operator visits for a footprint query. Above, it
+    /// answers that the data may be anywhere.
+    fn footprint_tiles_limit(&self) -> usize;
+    /// Whether operators ask their source where it has data and skip the tiles without.
+    fn footprint_skipping(&self) -> bool;
+    /// Whether the footprints of this query are shown to a user, e.g. in a calendar, and not used to
+    /// answer a raster query. Remote catalogs may then refuse them as too large, while the footprints
+    /// of a raster query search as much as the query itself would.
+    fn footprints_for_display(&self) -> bool {
+        false
+    }
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
@@ -214,6 +225,10 @@ pub struct MockQueryContext {
     pub default_cache_ttl: CacheTtlSeconds,
     pub chunk_byte_size: ChunkByteSize,
     pub footprint_boxes_per_step_limit: usize,
+    /// see [`QueryContext::footprint_tiles_limit`]
+    pub footprint_tiles_limit: usize,
+    /// see [`QueryContext::footprint_skipping`]
+    pub footprint_skipping: bool,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
 
@@ -245,6 +260,8 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: super::DEFAULT_FOOTPRINT_TILES_LIMIT,
+            footprint_skipping: false,
             tiling_specification,
             default_cache_ttl,
             thread_pool,
@@ -275,6 +292,8 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: super::DEFAULT_FOOTPRINT_TILES_LIMIT,
+            footprint_skipping: false,
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
@@ -303,6 +322,8 @@ impl MockQueryContext {
         Self {
             chunk_byte_size,
             footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: super::DEFAULT_FOOTPRINT_TILES_LIMIT,
+            footprint_skipping: false,
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
@@ -328,6 +349,14 @@ impl QueryContext for MockQueryContext {
 
     fn footprint_boxes_per_step_limit(&self) -> usize {
         self.footprint_boxes_per_step_limit
+    }
+
+    fn footprint_tiles_limit(&self) -> usize {
+        self.footprint_tiles_limit
+    }
+
+    fn footprint_skipping(&self) -> bool {
+        self.footprint_skipping
     }
 
     fn processing_runtime(&self) -> tokio::runtime::Handle {

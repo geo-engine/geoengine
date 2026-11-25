@@ -254,6 +254,10 @@ pub struct QueryContext {
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
     /// The most boxes a footprint keeps for one time step. Footprints with more boxes are merged.
     pub footprint_boxes_per_step_limit: usize,
+    /// The most output tiles whose source an operator visits for a footprint query, see `Settings-default.toml`.
+    pub footprint_tiles_limit: usize,
+    /// Whether operators skip the tiles where their source has no data, see `Settings-default.toml`.
+    pub footprint_skipping: bool,
     /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
     /// output tile
     pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,

@@ -174,6 +174,7 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
+    #[allow(clippy::too_many_lines)]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -389,7 +390,10 @@ impl StacMultiBandMetaData {
             if one_step_request || self.item_time == StacItemTime::Range {
                 // the hits counted here are the ones used, even if the cache drops them meanwhile
                 known = self.cached_steps(&time_steps, &cell_bboxes).await;
-                self.reject_too_many_searches(time_steps.len() * cell_bboxes.len() - known.len())?;
+                self.reject_too_many_searches(
+                    time_steps.len() * cell_bboxes.len() - known.len(),
+                    query.for_display,
+                )?;
             } else {
                 known = self
                     .prepare_window_search(
@@ -397,6 +401,7 @@ impl StacMultiBandMetaData {
                         time_interval,
                         time_steps.len(),
                         &cell_bboxes,
+                        query.for_display,
                     )
                     .await?;
             }
@@ -586,14 +591,15 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        for_display: bool,
     ) -> geoengine_operators::util::Result<KnownSteps> {
         if !self.query_cache.stores_results() {
             // Without a cache the loading info searches every step of every cell, one by one.
             // These are the searches the limit has to count.
-            self.reject_too_many_searches(number_of_steps * cell_bboxes.len())?;
+            self.reject_too_many_searches(number_of_steps * cell_bboxes.len(), for_display)?;
             return Ok(KnownSteps::new());
         }
-        self.search_missing_steps(items_url, time_interval, cell_bboxes)
+        self.search_missing_steps(items_url, time_interval, cell_bboxes, for_display)
             .await
     }
 
@@ -794,9 +800,16 @@ impl StacMultiBandMetaData {
 
     /// The limit counts the searches of one part (one chunk of `search_chunk_steps` steps), not of
     /// the whole request. The whole request is bounded by its number of time steps.
-    fn reject_too_many_searches(&self, searches: usize) -> geoengine_operators::util::Result<()> {
+    ///
+    /// Only footprints to show are bounded; those of a raster query search as much as the query
+    /// would.
+    fn reject_too_many_searches(
+        &self,
+        searches: usize,
+        for_display: bool,
+    ) -> geoengine_operators::util::Result<()> {
         let limit = self.query_cache.max_footprint_searches();
-        if searches > limit {
+        if for_display && searches > limit {
             return Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
                 searches,
                 limit,
@@ -818,6 +831,7 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         time_interval: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        for_display: bool,
     ) -> geoengine_operators::util::Result<KnownSteps> {
         let mut known = KnownSteps::new();
         let TimeDimension::Regular(regular) = self.time_dimension else {
@@ -877,7 +891,7 @@ impl StacMultiBandMetaData {
             }
         }
 
-        self.reject_too_many_searches(searches.len())?;
+        self.reject_too_many_searches(searches.len(), for_display)?;
         known.extend(self.search_spans(items_url, dataset_id, searches).await?);
         Ok(known)
     }
@@ -5101,7 +5115,9 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let result = meta.first_part(coverage_query(world, window(3, 5))).await;
+        let result = meta
+            .first_part(coverage_query(world, window(3, 5)).for_display())
+            .await;
 
         assert!(matches!(
             result,
@@ -5285,7 +5301,7 @@ mod grid_request_tests {
             .unwrap();
 
         // one of the two cells is cached, so one search is counted, within the limit
-        meta.first_part(coverage_query(bounds(0.5, 1.5), interval(3)))
+        meta.first_part(coverage_query(bounds(0.5, 1.5), interval(3)).for_display())
             .await
             .unwrap();
 
@@ -5309,7 +5325,7 @@ mod grid_request_tests {
 
         // one cell, but two steps: without a cache each step is a search of its own
         let result = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)).for_display())
             .await;
 
         assert!(matches!(
@@ -5344,7 +5360,9 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         // one step over more cells than the limit, and none of them is cached
-        let one_step = meta.first_part(coverage_query(world, interval(3))).await;
+        let one_step = meta
+            .first_part(coverage_query(world, interval(3)).for_display())
+            .await;
         assert!(matches!(
             one_step,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
@@ -5354,10 +5372,14 @@ mod grid_request_tests {
         meta.first_part(query(world, interval(3))).await.unwrap();
 
         // now the step needs no search, so its footprints are answered
-        let one_step = meta.first_part(coverage_query(world, interval(3))).await;
+        let one_step = meta
+            .first_part(coverage_query(world, interval(3)).for_display())
+            .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
-        let window = meta.first_part(coverage_query(world, window(3, 5))).await;
+        let window = meta
+            .first_part(coverage_query(world, window(3, 5)).for_display())
+            .await;
         assert!(matches!(
             window,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
@@ -5366,15 +5388,46 @@ mod grid_request_tests {
         // A chunk ends on January 7, so these two days are two parts of one step each. They are
         // still a window.
         let across_chunks = meta
-            .first_part(coverage_query(
-                world,
-                TimeInterval::new(interval(6).start(), interval(7).end()).unwrap(),
-            ))
+            .first_part(
+                coverage_query(
+                    world,
+                    TimeInterval::new(interval(6).start(), interval(7).end()).unwrap(),
+                )
+                .for_display(),
+            )
             .await;
         assert!(matches!(
             across_chunks,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn chunk_search_of_a_raster_query_is_not_limited() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(1..)
+                .respond_with(responders::json_encoded(collection(&[], None))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 256,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        // more cells than `max_footprint_searches` (50 in tests), which only bounds footprints to show
+        let loading_info = meta
+            .first_part(coverage_query(world, window(3, 5)))
+            .await
+            .unwrap();
+
+        assert_eq!(loading_info.time_steps().len(), 2);
     }
 
     #[tokio::test]

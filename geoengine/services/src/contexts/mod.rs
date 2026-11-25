@@ -114,6 +114,14 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
         computation: ComputationId,
     ) -> Result<Self::QueryContext>;
 
+    /// A query context for footprints that are shown to a user, see
+    /// [`QueryContext::footprints_for_display`].
+    fn footprints_query_context(
+        &self,
+        processing_graph: ProcessingGraphId,
+        computation: ComputationId,
+    ) -> Result<Self::QueryContext>;
+
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
 
@@ -148,6 +156,9 @@ pub trait GeoEngineDb:
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     footprint_boxes_per_step_limit: usize,
+    footprint_tiles_limit: usize,
+    footprint_skipping: bool,
+    footprints_for_display: bool,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
@@ -177,6 +188,9 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: geoengine_operators::engine::DEFAULT_FOOTPRINT_TILES_LIMIT,
+            footprint_skipping: false,
+            footprints_for_display: false,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -211,6 +225,9 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_tiles_limit: geoengine_operators::engine::DEFAULT_FOOTPRINT_TILES_LIMIT,
+            footprint_skipping: false,
+            footprints_for_display: false,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -235,6 +252,27 @@ impl QueryContextImpl {
         self.footprint_boxes_per_step_limit = footprint_boxes_per_step_limit;
         self
     }
+
+    /// Sets the most output tiles whose source an operator visits for a footprint query.
+    #[must_use]
+    pub fn with_footprint_tiles_limit(mut self, footprint_tiles_limit: usize) -> Self {
+        self.footprint_tiles_limit = footprint_tiles_limit;
+        self
+    }
+
+    /// Sets whether operators skip the tiles where their source has no data.
+    #[must_use]
+    pub fn with_footprint_skipping(mut self, footprint_skipping: bool) -> Self {
+        self.footprint_skipping = footprint_skipping;
+        self
+    }
+
+    /// Marks the footprints of this query as shown to a user.
+    #[must_use]
+    pub fn with_footprints_for_display(mut self) -> Self {
+        self.footprints_for_display = true;
+        self
+    }
 }
 
 #[async_trait::async_trait]
@@ -245,6 +283,18 @@ impl QueryContext for QueryContextImpl {
 
     fn footprint_boxes_per_step_limit(&self) -> usize {
         self.footprint_boxes_per_step_limit
+    }
+
+    fn footprint_tiles_limit(&self) -> usize {
+        self.footprint_tiles_limit
+    }
+
+    fn footprint_skipping(&self) -> bool {
+        self.footprint_skipping
+    }
+
+    fn footprints_for_display(&self) -> bool {
+        self.footprints_for_display
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

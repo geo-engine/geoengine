@@ -287,22 +287,20 @@ where
                 let sub_query =
                     NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
-                let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
-
                 let tiling_strat = self
                     .source
                     .result_descriptor()
                     .tiling_grid_definition(self.tiling_specification)
                     .generate_data_tiling_strategy();
 
-                let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                let sq = RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
                     &self.source,
                     query,
                     tiling_strat,
                     ctx,
                     sub_query,
-                    time_stream,
-                );
+                )
+                .await?;
                 Ok(sq.box_pin())
             },
         )
@@ -333,6 +331,39 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
     {
         self.source.time_query(query, ctx).await
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let tiling_grid = self
+            .source
+            .result_descriptor()
+            .tiling_grid_definition(self.tiling_specification);
+        // the same grid; a pixel reads its neighborhood, so data reaches that far around its box
+        let output_bounds = crate::adapters::source_box_mapping(
+            [
+                self.neighborhood.y_radius() as isize,
+                self.neighborhood.x_radius() as isize,
+            ],
+            tiling_grid.tiling_geo_transform(),
+            tiling_grid.tiling_geo_transform(),
+            None,
+        );
+        crate::adapters::subquery_footprints(
+            &self.source,
+            self.result_descriptor(),
+            query,
+            tiling_grid.generate_data_tiling_strategy(),
+            NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone()),
+            precision,
+            ctx,
+            output_bounds,
+        )
+        .await
     }
 }
 
@@ -813,5 +844,244 @@ mod tests {
             assert_eq!(tile.grid_array.inner_grid.data, data[i]);
             assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
+    }
+
+    #[tokio::test]
+    async fn it_visits_only_the_tiles_of_its_data_for_footprints_and_tells_nothing_beyond_the_limit()
+     {
+        use crate::engine::footprint_test_util::one_of_four_tiles_source;
+        use crate::engine::{Footprint, FootprintBounds, FootprintPrecision};
+        use futures::TryStreamExt as _;
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: one_of_four_tiles_source().into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+        // far more tiles than there are, of which the four of the data are visited
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new(
+                [-1_000_000_000, -1_000_000_000],
+                [1_000_000_000, 1_000_000_000],
+            )
+            .unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let footprints = async |query_ctx: &crate::engine::MockQueryContext| -> Vec<Footprint> {
+            processor
+                .footprint_query(query.clone(), FootprintPrecision::Coverage, query_ctx)
+                .await
+                .unwrap()
+                .try_collect()
+                .await
+                .unwrap()
+        };
+
+        query_ctx.footprint_tiles_limit = 4;
+        let within = footprints(&query_ctx).await;
+        assert_eq!(within.len(), 2);
+        assert!(!within[0].bounds.is_empty());
+        assert!(within[1].bounds.is_empty());
+
+        query_ctx.footprint_tiles_limit = 3;
+        let beyond = footprints(&query_ctx).await;
+        assert_eq!(beyond.len(), 2);
+        assert!(
+            beyond
+                .iter()
+                .all(|footprint| footprint.bounds == FootprintBounds::Unknown)
+        );
+    }
+
+    #[tokio::test]
+    async fn it_caches_only_the_tiles_its_footprint_skipped_as_long_as_the_footprint() {
+        use crate::engine::footprint_test_util::{regular_time, source, tile};
+        use futures::TryStreamExt as _;
+        use geoengine_datatypes::primitives::CacheHint;
+
+        // two tiles of data, whose footprints hold for a minute; the second step has no data
+        let data = [(0, 0, true), (0, 1, false), (5, 0, false), (5, 1, false)]
+            .into_iter()
+            .map(|(start, x, has_data)| RasterTile2D {
+                cache_hint: CacheHint::seconds(60),
+                ..tile(start, x, 0, has_data)
+            })
+            .collect();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        query_ctx.footprint_skipping = true;
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: source(data, 1, regular_time()).into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+
+        // four tiles in a row, of which the last two lie beyond the data of the source
+        let tiles: Vec<RasterTile2D<u8>> = processor
+            .raster_query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new_min_max(-2, -1, 0, 7).unwrap(),
+                    TimeInterval::new_unchecked(0, 10),
+                    BandSelection::first(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let ttl = |start: i64, x: isize| {
+            tiles
+                .iter()
+                .find(|tile| tile.time.start().inner() == start && tile.tile_position.x() == x)
+                .unwrap()
+                .cache_hint
+                .total_ttl_seconds()
+                .seconds()
+        };
+        // skipped because the footprint of the step says so: kept as long as it holds
+        assert!(ttl(5, 0) <= 60);
+        // empty because there is no data of the source at all: no footprint decided that
+        assert!(ttl(0, 2) > 60);
+        assert!(ttl(5, 3) > 60);
+    }
+
+    #[tokio::test]
+    async fn it_has_footprints_that_reach_as_far_as_its_neighborhood() {
+        use crate::engine::footprint_test_util::assert_data_within_footprints;
+        use crate::engine::{
+            FootprintPrecision, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
+        };
+        use crate::mock::{MockRasterSource, MockRasterSourceParams};
+        use futures::TryStreamExt as _;
+        use geoengine_datatypes::primitives::CacheHint;
+        use geoengine_datatypes::raster::{EmptyGrid2D, GeoTransform, RasterDataType};
+        use geoengine_datatypes::spatial_reference::SpatialReference;
+
+        // tiles of 6 × 6 pixels in a row, of which the first has data: a neighborhood of 5 × 5
+        // carries it two pixels into the second, where the source has none; one pixel would not
+        // tell, since the boxes of a footprint are grown by one pixel anyway
+        let shape = GridShape2D::new_2d(6, 6);
+        let time = TimeInterval::new_unchecked(0, 5);
+        let data = (0..2)
+            .map(|x| RasterTile2D::<u8> {
+                time,
+                tile_position: [-1, x].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: if x == 0 {
+                    Grid2D::new(shape, vec![1; 36]).unwrap().into()
+                } else {
+                    EmptyGrid2D::new(shape).into()
+                },
+                properties: Default::default(),
+                cache_hint: CacheHint::max_duration(),
+            })
+            .collect();
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_irregular(Some(time)),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new([-6, 0], [-1, 11]).unwrap(),
+                    ),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .typed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = shape;
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let processor = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::Rectangle { dimensions: [5, 5] },
+                // unlike a sum, it ignores neighbours without data, so data spreads
+                aggregate_function: AggregateFunctionParams::StandardDeviation,
+            },
+            sources: source.into(),
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-6, 0], [-1, 11]).unwrap(),
+            time,
+            BandSelection::first(),
+        );
+
+        let footprints: Vec<_> = processor
+            .footprint_query(query.clone(), FootprintPrecision::Coverage, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let tiles: Vec<RasterTile2D<u8>> = processor
+            .raster_query(query, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        // the data reaches into the second tile
+        assert!(!tiles[1].is_empty());
+        assert_data_within_footprints(&tiles, &footprints);
+    }
+
+    #[tokio::test]
+    async fn it_has_footprints_where_its_tiles_read_data() {
+        use crate::engine::footprint_test_util::{
+            assert_footprints_follow_the_data, one_of_four_tiles_source,
+        };
+
+        // the test tiles of 2 × 2 pixels allow no larger neighborhood
+        assert_footprints_follow_the_data(
+            NeighborhoodAggregate {
+                params: NeighborhoodAggregateParams {
+                    neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                    aggregate_function: AggregateFunctionParams::Sum,
+                },
+                sources: one_of_four_tiles_source().into(),
+            }
+            .typed(),
+        )
+        .await;
     }
 }

@@ -478,41 +478,54 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let state = self.state;
-
-        // setup the subquery
-        let sub_query_spec = TileReprojectionSubQuery {
-            in_srs: self.from,
-            out_srs: self.to,
-            fold_fn: fold_by_coordinate_lookup_future,
-            state,
-            index_cache: Default::default(),
-            approximation_error: self.approximation_error,
-            _phantom_data: PhantomData,
-        };
-
-        let tiling_strat = self
-            .result_descriptor
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            tiling_strat,
-            ctx,
-            sub_query_spec,
-            time_stream,
+        Ok(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
+                &self.source,
+                query,
+                self.tiling_strategy(ctx),
+                ctx,
+                self.sub_query(),
+            )
+            .await?
+            .box_pin(),
         )
-        .box_pin())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+}
+
+impl<Q, P> RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    /// The tiles of the output
+    fn tiling_strategy(
+        &self,
+        ctx: &dyn QueryContext,
+    ) -> geoengine_datatypes::raster::TilingStrategy {
+        self.result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy()
+    }
+
+    /// How a tile of the output is computed from the source
+    fn sub_query<'a>(
+        &self,
+    ) -> impl crate::adapters::SubQueryTileAggregator<'a, P> + 'static + use<'a, Q, P> {
+        TileReprojectionSubQuery {
+            in_srs: self.from,
+            out_srs: self.to,
+            fold_fn: fold_by_coordinate_lookup_future,
+            state: self.state,
+            index_cache: Default::default(),
+            approximation_error: self.approximation_error,
+            _phantom_data: PhantomData,
+        }
     }
 }
 
@@ -530,6 +543,31 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let output_bounds = crate::adapters::source_box_mapping(
+            [1, 1],
+            self.state.in_spatial_grid.geo_transform(),
+            self.state.out_spatial_grid.geo_transform(),
+            Some((self.from, self.to, self.approximation_error)),
+        );
+        crate::adapters::subquery_footprints(
+            &self.source,
+            self.result_descriptor(),
+            query,
+            self.tiling_strategy(ctx),
+            self.sub_query(),
+            precision,
+            ctx,
+            output_bounds,
+        )
+        .await
     }
 }
 

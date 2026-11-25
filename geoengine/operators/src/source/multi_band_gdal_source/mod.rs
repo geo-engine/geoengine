@@ -131,6 +131,8 @@ impl LoadingInfoDetail {
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub detail: LoadingInfoDetail,
+    /// The answer is shown to a user, see [`crate::engine::QueryContext::footprints_for_display`].
+    pub for_display: bool,
     /// The resolution the source produces its tiles in: the native resolution or an
     /// overview level.
     ///
@@ -169,8 +171,15 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             detail,
+            for_display: false,
             resolution: LoadingInfoResolution::Native,
         }
+    }
+
+    #[must_use]
+    pub fn for_display(mut self) -> Self {
+        self.for_display = true;
+        self
     }
 
     /// Sets the resolution the source produces its tiles in.
@@ -443,6 +452,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Footprint>>> {
         let max_boxes = ctx.footprint_boxes_per_step_limit();
+        let default_cache_ttl = self.default_cache_ttl;
         let tiling_grid = self
             .result_descriptor()
             .spatial_grid
@@ -455,17 +465,16 @@ where
             FootprintPrecision::Availability => LoadingInfoDetail::Availability,
             FootprintPrecision::Coverage => LoadingInfoDetail::Coverage,
         };
-        let parts = self
-            .loading_info_parts(
-                raster_query_rectangle_to_loading_info_query_rectangle(
-                    &query,
-                    tiling_grid,
-                    LoadingInfoResolution::Native,
-                    detail,
-                ),
-                ctx,
-            )
-            .await?;
+        let mut loading_info_query = raster_query_rectangle_to_loading_info_query_rectangle(
+            &query,
+            tiling_grid,
+            LoadingInfoResolution::Native,
+            detail,
+        );
+        if ctx.footprints_for_display() {
+            loading_info_query = loading_info_query.for_display();
+        }
+        let parts = self.loading_info_parts(loading_info_query, ctx).await?;
 
         let thread_pool = ctx.thread_pool().clone();
         Ok(parts
@@ -502,7 +511,11 @@ where
                                         max_boxes,
                                     ),
                                 };
-                                Ok(Footprint { time, bounds })
+                                Ok(Footprint {
+                                    time,
+                                    bounds,
+                                    cache_ttl: loading_info.cache_ttl(default_cache_ttl),
+                                })
                             })
                             .collect::<Vec<Result<Footprint>>>()
                     });
@@ -1493,6 +1506,8 @@ mod tests {
         let partition = files[0].spatial_partition;
         let dataset_name =
             add_multi_tile_dataset(&mut execution_context, files, vec![january, february]);
+        // the footprints hold as long as the tiles of the source
+        let cache_ttl = execution_context.default_cache_ttl();
 
         let processor = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
@@ -1542,10 +1557,12 @@ mod tests {
                         [geo_transform.spatial_to_grid_bounds(&partition)],
                         crate::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
                     ),
+                    cache_ttl,
                 },
                 Footprint {
                     time: february,
                     bounds: FootprintBounds::empty(),
+                    cache_ttl,
                 },
             ]
         );
