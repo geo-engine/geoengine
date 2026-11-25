@@ -626,10 +626,6 @@ impl StacMultiBandMetaData {
     /// over the view's search box `view_bbox`, if the server can tell. Nothing is searched. A step
     /// without items is empty for every cell inside that box, so it is stored as such for them,
     /// unless they are so many that storing them would flood the cache.
-    ///
-    /// An aggregation counts an item at its `datetime`, which for an item with a time range is its
-    /// start. A later step of the range would look empty, so for such items a step without one
-    /// is not known (`None`) and nothing is stored as empty.
     async fn steps_with_items(
         &self,
         items_url: &Url,
@@ -638,13 +634,13 @@ impl StacMultiBandMetaData {
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
         spatial_bounds: SpatialPartition2D,
         view_bbox: BoundingBox2D,
-    ) -> Option<Vec<Option<bool>>> {
+    ) -> Option<Vec<bool>> {
         // what is cached already needs no request at all, not even the aggregation
         if let Some(has_data) = self
             .cached_steps_with_items(time_steps, cell_bboxes, spatial_bounds)
             .await
         {
-            return Some(has_data.into_iter().map(Some).collect());
+            return Some(has_data);
         }
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return None;
@@ -671,18 +667,14 @@ impl StacMultiBandMetaData {
             .filter(|(_, bbox)| view_bbox.contains_bbox(bbox))
             .copied()
             .collect();
-        let ranges = self.item_time == StacItemTime::Range;
-        if !ranges && inside.len() <= self.query_cache.max_footprint_searches() {
+        if inside.len() <= self.query_cache.max_footprint_searches() {
             self.store_empty_steps(dataset_id, time_steps, &with_items, &inside)
                 .await;
         }
         Some(
             time_steps
                 .iter()
-                .map(|step| {
-                    let has_items = step_has_items(*step, &with_items);
-                    (has_items || !ranges).then_some(has_items)
-                })
+                .map(|step| step_has_items(*step, &with_items))
                 .collect(),
         )
     }
@@ -696,7 +688,13 @@ impl StacMultiBandMetaData {
         range: TimeInterval,
         bbox: BoundingBox2D,
     ) -> BoxFuture<'static, Option<Vec<TimeInterval>>> {
-        // for items with a time range only the step of their start, see `steps_with_items`
+        // An aggregation counts an item at its `datetime`, for items with a time range their start.
+        // A step without one is stored as empty, so an item must lie within one time step.
+        // shortcut: holds for every aggregating source on CODE-DE (measured 2026-11-25); a source
+        // whose items cover several steps, like the 10-day composites of Sentinel-3 SYN V10 on
+        // daily steps, must not set `datetime_frequency_aggregation`, else its later steps read as
+        // empty. Upgrade by marking the steps of an item's whole range if such a source must
+        // aggregate.
         let request = self
             .datetime_frequency_aggregation
             .then(|| items_url.join("aggregate").ok())
@@ -4776,25 +4774,15 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn it_availability_of_items_with_a_time_range_tells_only_the_steps_of_their_start() {
+    async fn it_availability_of_items_with_a_time_range_aggregates_like_items_with_a_datetime() {
+        // no search is expected: each item lies within one step, so the bucket of its start tells
+        // its step, and a step without a bucket is empty
         let server = Server::run();
-        // the aggregation counts an item at its start: a range from the 5th to the 6th is in the
-        // bucket of the 5th only
         expect_aggregation_in(
             &server,
             "0.10000,0.00000,0.40000,1.00000",
             "2025-12-08T00:00:00.000Z/2026-01-06T23:59:59.999999Z",
             &["2026-01-05T00:00:00.000Z"],
-        );
-        // so a step without a bucket is not stored as empty: a map tile of it searches
-        let starts = new_starts();
-        expect_search_at(
-            &server,
-            "0.00000,0.00000,1.00000,1.00000",
-            "2026-01-06T00:00:00.000Z/2026-01-06T23:59:59.999999Z",
-            vec![],
-            Duration::ZERO,
-            starts.clone(),
         );
         let mut provider = provider(
             &server,
@@ -4810,14 +4798,8 @@ mod grid_request_tests {
             .first_part(availability_query(bounds(0.1, 0.4), window(5, 7)))
             .await
             .unwrap();
-        assert!(info.tells_availability());
         assert_eq!(info.has_data(0), Some(true));
-        assert_eq!(info.has_data(1), None);
-
-        meta.first_part(query(bounds(0.1, 0.4), interval(6)))
-            .await
-            .unwrap();
-        assert_eq!(starts.lock().unwrap().len(), 1);
+        assert_eq!(info.has_data(1), Some(false));
     }
 
     #[tokio::test]

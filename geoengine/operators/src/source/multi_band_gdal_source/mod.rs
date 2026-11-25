@@ -487,10 +487,6 @@ where
                                         FootprintBounds::from_boxes([query_bounds], max_boxes)
                                     }
                                     Some(false) => FootprintBounds::empty(),
-                                    // told for the other steps, but not for this one
-                                    None if loading_info.tells_availability() => {
-                                        FootprintBounds::Unknown
-                                    }
                                     None => FootprintBounds::from_boxes(
                                         loading_info.file_bounds(time, &bands).filter_map(
                                             |partition| {
@@ -1267,17 +1263,7 @@ mod tests {
 
                     let part = MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), None);
                     if knows_availability {
-                        // data, none, can't tell, in turn
-                        part.with_availability(
-                            steps
-                                .iter()
-                                .map(|i| match i % 3 {
-                                    0 => Some(true),
-                                    1 => Some(false),
-                                    _ => None,
-                                })
-                                .collect(),
-                        )
+                        part.with_availability(steps.iter().map(|i| i % 2 == 0).collect())
                     } else {
                         Ok(part)
                     }
@@ -1447,16 +1433,16 @@ mod tests {
             .try_collect()
             .await?;
 
-        // the fake provider tells data, none and that it cannot tell, in turn
+        // the fake provider says that every second step has data
         assert_eq!(footprints.len(), 10);
         for (i, footprint) in footprints.iter().enumerate() {
-            let expected = match i % 3 {
-                0 => FootprintBounds::from_boxes(
+            let expected = if i % 2 == 0 {
+                FootprintBounds::from_boxes(
                     [query.spatial_bounds()],
                     crate::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
-                ),
-                1 => FootprintBounds::empty(),
-                _ => FootprintBounds::Unknown,
+                )
+            } else {
+                FootprintBounds::empty()
             };
             assert_eq!(footprint.bounds, expected, "step {i}");
         }
