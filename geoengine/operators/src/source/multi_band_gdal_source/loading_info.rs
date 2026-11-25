@@ -38,10 +38,11 @@ pub struct MultiBandGdalLoadingInfoPart {
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
-    /// For each time step whether it has data, if the provider could tell without the files.
-    /// The part then has no files. This holds for the whole part: either every time step has
-    /// an entry, or the part has files. Each part of a long time range decides this for itself.
-    availability: Option<Vec<bool>>,
+    /// For each time step whether it has data, if the provider could tell without the files,
+    /// `None` for a step it cannot tell. The part then has no files. This holds for the whole
+    /// part: either every time step has an entry, or the part has files. Each part of a long time
+    /// range decides this for itself.
+    availability: Option<Vec<Option<bool>>>,
 }
 
 /// Static metadata answers with its one part, e.g. in tests and benches.
@@ -121,7 +122,7 @@ impl MultiBandGdalLoadingInfoPart {
     /// # Errors
     /// If `has_data` does not have one entry per time step, because a missing entry would read as
     /// a step without data.
-    pub fn with_availability(mut self, has_data: Vec<bool>) -> crate::util::Result<Self> {
+    pub fn with_availability(mut self, has_data: Vec<Option<bool>>) -> crate::util::Result<Self> {
         snafu::ensure!(
             has_data.len() == self.time_steps.len(),
             crate::error::LoadingInfoAvailabilityLength {
@@ -137,7 +138,13 @@ impl MultiBandGdalLoadingInfoPart {
     pub fn has_data(&self, time_step_index: usize) -> Option<bool> {
         self.availability
             .as_ref()
-            .and_then(|has_data| has_data.get(time_step_index).copied())
+            .and_then(|has_data| has_data.get(time_step_index).copied().flatten())
+    }
+
+    /// Whether the provider told the availability of the time steps instead of their files, see
+    /// [`Self::with_availability`].
+    pub fn tells_availability(&self) -> bool {
+        self.availability.is_some()
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -221,13 +228,10 @@ mod tests {
             )
         };
 
-        assert!(info().with_availability(vec![true]).is_err());
-        assert_eq!(
-            info()
-                .with_availability(vec![true, false])
-                .unwrap()
-                .has_data(1),
-            Some(false)
-        );
+        assert!(info().with_availability(vec![Some(true)]).is_err());
+        let told = info().with_availability(vec![None, Some(false)]).unwrap();
+        assert_eq!(told.has_data(0), None);
+        assert_eq!(told.has_data(1), Some(false));
+        assert!(told.tells_availability());
     }
 }
