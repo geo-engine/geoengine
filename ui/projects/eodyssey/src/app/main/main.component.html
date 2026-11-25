@@ -47,7 +47,8 @@
 </mat-toolbar>
 
 <mat-drawer-container [style.height.px]="middleContainerHeight()">
-    <mat-drawer position="start" mode="side" opened="true">
+    <!-- The app has no control to reopen the drawer, so Escape (e.g., from an open select inside) must not close it. -->
+    <mat-drawer position="start" mode="side" opened="true" disableClose>
         <div class="drawer-container">
             <mat-nav-list>
                 <mat-list-item
