@@ -336,6 +336,48 @@ describe('OGC map tile minimum matrix index', () => {
         expect(zoomRequired).toHaveBeenCalledTimes(calls);
     });
 
+    it('recovers from a missing map size, showing the zoom prompt and then loading after zooming in', async () => {
+        fixture.componentRef.setInput('maxResolution', 0);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+
+        // The parent learns the real viewport size after asynchronous map initialization.
+        fixture.componentRef.setInput('maxResolution', 1500);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(fixture.componentInstance.mapLayer.getSource()).toBe(source);
+        source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!).load();
+        expect(tileRequests).toHaveLength(0);
+
+        await setResolution(999);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!).load();
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('uses a map resolution cutoff independently of the imagery matrix index', async () => {
+        fixture.componentRef.setInput('maxResolution', 3000);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        await setResolution(2999);
+        expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(3000);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        const tile = source.getTile(3, 0, 0, 1, getProjection('EPSG:3857')!);
+        tile.load();
+        expect(tileRequests).toHaveLength(1);
+        await setResolution(3000);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(tileRequests[0].aborted).toBe(true);
+        const excluded = source.getTile(4, 1, 0, 1, getProjection('EPSG:3857')!);
+        excluded.load();
+        expect(tileRequests).toHaveLength(1);
+        await setResolution(2999);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+    });
+
     it('leaves sources without a zoom limit unrestricted', async () => {
         fixture.componentRef.setInput('minTileMatrixIndex', 0);
         fixture.detectChanges();

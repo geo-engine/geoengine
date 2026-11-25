@@ -519,6 +519,8 @@ export class OlOgcApiMapTileLayerComponent
     readonly minTileMatrixIndex = input(0);
     /** Keep the map cutoff tied to this grid when imagery switches to a different tile matrix set. */
     readonly minTileMatrixSetId = input<TMSId>();
+    /** Exclusive visibility cutoff in map projection units per pixel; overrides the matrix-index limit. */
+    readonly maxResolution = input<number>();
     readonly zoomRequired = output<boolean>();
     /**
      * Whether tiles load at the current zoom, or would `tilesLoadableLevelsOut` matrix levels further in.
@@ -572,7 +574,10 @@ export class OlOgcApiMapTileLayerComponent
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
                 acceptsTile: (tile): boolean =>
-                    separateLimitGrid || this.effectiveMaxResolution() === Infinity || tile.getTileCoord()[0] >= params.minTileMatrixIndex,
+                    this.maxResolution() !== undefined ||
+                    separateLimitGrid ||
+                    this.effectiveMaxResolution() === Infinity ||
+                    tile.getTileCoord()[0] >= params.minTileMatrixIndex,
                 canLoad: (): boolean => {
                     const view = this.mapService.view();
                     return view.isDef() && this._mapLayer.isVisible(view);
@@ -647,6 +652,7 @@ export class OlOgcApiMapTileLayerComponent
     });
 
     private readonly effectiveMaxResolution = computed(() => {
+        if (this.maxResolution() !== undefined) return this.maxResolution();
         const maxResolution = this.limitMaxResolution();
         const projection = this.limitProjection();
         if (

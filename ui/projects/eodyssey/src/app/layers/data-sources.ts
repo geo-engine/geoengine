@@ -8,8 +8,6 @@ export interface VisualizationPreset {
     connectorId: string;
     layerId: string;
     order: number;
-    /** Minimum matrix index derived for this preset's processing graph and grid. */
-    minTileMatrixIndex?: number;
 }
 export interface DataSourceVariant {
     key: string;
@@ -31,10 +29,15 @@ export interface DataSourceDefinition {
     variants: DataSourceVariant[];
     defaultTimeStep?: TimeStepDuration;
     citation: string;
-    /** Conservative source minimum tile matrix index, used when the preset does not specify one. */
-    minTileMatrixIndex?: number;
+    /** Maximum map viewport dimensions in EPSG:3857 projection units (metres). */
+    maxMapExtent?: MapExtent;
 }
 export interface DataSourceLayer {
     dataConnectorId: string;
     layerId: string;
+}
+
+export interface MapExtent {
+    width: number;
+    height: number;
 }
