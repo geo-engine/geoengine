@@ -564,6 +564,25 @@ describe('LayersComponent', () => {
             });
         });
 
+        it('moves a date before the data also without loaded dates, by the time of the data', async () => {
+            setTime.mockImplementation((time: Time) => {
+                footprints().time.set(time);
+                return Promise.resolve();
+            });
+            mockCategorizedCatalogue();
+            // no dates, e.g. a view that needs too many searches; the service tells from the time of the data
+            footprints().stepsOfSelection.set([]);
+            footprints().selectedOutsideData.set({
+                direction: -1,
+                step: {time: {start: Date.UTC(2026, 5, 1), end: Date.UTC(2026, 5, 1) + 1}},
+            });
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 5, 1));
+        });
+
         it('says that the dates could not be loaded and loads them again on retry', async () => {
             const element = fixture.nativeElement as HTMLElement;
             footprints().datesFailed.set(true);
