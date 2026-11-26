@@ -4766,6 +4766,61 @@ mod tests {
     }
 
     #[ge_context::test]
+    async fn it_rejects_a_regular_time_range_from_the_begin_of_time(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, true).await?;
+        let operator = MultiBandGdalSource {
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: dataset_name.into(),
+                overview_level: None,
+            },
+        };
+        let execution_context = ctx.execution_context()?;
+        let processor = OperatorsMultiBandGdalSource::try_from(operator)
+            .unwrap()
+            .typed()
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
+            .await?
+            .query_processor()?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
+        let grid_bounds = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(execution_context.tiling_specification())
+            .tiling_grid_bounds();
+
+        let processor = processor.get_u16().unwrap();
+
+        // a step after the begin of time is the begin of time again: without a check, the time
+        // steps of this query never end
+        let result = processor
+            .query(
+                RasterQueryRectangle::new(
+                    grid_bounds,
+                    TimeInterval::new(
+                        geoengine_datatypes::primitives::TimeInstance::MIN,
+                        geoengine_datatypes::primitives::TimeInstance::from_str(
+                            "2025-01-01T00:00:00Z",
+                        )
+                        .unwrap(),
+                    )?,
+                    BandSelection::first(),
+                ),
+                &query_ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps_irregular(
         app_ctx: PostgresContext<NoTls>,
