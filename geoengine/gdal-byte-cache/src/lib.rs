@@ -65,6 +65,9 @@ const EXTENSION: &str = "cache";
 /// The extension of the links through which workers share the versions of remote files.
 const VERSION_EXTENSION: &str = "version";
 
+/// The name of the file whose bytes workers lock while they ask for the version of a remote file.
+const VERSION_LOCKS: &str = "versions.lock";
+
 /// Remote GDAL file systems whose files are read through the cache.
 const REMOTE_FILE_SYSTEMS: [&str; 7] = [
     "/vsicurl/",
@@ -151,13 +154,19 @@ pub struct ByteCache {
     directory: PathBuf,
     max_file_bytes: u64,
     lock_wait: Duration,
-    version_check: Duration,
+    version_trust: Duration,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
     write_failures: AtomicU64,
     /// version and when it was checked, by key and inner path
     versions: std::sync::Mutex<lru::LruCache<FileId, (Version, Instant)>>,
+    /// The file whose bytes workers lock while they ask for a file's version ([`VersionLock`]);
+    /// `None` if it could not be opened: every worker then asks itself.
+    version_locks: Option<File>,
+    /// Held with a lock on `version_locks`: the threads of a process share its open file, and
+    /// such locks do not exclude them from each other.
+    asking: std::sync::Mutex<()>,
 }
 
 impl ByteCache {
@@ -277,12 +286,22 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         directory: config.directory.clone(),
         max_file_bytes: config.max_file_bytes,
         lock_wait: config.lock_wait,
-        version_check: config.version_check,
+        version_trust: config.version_check,
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
         write_failures: AtomicU64::new(0),
         versions: std::sync::Mutex::new(lru::LruCache::new(REMEMBERED_FILES)),
+        version_locks: OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(config.directory.join(VERSION_LOCKS))
+            .ok(),
+        asking: std::sync::Mutex::new(()),
     }));
     // SAFETY: GDAL copies the callbacks but keeps the prefix pointer, so the prefix is a static
     // string; `cache` is never freed, as every handle refers to it
@@ -700,13 +719,45 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// The link through which workers share the version of a remote file: a SHA-256 of key and inner
 /// path.
 fn version_link(cache: &ByteCache, key: &str, inner: &[u8]) -> PathBuf {
+    cache.directory.join(format!(
+        "{}.{VERSION_EXTENSION}",
+        hex(&file_hash(key, inner))
+    ))
+}
+
+/// A SHA-256 of key and inner path.
+fn file_hash(key: &str, inner: &[u8]) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(key.as_bytes());
     hash.update([0]);
     hash.update(inner);
-    cache
-        .directory
-        .join(format!("{}.{VERSION_EXTENSION}", hex(&hash.finalize())))
+    hash.finalize().into()
+}
+
+/// Held by the one worker that asks the remote file system for the version of a file, so that
+/// workers that open a file nobody knows at the same time ask once: the others wait and take the
+/// version from its link. Without the lock, e.g. after waiting [`ByteCacheConfig::lock_wait`], a
+/// worker asks itself.
+struct VersionLock<'a> {
+    _process: std::sync::MutexGuard<'a, ()>,
+    _workers: Option<ChunkLock<'a>>,
+}
+
+impl<'a> VersionLock<'a> {
+    fn wait(cache: &'a ByteCache, key: &str, inner: &CStr) -> Self {
+        let process = lock(&cache.asking);
+        // one of 2^20 bytes per file; files that share a byte only wait for each other
+        let hash = file_hash(key, inner.to_bytes());
+        let byte = u64::from(u32::from_be_bytes([0, hash[0], hash[1], hash[2]]) >> 4);
+        let workers = cache
+            .version_locks
+            .as_ref()
+            .and_then(|file| ChunkLock::wait(file, byte, 1, cache.lock_wait));
+        Self {
+            _process: process,
+            _workers: workers,
+        }
+    }
 }
 
 /// The version of a remote file that this or another worker checked less than
@@ -714,7 +765,7 @@ fn version_link(cache: &ByteCache, key: &str, inner: &[u8]) -> PathBuf {
 fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
     let id = (key.to_string(), inner.to_bytes().to_vec());
     if let Some((version, checked)) = lock(&cache.versions).get(&id)
-        && checked.elapsed() < cache.version_check
+        && checked.elapsed() < cache.version_trust
     {
         return Some(version.clone());
     }
@@ -725,7 +776,7 @@ fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
         .ok()?
         .elapsed()
         .ok()?;
-    if age >= cache.version_check {
+    if age >= cache.version_trust {
         return None;
     }
     let target = std::fs::read_link(&link).ok()?;
@@ -835,7 +886,13 @@ unsafe extern "C" fn open(
     let Ok(inner) = CString::new(inner) else {
         return std::ptr::null_mut();
     };
-    let (version, handle) = match known(cache, key, &inner) {
+    let mut version_lock = None;
+    let known = known(cache, key, &inner).or_else(|| {
+        // another worker may ask for the version right now: wait for it and its answer
+        version_lock = Some(VersionLock::wait(cache, key, &inner));
+        self::known(cache, key, &inner)
+    });
+    let (version, handle) = match known {
         Some(version) => (version, std::ptr::null_mut()),
         None => {
             // SAFETY: a valid path and buffer; the handle is closed in `close` or below. Opened as
@@ -871,6 +928,7 @@ unsafe extern "C" fn open(
             checked
         }
     };
+    drop(version_lock);
     let size = version.size;
     let file = CacheFile::open(&cache.directory, &version.stem, size)
         .inspect_err(|_| cache.failed_write())
@@ -927,7 +985,12 @@ unsafe extern "C" fn stat(
     };
     // `VSIStatBufL` is `stat64` on Linux, opaque in the bindings
     let buffer = stat_buf.cast::<libc::stat64>();
-    if let Some(version) = known(cache, key, &inner) {
+    let mut version_lock = None;
+    let known = known(cache, key, &inner).or_else(|| {
+        version_lock = Some(VersionLock::wait(cache, key, &inner));
+        self::known(cache, key, &inner)
+    });
+    if let Some(version) = known {
         // SAFETY: GDAL passes a buffer for one stat
         unsafe {
             let stat_buf = buffer;
@@ -1556,6 +1619,52 @@ mod tests {
             bytes_again - bytes < CHUNK_SIZE,
             "only the least of the start: {} bytes",
             bytes_again - bytes
+        );
+    }
+
+    /// Workers that open a file nobody knows at the same time: one asks for its version, the
+    /// others wait for the answer.
+    #[test]
+    #[serial_test::serial]
+    fn it_asks_once_for_a_version_that_several_open_at_once() {
+        let _ = cache();
+        // slow answers, so that the opens overlap
+        let server = super::test_range_server::RangeServer::start(
+            test_data("raster/landcover"),
+            Duration::from_millis(200),
+        );
+        let remote = PathBuf::from(server.vsicurl_path("landcover.tif"));
+        for (name, value) in [
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif"),
+            ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
+            ("GDAL_HTTP_NETRC", "NO"),
+        ] {
+            gdal::config::set_config_option(name, value).unwrap();
+        }
+        let open = |n: u64| {
+            let path = CString::new(wrap(&remote, &key(n)).unwrap().to_str().unwrap()).unwrap();
+            // SAFETY: a valid path; closed at once
+            unsafe {
+                let file = gdal_sys::VSIFOpenL(path.as_ptr(), c"rb".as_ptr());
+                assert!(!file.is_null());
+                gdal_sys::VSIFCloseL(file);
+            }
+        };
+        open(13);
+        let (alone, _) = server.totals();
+        assert!(alone > 0);
+
+        // another key, so nobody knows the version; GDAL's own knowledge of the file is gone
+        unsafe { gdal_sys::VSICurlClearCache() };
+        std::thread::scope(|scope| {
+            for _ in 0..3 {
+                scope.spawn(|| open(14));
+            }
+        });
+        assert_eq!(
+            server.totals().0,
+            2 * alone,
+            "asked once more, not three times"
         );
     }
 
