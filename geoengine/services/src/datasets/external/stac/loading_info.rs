@@ -198,9 +198,7 @@ impl MultiBandGdalMetaData for StacMultiBandMetaData {
         // Regular layers expose every step, including steps without any assets.
         // Their time axis is defined by the provider, so no STAC search is needed.
         let time = stac_query_time_interval(time, self.time_dimension)?;
-        let steps = regular_time_steps(self.time_dimension, time)?
-            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
-        Ok(futures::stream::iter(steps.into_iter().map(Ok)).boxed())
+        Ok(futures::stream::iter(regular_time_steps(self.time_dimension, time)?).boxed())
     }
 
     async fn loading_info(
@@ -3695,7 +3693,7 @@ mod grid_request_tests {
         StacProviderDataset, StacProviderDatasetBand, cache::StacQueryCache,
     };
     use super::{FirstPart as _, StacMultiBandMetaData, stac_query_bbox, stac_query_time_interval};
-    use futures::TryStreamExt as _;
+    use futures::{StreamExt as _, TryStreamExt as _};
     use geoengine_datatypes::primitives::QueryRectangle;
     use geoengine_datatypes::{
         dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
@@ -3989,6 +3987,49 @@ mod grid_request_tests {
                 TimeInterval::new(february, march).unwrap(),
                 TimeInterval::new(march, april).unwrap(),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn time_steps_are_built_as_they_are_read() {
+        // no request is expected
+        let server = Server::run();
+        let mut provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.time_dimension =
+            TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
+                granularity: TimeGranularity::Days,
+                step: 1,
+            }));
+        // millions of days, which take seconds to build
+        let ten_thousand_years = TimeInterval::new(
+            DateTime::new_utc(-5000, 1, 1, 0, 0, 0),
+            DateTime::new_utc(5000, 1, 1, 0, 0, 0),
+        )
+        .unwrap();
+
+        let started = Instant::now();
+        let steps: Vec<_> = metadata(&provider, 0)
+            .await
+            .time_steps(ten_thousand_years)
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect()
+            .await
+            .unwrap();
+
+        assert_eq!(steps.len(), 5);
+        assert_eq!(steps[0].start(), ten_thousand_years.start());
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "{:?}",
+            started.elapsed()
         );
     }
 

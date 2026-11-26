@@ -1724,7 +1724,7 @@ mod tests {
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use futures::TryStreamExt;
+    use futures::{StreamExt as _, TryStreamExt};
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
@@ -5748,6 +5748,38 @@ mod tests {
         assert_eq!(rest.time_steps().len(), 8);
         let last = *rest.time_steps().last().unwrap();
         assert!(rest.file_bounds(last, &[0]).count() > 0);
+
+        // 400,000 years are millions of monthly steps, which take seconds to build. They are built
+        // as they are read, by the time query and by the parts of the loading info.
+        let years = TimeInterval::new(
+            geoengine_datatypes::primitives::DateTime::new_utc(-200_000, 1, 1, 0, 0, 0),
+            geoengine_datatypes::primitives::DateTime::new_utc(200_000, 1, 1, 0, 0, 0),
+        )?;
+        let started = std::time::Instant::now();
+        let steps: Vec<_> = meta_data
+            .time_steps(years)
+            .await?
+            .take(3)
+            .try_collect()
+            .await?;
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].start(), years.start());
+        let first = meta_data
+            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+                years,
+                BandSelection::first(),
+            ))
+            .await?
+            .try_next()
+            .await?
+            .expect("a first part");
+        assert_eq!(first.time_steps().len(), 32);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "{:?}",
+            started.elapsed()
+        );
 
         Ok(())
     }

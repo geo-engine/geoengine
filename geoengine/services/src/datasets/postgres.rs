@@ -21,7 +21,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-use futures::{StreamExt, future, stream, stream::BoxStream};
+use futures::{StreamExt, TryStreamExt, future, stream, stream::BoxStream};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
@@ -780,7 +780,7 @@ async fn create_gap_free_time_steps<Tls>(
     dataset_id: DatasetId,
     query_time: TimeInterval,
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-) -> Result<Vec<TimeInterval>>
+) -> Result<Box<dyn Iterator<Item = Result<TimeInterval>> + Send>>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -793,14 +793,17 @@ where
     // fill the gaps before, between and after the data tiles to fully cover the query time range
     match time_dim {
         TimeDimension::Regular(regular_time_dimension) => {
-            // we do not even need to know the existing tile's time steps here, since the steps are regular
-            vec![]
-                .into_iter()
-                .try_time_regular_range_fill(regular_time_dimension, query_time)
-                .collect()
+            // we do not even need to know the existing tile's time steps here, since the steps are
+            // regular, and they are built as the caller reads them
+            Ok(Box::new(
+                std::iter::empty::<Result<TimeInterval>>()
+                    .try_time_regular_range_fill(regular_time_dimension, query_time),
+            ))
         }
         TimeDimension::Irregular => {
             // query all time steps inside the query, across all spatial tiles and bands
+            // shortcut: reads the distinct times of the whole query at once, bounded by the stored
+            // tiles; read them with a cursor if a dataset has millions of distinct times
             let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn)
                 .await?
                 .into_iter()
@@ -833,10 +836,11 @@ where
                 (start, end)
             };
 
-            time_steps
-                .into_iter()
-                .try_time_irregular_range_fill(TimeInterval::new(start, end)?)
-                .collect()
+            Ok(Box::new(
+                time_steps
+                    .into_iter()
+                    .try_time_irregular_range_fill(TimeInterval::new(start, end)?),
+            ))
         }
     }
 }
@@ -1002,7 +1006,11 @@ where
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
             })?;
-        Ok(stream::iter(time_steps.into_iter().map(Ok)).boxed())
+        Ok(stream::iter(time_steps)
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })
+            .boxed())
     }
 
     async fn loading_info(
@@ -1031,15 +1039,19 @@ where
         // not hold the files of all steps at once. The first part is read here, on the connection
         // of the time steps, so a query of few steps takes one connection as before. The files of
         // each later part are read when the source gets there.
-        let mut parts = time_steps.chunks(self.part_steps).map(<[_]>::to_vec);
-        let Some(first) = parts.next() else {
+        let mut parts = stream::iter(time_steps)
+            .try_chunks(self.part_steps)
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e.1),
+            });
+        let Some(first) = parts.try_next().await? else {
             return Ok(stream::empty().boxed());
         };
         let first = self.part(&conn, first, &query).await?;
         drop(conn);
 
         let provider = self.clone();
-        let rest = stream::iter(parts.collect::<Vec<_>>()).then(move |time_steps| {
+        let rest = parts.and_then(move |time_steps| {
             let provider = provider.clone();
             let query = query.clone();
             async move {
