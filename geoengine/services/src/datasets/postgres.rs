@@ -793,6 +793,12 @@ where
     // fill the gaps before, between and after the data tiles to fully cover the query time range
     match time_dim {
         TimeDimension::Regular(regular_time_dimension) => {
+            // a step after the begin of time is the begin of time again, so the fill would never end
+            if query_time.start().is_min() {
+                return Err(
+                    geoengine_datatypes::error::Error::TimeStepIterStartMustNotBeBeginOfTime.into(),
+                );
+            }
             // we do not even need to know the existing tile's time steps here, since the steps are regular
             vec![]
                 .into_iter()
