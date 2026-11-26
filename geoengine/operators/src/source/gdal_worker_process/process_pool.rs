@@ -356,6 +356,10 @@ impl Drop for GdalProcessPool {
         if let Some(sweeper) = &self.byte_cache_sweeper {
             sweeper.abort();
         }
+        // the bytes of datasets must not outlive the server on disk
+        if let Some(directory) = &self.byte_cache_directory {
+            let _ = super::byte_cache::sweep(directory, 0);
+        }
     }
 }
 
@@ -2054,6 +2058,36 @@ mod tests {
         std::fs::write(&file, [1_u8; 16]).unwrap();
 
         pool.clear_caches().await.unwrap();
+
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
+    async fn it_empties_the_byte_cache_when_the_pool_is_dropped() {
+        let directory = tempfile::tempdir().unwrap();
+        let chunks = directory.path().join("chunks");
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig {
+                byte_cache: Some(super::super::byte_cache::ByteCacheConfig {
+                    directory: chunks.clone(),
+                    size_bytes: 1 << 20,
+                    max_file_bytes: 1 << 18,
+                    lock_wait: std::time::Duration::from_secs(10),
+                }),
+                ..WorkerConfig::default()
+            },
+        );
+        // after the sweep that empties the directory at start
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        std::fs::create_dir_all(&chunks).unwrap();
+        let file = chunks.join(format!("{}.cache", "0".repeat(64)));
+        std::fs::write(&file, [1_u8; 16]).unwrap();
+
+        drop(pool);
 
         assert!(!file.exists());
     }
