@@ -265,6 +265,8 @@ impl MockExecutionContext {
         self.named_data.insert(named_data, data);
     }
 
+    /// Adds the meta data of a multi band GDAL dataset. The multi band GDAL source reads only meta
+    /// data added with this, not with [`Self::add_meta_data`].
     pub fn add_multi_band_gdal_meta_data(
         &mut self,
         data: DataId,

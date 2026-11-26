@@ -16,6 +16,7 @@ use std::fmt::Debug;
 /// there is data.
 #[async_trait]
 pub trait MultiBandGdalMetaData: Debug + Send + Sync {
+    /// The result descriptor of the dataset.
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor>;
 
     /// The gap-free time steps that intersect `time`, one by one, so a caller that takes the
@@ -45,6 +46,7 @@ pub trait MultiBandGdalMetaData: Debug + Send + Sync {
         Ok(parts.map_ok(move |part| part.footprints(&bands)).boxed())
     }
 
+    /// A boxed copy, for `Clone` of `Box<dyn MultiBandGdalMetaData>`.
     fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData>;
 }
 
@@ -67,6 +69,7 @@ pub enum StepFootprint {
 /// implements it with the default.
 #[async_trait]
 pub trait MultiBandGdalMetaDataProvider {
+    /// The meta data of the dataset `id`. By default [`Error::NotImplemented`].
     async fn multi_band_gdal_meta_data(
         &self,
         _id: &DataId,
