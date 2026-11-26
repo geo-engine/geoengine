@@ -3991,7 +3991,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn time_steps_are_built_as_they_are_read() {
+    async fn it_builds_time_steps_as_they_are_read() {
         // no request is expected
         let server = Server::run();
         let mut provider = provider(
@@ -4006,31 +4006,29 @@ mod grid_request_tests {
                 granularity: TimeGranularity::Days,
                 step: 1,
             }));
-        // millions of days, which take seconds to build
-        let ten_thousand_years = TimeInterval::new(
-            DateTime::new_utc(-5000, 1, 1, 0, 0, 0),
-            DateTime::new_utc(5000, 1, 1, 0, 0, 0),
+        // about 11 M days: built at once, they take seconds (about 3 s for 10,000 years in a debug
+        // build); built as they are read, the first five take microseconds
+        let years = TimeInterval::new(
+            DateTime::new_utc(-15_000, 1, 1, 0, 0, 0),
+            DateTime::new_utc(15_000, 1, 1, 0, 0, 0),
         )
         .unwrap();
+        let metadata = metadata(&provider, 0).await;
 
         let started = Instant::now();
-        let steps: Vec<_> = metadata(&provider, 0)
-            .await
-            .time_steps(ten_thousand_years)
+        let steps: Vec<_> = metadata
+            .time_steps(years)
             .await
             .unwrap()
             .take(5)
             .try_collect()
             .await
             .unwrap();
+        let elapsed = started.elapsed();
 
         assert_eq!(steps.len(), 5);
-        assert_eq!(steps[0].start(), ten_thousand_years.start());
-        assert!(
-            started.elapsed() < Duration::from_secs(1),
-            "{:?}",
-            started.elapsed()
-        );
+        assert_eq!(steps[0].start(), years.start());
+        assert!(elapsed < Duration::from_secs(1), "{elapsed:?}");
     }
 
     #[tokio::test]

@@ -5749,25 +5749,24 @@ mod tests {
         let last = *rest.time_steps().last().unwrap();
         assert!(rest.file_bounds(last, &[0]).count() > 0);
 
-        // 400,000 years are millions of monthly steps, which take seconds to build. They are built
-        // as they are read, by the time query and by the parts of the loading info.
-        let years = TimeInterval::new(
-            geoengine_datatypes::primitives::DateTime::new_utc(-200_000, 1, 1, 0, 0, 0),
-            geoengine_datatypes::primitives::DateTime::new_utc(200_000, 1, 1, 0, 0, 0),
+        // The monthly steps up to the end of time cannot all be built: the last one would end
+        // after it. So only steps built as they are read answer the time query and the first part.
+        let open_end = TimeInterval::new(
+            geoengine_datatypes::primitives::DateTime::new_utc(2000, 1, 1, 0, 0, 0),
+            geoengine_datatypes::primitives::TimeInstance::MAX,
         )?;
-        let started = std::time::Instant::now();
         let steps: Vec<_> = meta_data
-            .time_steps(years)
+            .time_steps(open_end)
             .await?
             .take(3)
             .try_collect()
             .await?;
         assert_eq!(steps.len(), 3);
-        assert_eq!(steps[0].start(), years.start());
+        assert_eq!(steps[0].start(), open_end.start());
         let first = meta_data
             .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
                 SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-                years,
+                open_end,
                 BandSelection::first(),
             ))
             .await?
@@ -5775,11 +5774,6 @@ mod tests {
             .await?
             .expect("a first part");
         assert_eq!(first.time_steps().len(), 32);
-        assert!(
-            started.elapsed() < std::time::Duration::from_secs(1),
-            "{:?}",
-            started.elapsed()
-        );
 
         Ok(())
     }
