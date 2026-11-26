@@ -321,7 +321,13 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         (*callbacks).tell = Some(tell);
         (*callbacks).seek = Some(seek);
         (*callbacks).read = Some(read);
-        (*callbacks).read_multi_range = Some(read_multi_range);
+        // shortcut: a switch for the bench that decides whether the GeoTIFF driver reads better
+        // with multi-range reads (one thread decodes) or without (it advises its reads, then
+        // decodes with its threads); remove it with the losing side.
+        if std::env::var_os("GEOENGINE_BYTE_CACHE_NO_MULTI_RANGE").is_none() {
+            (*callbacks).read_multi_range = Some(read_multi_range);
+        }
+        (*callbacks).advise_read = Some(advise_read);
         (*callbacks).eof = Some(eof);
         (*callbacks).close = Some(close);
         // no buffering on top: the cache file and the page cache are the buffer
@@ -616,44 +622,27 @@ impl Handle {
         let hits: u64 = present.iter().map(|&b| u64::from(b == 1)).sum();
         self.cache.hits.fetch_add(hits, Ordering::Relaxed);
 
-        // download each run of missing chunks once: under a lock on its map bytes, so that other
-        // workers missing them wait and then read them. Downloaded bytes go straight to the
-        // caller's buffer.
+        // download the runs of missing chunks once, see `fetch`. Downloaded bytes go straight to
+        // the caller's buffer.
+        let wanted: Vec<(u64, u64)> = runs(present.len(), |i| present[i] != 1)
+            .into_iter()
+            .map(|(a, b)| self.widen(file, first + a, first + b))
+            .collect();
+        let Ok(fetched) = self.fetch(file, &wanted) else {
+            return 0;
+        };
         let mut downloaded = vec![false; present.len()];
-        for (a, b) in runs(present.len(), |i| present[i] != 1) {
-            let (a, b) = self.widen(file, first + a, first + b);
-            let _lock = file.lock(a, b - a + 1, self.cache.lock_wait);
-            let now = file.present(a, b);
-            let missing = runs(now.len(), |i| now[i] != 1);
-            let still = missing.iter().map(|(c, d)| d - c + 1).sum::<u64>();
-            self.cache
-                .waited
-                .fetch_add(b - a + 1 - still, Ordering::Relaxed);
-            for (c, d) in missing {
-                let (c, d) = (a + c, a + d);
-                let start = c * CHUNK_SIZE;
-                let mut bytes = vec![0_u8; (d * CHUNK_SIZE + self.chunk_len(d) - start) as usize];
-                if self.inner_read(start, &mut bytes).is_err() {
-                    return 0;
-                }
-                self.cache.misses.fetch_add(d - c + 1, Ordering::Relaxed);
-                // as many chunks as the file's share still holds; the rest is served, not stored.
-                // shortcut: workers storing runs of one file at once may each see room and exceed
-                // its share by their runs; lock the whole map while checking if that matters.
-                let room = self.cache.max_file_bytes.saturating_sub(file.allocated()) / CHUNK_SIZE;
-                let chunks = (d - c + 1).min(room);
-                if chunks > 0 && file.store(c, chunks, &bytes).is_err() {
-                    self.cache.failed_write();
-                }
-                let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
-                if from < to {
-                    buffer[(from - offset) as usize..(to - offset) as usize]
-                        .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
-                }
-                // a widened run reaches beyond the read
-                for chunk in c.max(first)..=d.min(last) {
-                    downloaded[(chunk - first) as usize] = true;
-                }
+        for (c, bytes) in &fetched {
+            let start = c * CHUNK_SIZE;
+            let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
+            if from < to {
+                buffer[(from - offset) as usize..(to - offset) as usize]
+                    .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
+            }
+            // a widened run reaches beyond the read
+            let d = c + (bytes.len() as u64).div_ceil(CHUNK_SIZE) - 1;
+            for chunk in (*c).max(first)..=d.min(last) {
+                downloaded[(chunk - first) as usize] = true;
             }
         }
 
@@ -699,13 +688,81 @@ impl Handle {
         )
     }
 
+    /// Downloads what is still missing of the runs `wanted` (ascending, apart) and stores it:
+    /// under locks on their map bytes, so that other workers missing the same chunks wait and
+    /// then read them. Several runs are downloaded in one round, which the remote file systems
+    /// do in parallel. Returns the downloaded runs by their first chunk.
+    fn fetch(&self, file: &CacheFile, wanted: &[(u64, u64)]) -> Result<Vec<(u64, Vec<u8>)>, ()> {
+        // ascending, so workers that want the same runs never wait for each other in a circle
+        let _locks: Vec<_> = wanted
+            .iter()
+            .map(|&(a, b)| file.lock(a, b - a + 1, self.cache.lock_wait))
+            .collect();
+        let mut missing = Vec::new();
+        for &(a, b) in wanted {
+            let now = file.present(a, b);
+            let still = runs(now.len(), |i| now[i] != 1);
+            let count = still.iter().map(|(c, d)| d - c + 1).sum::<u64>();
+            self.cache
+                .waited
+                .fetch_add(b - a + 1 - count, Ordering::Relaxed);
+            missing.extend(still.into_iter().map(|(c, d)| (a + c, a + d)));
+        }
+        let mut fetched: Vec<(u64, Vec<u8>)> = missing
+            .iter()
+            .map(|&(c, d)| {
+                let len = d * CHUNK_SIZE + self.chunk_len(d) - c * CHUNK_SIZE;
+                (c, vec![0_u8; len as usize])
+            })
+            .collect();
+        self.inner_read_runs(&mut fetched)?;
+        for ((c, bytes), &(_, d)) in fetched.iter().zip(&missing) {
+            self.cache.misses.fetch_add(d - c + 1, Ordering::Relaxed);
+            // as many chunks as the file's share still holds; the rest is served, not stored.
+            // shortcut: workers storing runs of one file at once may each see room and exceed
+            // its share by their runs; lock the whole map while checking if that matters.
+            let room = self.cache.max_file_bytes.saturating_sub(file.allocated()) / CHUNK_SIZE;
+            let chunks = (d - c + 1).min(room);
+            if chunks > 0 && file.store(*c, chunks, bytes).is_err() {
+                self.cache.failed_write();
+            }
+        }
+        Ok(fetched)
+    }
+
+    /// Downloads the missing chunks of the byte ranges `(offset, length)` that a driver is about
+    /// to read, all in one round: the reads then find them in the cache. Not for a file near its
+    /// share, whose chunks would not be stored and so be downloaded twice.
+    fn prefetch(&self, ranges: &[(u64, u64)]) {
+        let Some(file) = &self.file else { return };
+        let mut wanted = Vec::new();
+        for &(offset, len) in ranges {
+            let end = offset.saturating_add(len).min(self.size);
+            if offset >= end {
+                continue;
+            }
+            let (first, last) = (offset / CHUNK_SIZE, (end - 1) / CHUNK_SIZE);
+            let present = file.present(first, last);
+            wanted.extend(
+                runs(present.len(), |i| present[i] != 1)
+                    .into_iter()
+                    .map(|(a, b)| self.widen(file, first + a, first + b)),
+            );
+        }
+        let wanted = merge(wanted);
+        let bytes = wanted.iter().map(|(a, b)| (b - a + 1) * CHUNK_SIZE).sum();
+        if self.cache.max_file_bytes.saturating_sub(file.allocated()) >= bytes {
+            // a failure shows again in the read that needs the bytes
+            let _ = self.fetch(file, &wanted);
+        }
+    }
+
     fn chunk_len(&self, index: u64) -> u64 {
         CHUNK_SIZE.min(self.size - index * CHUNK_SIZE)
     }
 
-    /// Reads exactly `buffer.len()` bytes at `start` from the inner file, which it opens first if
-    /// this handle has not yet.
-    fn inner_read(&self, start: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    /// The inner file, which it opens first if this handle has not yet.
+    fn inner(&self) -> Result<*mut gdal_sys::VSILFILE, ()> {
         if self.inner.get().is_null() {
             // SAFETY: a valid path; the handle is closed in `close`. The size is known, so the open
             // need not download the file's start (`GDAL_INGESTED_BYTES_AT_OPEN`, at least one chunk)
@@ -717,7 +774,12 @@ impl Handle {
             }
             self.inner.set(inner);
         }
-        let inner = self.inner.get();
+        Ok(self.inner.get())
+    }
+
+    /// Reads exactly `buffer.len()` bytes at `start` from the inner file.
+    fn inner_read(&self, start: u64, buffer: &mut [u8]) -> Result<(), ()> {
+        let inner = self.inner()?;
         // SAFETY: `inner` is open until `close`, and `buffer` holds `buffer.len()` bytes
         let got = unsafe {
             if gdal_sys::VSIFSeekL(inner, start, 0 /* SEEK_SET */) != 0 {
@@ -727,6 +789,48 @@ impl Handle {
         };
         (got == buffer.len()).then_some(()).ok_or(())
     }
+
+    /// Fills the buffers of `runs`, each from its first chunk on, from the inner file: several in
+    /// one multi-range read.
+    fn inner_read_runs(&self, runs: &mut [(u64, Vec<u8>)]) -> Result<(), ()> {
+        if let [(c, bytes)] = runs {
+            return self.inner_read(*c * CHUNK_SIZE, bytes);
+        }
+        if runs.is_empty() {
+            return Ok(());
+        }
+        let inner = self.inner()?;
+        let offsets: Vec<u64> = runs.iter().map(|(c, _)| c * CHUNK_SIZE).collect();
+        let sizes: Vec<usize> = runs.iter().map(|(_, bytes)| bytes.len()).collect();
+        let mut data: Vec<*mut c_void> = runs
+            .iter_mut()
+            .map(|(_, bytes)| bytes.as_mut_ptr().cast())
+            .collect();
+        // SAFETY: `inner` is open until `close`; each buffer holds its size
+        let result = unsafe {
+            gdal_sys::VSIFReadMultiRangeL(
+                c_int::try_from(runs.len()).map_err(|_| ())?,
+                data.as_mut_ptr(),
+                offsets.as_ptr(),
+                sizes.as_ptr(),
+                inner,
+            )
+        };
+        (result == 0).then_some(()).ok_or(())
+    }
+}
+
+/// Runs `(first, last)` sorted, with those that overlap or touch joined.
+fn merge(mut runs: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
+    runs.sort_unstable();
+    let mut out: Vec<(u64, u64)> = Vec::new();
+    for (a, b) in runs {
+        match out.last_mut() {
+            Some((_, last)) if a <= *last + 1 => *last = (*last).max(b),
+            _ => out.push((a, b)),
+        }
+    }
+    out
 }
 
 /// The runs `(first, last)` of consecutive indices below `len` that `pick` selects.
@@ -1136,7 +1240,10 @@ unsafe extern "C" fn read_multi_range(
     sizes: *const usize,
 ) -> c_int {
     let h = unsafe { handle(file) };
-    for i in 0..usize::try_from(ranges).unwrap_or(0) {
+    let ranges = usize::try_from(ranges).unwrap_or(0);
+    // SAFETY: GDAL passes `ranges` offsets and sizes
+    h.prefetch(&unsafe { byte_ranges(ranges, offsets, sizes) });
+    for i in 0..ranges {
         // SAFETY: GDAL passes `ranges` buffers, offsets and sizes
         let (buffer, offset, size) = unsafe { (*data.add(i), *offsets.add(i), *sizes.add(i)) };
         if size == 0 {
@@ -1148,6 +1255,30 @@ unsafe extern "C" fn read_multi_range(
         }
     }
     0
+}
+
+/// The ranges a driver is about to read: their missing chunks are downloaded in one round.
+unsafe extern "C" fn advise_read(
+    file: *mut c_void,
+    ranges: c_int,
+    offsets: *const gdal_sys::vsi_l_offset,
+    sizes: *const usize,
+) {
+    let h = unsafe { handle(file) };
+    // SAFETY: GDAL passes `ranges` offsets and sizes
+    h.prefetch(&unsafe { byte_ranges(usize::try_from(ranges).unwrap_or(0), offsets, sizes) });
+}
+
+/// # Safety
+/// `offsets` and `sizes` must hold `ranges` values.
+unsafe fn byte_ranges(
+    ranges: usize,
+    offsets: *const gdal_sys::vsi_l_offset,
+    sizes: *const usize,
+) -> Vec<(u64, u64)> {
+    (0..ranges)
+        .map(|i| unsafe { (*offsets.add(i), *sizes.add(i) as u64) })
+        .collect()
 }
 
 unsafe extern "C" fn eof(file: *mut c_void) -> c_int {
@@ -1960,6 +2091,43 @@ mod tests {
         read(&mut handle, 39); // the last multiple ends with the file
         assert_eq!(cached(&handle), (19..=40).collect::<Vec<_>>());
         close(&handle);
+    }
+
+    #[test]
+    fn it_downloads_the_missing_runs_of_one_read_together() {
+        let len = 6 * CHUNK_SIZE as usize;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 22, len as u64);
+        let mut one = [0_u8; 10];
+        assert_eq!(handle.read_at(2 * CHUNK_SIZE, &mut one), 10); // chunk 2 is cached
+
+        // chunks 1 and 3 are missing around it
+        let mut buffer = vec![0_u8; 3 * CHUNK_SIZE as usize];
+        assert_eq!(handle.read_at(CHUNK_SIZE, &mut buffer), buffer.len());
+        assert_eq!(
+            buffer[..],
+            bytes[CHUNK_SIZE as usize..4 * CHUNK_SIZE as usize]
+        );
+        assert_eq!(
+            handle.file.as_ref().unwrap().present(0, 5),
+            [0, 1, 1, 1, 0, 0]
+        );
+
+        // ranges a driver announces are there before it reads them
+        handle.prefetch(&[(0, 10), (5 * CHUNK_SIZE + 3, 10)]);
+        assert_eq!(
+            handle.file.as_ref().unwrap().present(0, 5),
+            [1, 1, 1, 1, 0, 1]
+        );
+        close(&handle);
+    }
+
+    #[test]
+    fn it_merges_runs() {
+        assert_eq!(
+            merge(vec![(8, 9), (0, 3), (2, 5), (6, 6), (11, 12)]),
+            [(0, 6), (8, 9), (11, 12)]
+        );
     }
 
     #[test]
