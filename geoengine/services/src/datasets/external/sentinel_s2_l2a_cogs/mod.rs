@@ -33,7 +33,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
     GdalLoadingInfoTemporalSliceIterator, GdalRetryOptions, GdalSource, GdalSourceParameters,
-    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    MultiBandGdalMetaDataProvider, OgrSourceDataset,
 };
 use geoengine_operators::util::retry::retry;
 use postgres_types::{FromSql, ToSql};
@@ -849,30 +849,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-#[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for SentinelS2L2aCogsDataProvider
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotImplemented)
-    }
-}
+impl MultiBandGdalMetaDataProvider for SentinelS2L2aCogsDataProvider {}
 
 #[async_trait]
 impl

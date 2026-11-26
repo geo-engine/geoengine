@@ -1,7 +1,7 @@
 use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{
-    CanonicOperatorName, Footprint, FootprintBounds, FootprintPrecision, MetaData, OperatorData,
-    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, SpatialGridDescriptor,
+    CanonicOperatorName, Footprint, FootprintBounds, OperatorData, OperatorName,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, SpatialGridDescriptor,
     TypedRasterOperator,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
@@ -36,6 +36,7 @@ use geoengine_datatypes::{
 pub use loading_info::{
     GdalMultiBand, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart, TileFile,
 };
+pub use meta_data::{MultiBandGdalMetaData, MultiBandGdalMetaDataProvider, StepFootprint};
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -47,6 +48,7 @@ use tracing::{Instrument as _, debug, trace};
 
 mod error;
 mod loading_info;
+mod meta_data;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -87,42 +89,6 @@ impl OperatorData for GdalSourceParameters {
     }
 }
 
-type MultiBandGdalMetaData = Box<
-    dyn MetaData<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        >,
->;
-
-/// What a loading-info query asks for. Every case is a question a caller really has, so there is
-/// no combination that makes no sense.
-///
-/// This is one query with levels and not one method per question, because a provider answers
-/// all of them from the same lookup, e.g. a STAC provider from the same searches and cache.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LoadingInfoDetail {
-    /// Only the time steps, without files.
-    TimeSteps,
-    /// The files to read the data from.
-    Files,
-    /// For footprints: for each time step whether it has data. A provider that can tell without
-    /// the files answers with [`MultiBandGdalLoadingInfoPart::has_data`] and no files, others
-    /// with the files.
-    Availability,
-    /// For footprints: the files, for their areas. Unlike for [`Self::Files`], a remote catalog
-    /// may search the steps of a part together and limit the number of searches, which a data
-    /// query must not get.
-    Coverage,
-}
-
-impl LoadingInfoDetail {
-    /// Whether the query is for footprints and not for the data or its time steps.
-    pub fn is_for_footprints(self) -> bool {
-        matches!(self, Self::Availability | Self::Coverage)
-    }
-}
-
 /// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request
 /// tiles that are anchored in coordinates space.
 ///
@@ -130,7 +96,6 @@ impl LoadingInfoDetail {
 #[derive(Clone, Debug)]
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-    pub detail: LoadingInfoDetail,
     /// The resolution the source produces its tiles in: the native resolution or an
     /// overview level.
     ///
@@ -154,21 +119,19 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         spatial_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
-        detail: LoadingInfoDetail,
     ) -> Self {
-        Self::with_query_rectangle(
-            QueryRectangle::new(spatial_bounds, time_interval, attributes),
-            detail,
-        )
+        Self::with_query_rectangle(QueryRectangle::new(
+            spatial_bounds,
+            time_interval,
+            attributes,
+        ))
     }
 
     pub fn with_query_rectangle(
         query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-        detail: LoadingInfoDetail,
     ) -> Self {
         Self {
             query_rectangle,
-            detail,
             resolution: LoadingInfoResolution::Native,
         }
     }
@@ -181,20 +144,18 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
     }
 }
 
-fn raster_query_rectangle_to_loading_info_query_rectangle(
+/// The query in coordinates of the tiling grid, for the meta data.
+fn spatial_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
-    resolution: LoadingInfoResolution,
-    detail: LoadingInfoDetail,
-) -> MultiBandGdalLoadingInfoQueryRectangle {
-    let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
-    MultiBandGdalLoadingInfoQueryRectangle::new(
-        tiling_geo_transform.grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
+) -> QueryRectangle<SpatialPartition2D, BandSelection> {
+    QueryRectangle::new(
+        tiling_spatial_grid
+            .tiling_geo_transform()
+            .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
-        detail,
     )
-    .with_resolution(resolution)
 }
 
 pub struct GdalSourceProcessor<T>
@@ -203,7 +164,7 @@ where
 {
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
-    pub meta_data: MultiBandGdalMetaData,
+    pub meta_data: Box<dyn MultiBandGdalMetaData>,
     pub overview_level: NonZeroU32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     pub default_cache_ttl: CacheTtlSeconds,
@@ -225,17 +186,15 @@ where
             )
     }
 
-    /// The parts of the loading info of `query`. The first part is read before this returns, so
-    /// its errors come right away. The next part is read in the background while the caller works
-    /// on the current one, so at most two parts are held at a time. Unlike
+    /// The `parts` of a meta data answer, read ahead. The first part is read before this returns,
+    /// so its errors come right away. The next part is read in the background while the caller
+    /// works on the current one, so at most two parts are held at a time. Unlike
     /// [`crate::util::spawn_stream`], which reads its capacity plus one items ahead, it reads only one,
     /// because a part can cost searches of a remote catalogue that are wasted if the query ends early.
-    async fn loading_info_parts(
-        &self,
-        query: MultiBandGdalLoadingInfoQueryRectangle,
+    async fn read_ahead<Part: Send + 'static>(
+        mut parts: BoxStream<'static, Result<Part>>,
         ctx: &dyn QueryContext,
-    ) -> Result<MultiBandGdalLoadingInfo> {
-        let mut parts = self.meta_data.loading_info(query).await?;
+    ) -> Result<BoxStream<'static, Result<Part>>> {
         let Some(first) = parts.try_next().await? else {
             return Ok(parts);
         };
@@ -335,17 +294,18 @@ where
         };
 
         let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
-        let parts = self
-            .loading_info_parts(
-                raster_query_rectangle_to_loading_info_query_rectangle(
-                    &query,
-                    produced_tiling_grid,
-                    self.loading_info_resolution(),
-                    LoadingInfoDetail::Files,
-                ),
-                ctx,
-            )
-            .await?;
+        let parts = Self::read_ahead(
+            self.meta_data
+                .loading_info(
+                    MultiBandGdalLoadingInfoQueryRectangle::with_query_rectangle(
+                        spatial_query_rectangle(&query, produced_tiling_grid),
+                    )
+                    .with_resolution(self.loading_info_resolution()),
+                )
+                .await?,
+            ctx,
+        )
+        .await?;
         if let Some(loading_info_start) = loading_info_start {
             let loading_info_ms = loading_info_start.elapsed().as_millis();
             trace!(loading_info_ms, "loading_info timing");
@@ -406,34 +366,9 @@ where
     async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
-        ctx: &'a dyn QueryContext,
+        _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
-        let result_descriptor = self.result_descriptor();
-
-        let grid_produced_by_source_desc = result_descriptor.spatial_grid;
-
-        let produced_tiling_grid =
-            grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
-
-        let q_bounds = self
-            .raster_result_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_grid_bounds();
-        let query = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
-
-        let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
-            &query,
-            produced_tiling_grid,
-            LoadingInfoResolution::Native,
-            LoadingInfoDetail::TimeSteps,
-        );
-
-        let parts = self.loading_info_parts(qrect, ctx).await?;
-
-        Ok(parts
-            .map_ok(|loading_info| stream::iter(loading_info.time_steps().to_vec()).map(Result::Ok))
-            .try_flatten()
-            .boxed())
+        self.meta_data.time_steps(query).await
     }
 
     async fn _footprint_query<'a>(
@@ -449,52 +384,36 @@ where
             .tiling_grid_definition(self.tiling_specification);
         let geo_transform = tiling_grid.tiling_geo_transform();
         let query_bounds = query.spatial_bounds();
-        let bands = query.attributes().clone().as_vec();
 
-        let detail = match precision {
-            FootprintPrecision::Availability => LoadingInfoDetail::Availability,
-            FootprintPrecision::Coverage => LoadingInfoDetail::Coverage,
-        };
-        let parts = self
-            .loading_info_parts(
-                raster_query_rectangle_to_loading_info_query_rectangle(
-                    &query,
-                    tiling_grid,
-                    LoadingInfoResolution::Native,
-                    detail,
-                ),
-                ctx,
-            )
-            .await?;
+        let parts = Self::read_ahead(
+            self.meta_data
+                .footprints(spatial_query_rectangle(&query, tiling_grid), precision)
+                .await?,
+            ctx,
+        )
+        .await?;
 
         let thread_pool = ctx.thread_pool().clone();
         Ok(parts
-            .and_then(move |loading_info| {
-                let bands = bands.clone();
+            .and_then(move |steps| {
                 // merging the boxes of many files is CPU work, which runs on the thread pool, not
                 // on the async runtime
                 let task =
                     crate::util::spawn_blocking_with_thread_pool(thread_pool.clone(), move || {
-                        loading_info
-                            .time_steps()
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &time)| {
-                                // A provider may tell whether a step has data without its files.
-                                // Then the whole query is the box of a step with data.
-                                let bounds = match loading_info.has_data(i) {
-                                    Some(true) => {
+                        steps
+                            .into_iter()
+                            .map(|(time, footprint)| {
+                                let bounds = match footprint {
+                                    // the provider did not tell where: the whole query
+                                    StepFootprint::Somewhere => {
                                         FootprintBounds::from_boxes([query_bounds], max_boxes)
                                     }
-                                    Some(false) => FootprintBounds::empty(),
-                                    None => FootprintBounds::from_boxes(
-                                        loading_info.file_bounds(time, &bands).filter_map(
-                                            |partition| {
-                                                geo_transform
-                                                    .spatial_to_grid_bounds(&partition)
-                                                    .intersection(&query_bounds)
-                                            },
-                                        ),
+                                    StepFootprint::Areas(areas) => FootprintBounds::from_boxes(
+                                        areas.iter().filter_map(|area| {
+                                            geo_transform
+                                                .spatial_to_grid_bounds(area)
+                                                .intersection(&query_bounds)
+                                        }),
                                         max_boxes,
                                     ),
                                 };
@@ -524,7 +443,7 @@ impl RasterOperator for MultiBandGdalSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
-        let meta_data: MultiBandGdalMetaData = context.meta_data(&data_id).await?;
+        let meta_data = context.multi_band_gdal_meta_data(&data_id).await?;
 
         debug!(
             "Initializing MultiBandGdalSource for {:?}.",
@@ -579,7 +498,7 @@ pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
     path: ProcessingGraphOperatorPath,
     data_name: NamedData,
-    pub meta_data: MultiBandGdalMetaData,
+    pub meta_data: Box<dyn MultiBandGdalMetaData>,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     // the overview level to use. 0/1 means the highest resolution
@@ -595,7 +514,7 @@ impl InitializedGdalSourceOperator {
         name: CanonicOperatorName,
         path: ProcessingGraphOperatorPath,
         data_name: NamedData,
-        meta_data: MultiBandGdalMetaData,
+        meta_data: Box<dyn MultiBandGdalMetaData>,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
         default_cache_ttl: CacheTtlSeconds,
@@ -619,7 +538,7 @@ impl InitializedGdalSourceOperator {
         name: CanonicOperatorName,
         path: ProcessingGraphOperatorPath,
         data_name: NamedData,
-        meta_data: MultiBandGdalMetaData,
+        meta_data: Box<dyn MultiBandGdalMetaData>,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
         overview_level: NonZeroU32,
@@ -773,6 +692,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::engine::FootprintPrecision;
     use crate::engine::{
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
         TimeDescriptor,
@@ -1140,7 +1060,7 @@ mod tests {
             time_steps.last().unwrap().end(),
         )));
 
-        let meta: MultiBandGdalMetaData = Box::new(StaticMetaData {
+        let meta: Box<dyn MultiBandGdalMetaData> = Box::new(StaticMetaData {
             loading_info: MultiBandGdalLoadingInfoPart::new(time_steps, files, None),
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U16,
@@ -1160,7 +1080,7 @@ mod tests {
             phantom: Default::default(),
         });
 
-        ctx.add_meta_data(id, name.clone(), meta);
+        ctx.add_multi_band_gdal_meta_data(id, name.clone(), meta);
 
         name
     }
@@ -1226,19 +1146,9 @@ mod tests {
     const STEP_MS: i64 = 10;
     const STEPS_PER_ANSWER: usize = 3;
 
-    #[async_trait::async_trait]
-    impl
-        MetaData<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        > for ChunkedMetaData
-    {
-        async fn loading_info(
-            &self,
-            query: MultiBandGdalLoadingInfoQueryRectangle,
-        ) -> Result<MultiBandGdalLoadingInfo> {
-            let time = query.query_rectangle.time_interval();
+    impl ChunkedMetaData {
+        /// The parts of `time`, each of up to three steps, recording the time of each part read.
+        fn parts(&self, time: TimeInterval) -> BoxStream<'static, Result<Vec<TimeInterval>>> {
             let first = time.start().inner().div_euclid(STEP_MS);
             let last = (time.end().inner() - 1).div_euclid(STEP_MS);
             let parts = (first..=last)
@@ -1246,11 +1156,8 @@ mod tests {
                 .chunks(STEPS_PER_ANSWER)
                 .map(<[i64]>::to_vec)
                 .collect::<Vec<_>>();
-
             let asked = self.asked.clone();
-            let knows_availability =
-                query.detail == LoadingInfoDetail::Availability && self.knows_availability;
-            Ok(stream::iter(parts)
+            stream::iter(parts)
                 .map(move |steps| {
                     let time_steps = steps
                         .iter()
@@ -1260,30 +1167,68 @@ mod tests {
                         time_steps[0].start(),
                         time_steps[time_steps.len() - 1].end(),
                     )?);
-
-                    let part = MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), None);
-                    if knows_availability {
-                        part.with_availability(steps.iter().map(|i| i % 2 == 0).collect())
-                    } else {
-                        Ok(part)
-                    }
+                    Ok(time_steps)
                 })
-                .boxed())
+                .boxed()
         }
+    }
 
+    #[async_trait::async_trait]
+    impl MultiBandGdalMetaData for ChunkedMetaData {
         async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
             Ok(self.result_descriptor.clone())
         }
 
-        fn box_clone(
+        async fn time_steps(
             &self,
-        ) -> Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > {
+            time: TimeInterval,
+        ) -> Result<BoxStream<'static, Result<TimeInterval>>> {
+            Ok(self
+                .parts(time)
+                .map_ok(|steps| stream::iter(steps).map(Ok))
+                .try_flatten()
+                .boxed())
+        }
+
+        async fn loading_info(
+            &self,
+            query: MultiBandGdalLoadingInfoQueryRectangle,
+        ) -> Result<MultiBandGdalLoadingInfo> {
+            Ok(self
+                .parts(query.query_rectangle.time_interval())
+                .map_ok(|steps| MultiBandGdalLoadingInfoPart::new(steps, Vec::new(), None))
+                .boxed())
+        }
+
+        async fn footprints(
+            &self,
+            query: QueryRectangle<SpatialPartition2D, BandSelection>,
+            precision: FootprintPrecision,
+        ) -> Result<BoxStream<'static, Result<Vec<(TimeInterval, StepFootprint)>>>> {
+            let knows_availability =
+                precision == FootprintPrecision::Availability && self.knows_availability;
+            Ok(self
+                .parts(query.time_interval())
+                .map_ok(move |steps| {
+                    steps
+                        .into_iter()
+                        .map(|step| {
+                            // with data in every second step; otherwise from the files, of which it has none
+                            let footprint = if knows_availability
+                                && step.start().inner().div_euclid(STEP_MS) % 2 == 0
+                            {
+                                StepFootprint::Somewhere
+                            } else {
+                                StepFootprint::Areas(vec![])
+                            };
+                            (step, footprint)
+                        })
+                        .collect()
+                })
+                .boxed())
+        }
+
+        fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData> {
             Box::new(self.clone())
         }
     }
@@ -1317,12 +1262,12 @@ mod tests {
         let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("chunked");
-        let meta: MultiBandGdalMetaData = Box::new(ChunkedMetaData {
+        let meta: Box<dyn MultiBandGdalMetaData> = Box::new(ChunkedMetaData {
             result_descriptor,
             asked: asked.clone(),
             knows_availability,
         });
-        execution_context.add_meta_data(id, name.clone(), meta);
+        execution_context.add_multi_band_gdal_meta_data(id, name.clone(), meta);
 
         let processor = MultiBandGdalSource {
             params: GdalSourceParameters::new(name),

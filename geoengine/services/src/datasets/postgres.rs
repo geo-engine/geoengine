@@ -21,7 +21,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-use futures::{StreamExt, future, stream};
+use futures::{StreamExt, future, stream, stream::BoxStream};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
@@ -37,9 +37,9 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
-    TileFile,
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart,
+    MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalMetaData, MultiBandGdalMetaDataProvider,
+    OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::Transaction;
@@ -671,30 +671,17 @@ where
 }
 
 #[async_trait]
-impl<Tls>
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for PostgresDb<Tls>
+impl<Tls> MultiBandGdalMetaDataProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn meta_data(
+    async fn multi_band_gdal_meta_data(
         &self,
         data_id: &DataId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-    > {
+    ) -> geoengine_operators::util::Result<Box<dyn MultiBandGdalMetaData>> {
         let id = data_id
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
@@ -986,18 +973,38 @@ where
 }
 
 #[async_trait]
-impl<Tls>
-    MetaData<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for MultiBandGdalLoadingInfoProvider<Tls>
+impl<Tls> MultiBandGdalMetaData for MultiBandGdalLoadingInfoProvider<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    async fn result_descriptor(
+        &self,
+    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    async fn time_steps(
+        &self,
+        time: TimeInterval,
+    ) -> geoengine_operators::util::Result<
+        BoxStream<'static, geoengine_operators::util::Result<TimeInterval>>,
+    > {
+        let conn = self.db.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let time_steps = create_gap_free_time_steps(self.dataset_id, time, &conn)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+        Ok(stream::iter(time_steps.into_iter().map(Ok)).boxed())
+    }
+
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -1048,21 +1055,7 @@ where
         Ok(stream::once(future::ready(Ok(first))).chain(rest).boxed())
     }
 
-    async fn result_descriptor(
-        &self,
-    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
-    > {
+    fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData> {
         Box::new(self.clone())
     }
 }
@@ -1091,68 +1084,55 @@ where
             _ => query_time,
         };
 
-        let files = if matches!(
-            query.detail,
-            LoadingInfoDetail::Files
-                | LoadingInfoDetail::Availability
-                | LoadingInfoDetail::Coverage
-        ) {
-            // query the files
-            let rows = conn
-                .query(
-                    "
-            SELECT
-                bbox, time, band, z_index, gdal_params
-            FROM
-                dataset_tiles
-            WHERE
-                dataset_id = $1 AND 
-                spatial_partition2d_intersects(bbox, $2) AND
-                time_interval_intersects(time, $3) AND
-                band = ANY($4)
-            ORDER BY
-                (time).start, band, z_index",
-                    &[
-                        &self.dataset_id,
-                        &query.query_rectangle.spatial_bounds(),
-                        &files_time,
-                        &query.query_rectangle.attributes().as_slice(),
-                    ],
-                )
-                .await
-                .map_err(|e| geoengine_operators::error::Error::MetaData {
-                    source: Box::new(e),
-                })?;
-
-            // Resolve the base path once before the tile loop to avoid repeated volume lookups
-            let base_path = self.data_path.resolve_base_path().map_err(|e| {
-                geoengine_operators::error::Error::MetaData {
-                    source: Box::new(e),
-                }
+        let rows = conn
+            .query(
+                "
+        SELECT
+            bbox, time, band, z_index, gdal_params
+        FROM
+            dataset_tiles
+        WHERE
+            dataset_id = $1 AND 
+            spatial_partition2d_intersects(bbox, $2) AND
+            time_interval_intersects(time, $3) AND
+            band = ANY($4)
+        ORDER BY
+            (time).start, band, z_index",
+                &[
+                    &self.dataset_id,
+                    &query.query_rectangle.spatial_bounds(),
+                    &files_time,
+                    &query.query_rectangle.attributes().as_slice(),
+                ],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
             })?;
 
-            let files: Vec<TileFile> = rows
-                .into_iter()
-                .map(|row| {
-                    let mut params: GdalDatasetParameters = row.get(4);
-                    if let Some(ref base_path) = base_path {
-                        params.file_path = base_path.join(&params.file_path);
-                    }
-                    TileFile {
-                        spatial_partition: row.get(0),
-                        time: row.get(1),
-                        band: row.get(2),
-                        z_index: row.get(3),
-                        params,
-                    }
-                })
-                .collect();
+        // Resolve the base path once before the tile loop to avoid repeated volume lookups
+        let base_path = self.data_path.resolve_base_path().map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
 
-            files
-        } else {
-            // TODO: configure the resulting loading info to return an error on accessing the files
-            vec![]
-        };
+        let files: Vec<TileFile> = rows
+            .into_iter()
+            .map(|row| {
+                let mut params: GdalDatasetParameters = row.get(4);
+                if let Some(ref base_path) = base_path {
+                    params.file_path = base_path.join(&params.file_path);
+                }
+                TileFile {
+                    spatial_partition: row.get(0),
+                    time: row.get(1),
+                    band: row.get(2),
+                    z_index: row.get(3),
+                    params,
+                }
+            })
+            .collect();
 
         Ok(MultiBandGdalLoadingInfoPart::new(
             time_steps,

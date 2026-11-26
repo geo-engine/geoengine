@@ -37,10 +37,7 @@ use geoengine_operators::source::{
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
-    },
+    source::{GdalLoadingInfo, MultiBandGdalMetaDataProvider, OgrSourceDataset},
 };
 use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
@@ -839,30 +836,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-#[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for GfbioCollectionsDataProvider
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
+impl MultiBandGdalMetaDataProvider for GfbioCollectionsDataProvider {}
 
 #[cfg(test)]
 mod tests {

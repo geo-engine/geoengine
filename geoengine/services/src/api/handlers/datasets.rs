@@ -1738,12 +1738,12 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ExecutionContext, InitializedVectorOperator, MetaData, MetaDataProvider,
-            ProcessingGraphOperatorPath, QueryProcessor, RasterOperator as _, StaticMetaData,
-            VectorOperator, VectorResultDescriptor,
+            ExecutionContext, InitializedVectorOperator, ProcessingGraphOperatorPath,
+            QueryProcessor, RasterOperator as _, StaticMetaData, VectorOperator,
+            VectorResultDescriptor,
         },
         source::{
-            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
+            MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalMetaDataProvider, OgrSource,
             OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
         },
         util::{
@@ -5563,14 +5563,8 @@ mod tests {
             panic!("expected raster dataset");
         };
 
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: id_and_name.id.into(),
                     r#type:
@@ -5654,14 +5648,8 @@ mod tests {
             panic!("expected raster dataset");
         };
 
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: id_and_name.id.into(),
                     r#type:
@@ -5720,14 +5708,8 @@ mod tests {
             .resolve_dataset_name_to_id(&dataset_name)
             .await?
             .expect("the dataset exists");
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: dataset_id.into(),
                     r#type:
@@ -5747,7 +5729,6 @@ mod tests {
                         .unwrap(),
                 )?,
                 BandSelection::first(),
-                geoengine_operators::source::LoadingInfoDetail::Files,
             ))
             .await?
             .try_collect()

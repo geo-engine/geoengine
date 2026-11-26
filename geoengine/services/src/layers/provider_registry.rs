@@ -146,8 +146,7 @@ mod tests {
     };
     use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
     use geoengine_operators::source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
+        GdalLoadingInfo, MultiBandGdalMetaDataProvider, OgrSourceDataset,
     };
     use geoengine_operators::util::Result as OpResult;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -267,30 +266,7 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    #[allow(clippy::unimplemented, reason = "ok in tests")]
-    impl
-        MetaDataProvider<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        > for MockProvider
-    {
-        async fn meta_data(
-            &self,
-            _id: &DataId,
-        ) -> OpResult<
-            Box<
-                dyn MetaData<
-                        MultiBandGdalLoadingInfo,
-                        RasterResultDescriptor,
-                        MultiBandGdalLoadingInfoQueryRectangle,
-                    >,
-            >,
-        > {
-            unimplemented!()
-        }
-    }
+    impl MultiBandGdalMetaDataProvider for MockProvider {}
 
     // ── DataProvider ───────────────────────────────────────────────────────
 

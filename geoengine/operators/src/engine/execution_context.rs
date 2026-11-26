@@ -17,8 +17,7 @@ use crate::source::gdal_worker_process::{
     DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, GdalProcessPoolAccess, WorkerConfig,
 };
 use crate::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+    GdalLoadingInfo, MultiBandGdalMetaData, MultiBandGdalMetaDataProvider, OgrSourceDataset,
 };
 use crate::util::test::{test_expression_environment, test_ort_environment};
 use crate::util::{Result, create_rayon_thread_pool};
@@ -45,11 +44,8 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > + GdalProcessPoolAccess
+    + MultiBandGdalMetaDataProvider
+    + GdalProcessPoolAccess
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
@@ -269,6 +265,20 @@ impl MockExecutionContext {
         self.named_data.insert(named_data, data);
     }
 
+    pub fn add_multi_band_gdal_meta_data(
+        &mut self,
+        data: DataId,
+        named_data: NamedData,
+        meta_data: Box<dyn MultiBandGdalMetaData>,
+    ) {
+        self.meta_data.insert(
+            data.clone(),
+            Box::new(meta_data) as Box<dyn Any + Send + Sync>,
+        );
+
+        self.named_data.insert(named_data, data);
+    }
+
     pub fn delete_meta_data(&mut self, named_data: &NamedData) {
         let data = self.named_data.remove(named_data);
         if let Some(data) = data {
@@ -417,6 +427,23 @@ where
             .get(id)
             .ok_or(Error::UnknownDataId)?
             .downcast_ref::<Box<dyn MetaData<L, R, Q>>>()
+            .ok_or(Error::InvalidMetaDataType)?;
+
+        Ok(meta_data.clone())
+    }
+}
+
+#[async_trait]
+impl MultiBandGdalMetaDataProvider for MockExecutionContext {
+    async fn multi_band_gdal_meta_data(
+        &self,
+        id: &DataId,
+    ) -> Result<Box<dyn MultiBandGdalMetaData>> {
+        let meta_data = self
+            .meta_data
+            .get(id)
+            .ok_or(Error::UnknownDataId)?
+            .downcast_ref::<Box<dyn MultiBandGdalMetaData>>()
             .ok_or(Error::InvalidMetaDataType)?;
 
         Ok(meta_data.clone())
@@ -652,6 +679,16 @@ where
 {
     async fn meta_data(&self, id: &DataId) -> Result<Box<dyn MetaData<L, R, Q>>> {
         self.inner.meta_data(id).await
+    }
+}
+
+#[async_trait]
+impl MultiBandGdalMetaDataProvider for StatisticsWrappingMockExecutionContext {
+    async fn multi_band_gdal_meta_data(
+        &self,
+        id: &DataId,
+    ) -> Result<Box<dyn MultiBandGdalMetaData>> {
+        self.inner.multi_band_gdal_meta_data(id).await
     }
 }
 

@@ -26,10 +26,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
-    },
+    source::{GdalLoadingInfo, MultiBandGdalMetaDataProvider, OgrSourceDataset},
 };
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -701,30 +698,7 @@ impl<D: GeoEngineDb>
     }
 }
 
-#[async_trait]
-impl<D: GeoEngineDb>
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for EbvPortalDataProvider<D>
-{
-    async fn meta_data(
-        &self,
-        id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        self.netcdf_cf_provider.meta_data(id).await
-    }
-}
+impl<D: GeoEngineDb> MultiBandGdalMetaDataProvider for EbvPortalDataProvider<D> {}
 
 #[cfg(test)]
 mod tests {

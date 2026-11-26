@@ -70,6 +70,7 @@ use geoengine_operators::{
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
+        MultiBandGdalMetaData,
         gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
     util::{
@@ -388,6 +389,20 @@ impl Env {
         self.exe_ctx
             .inner
             .add_meta_data(DataId::from(DatasetId::new()), data.clone(), meta_data);
+        data
+    }
+
+    pub fn add_multi_band_gdal_data(
+        &mut self,
+        name: &str,
+        meta_data: Box<dyn MultiBandGdalMetaData>,
+    ) -> NamedData {
+        let data = NamedData::with_system_name(name);
+        self.exe_ctx.inner.add_multi_band_gdal_meta_data(
+            DataId::from(DatasetId::new()),
+            data.clone(),
+            meta_data,
+        );
         data
     }
 
