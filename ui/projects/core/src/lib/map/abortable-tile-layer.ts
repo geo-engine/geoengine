@@ -1,15 +1,29 @@
 import {intersects} from 'ol/extent';
 import ImageTile from 'ol/ImageTile';
 import TileLayer from 'ol/layer/Tile';
+import type {FrameState} from 'ol/Map';
 import {equivalent} from 'ol/proj';
 import CanvasTileLayerRenderer from 'ol/renderer/canvas/TileLayer';
 import ReprojTile from 'ol/reproj/Tile';
 import TileSource from 'ol/source/Tile';
+import type Tile from 'ol/Tile';
+import {getUid} from 'ol/util';
 import {Extent} from './map.service';
 import {transformExtentBetweenProjections} from './tile-loader';
 
 /** Keeps cancelled source tiles from leaving failed or incomplete reprojections in the display cache. */
-class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRenderer<L> {
+class AbortableTileLayerRenderer<L extends TileLayer & {requestsPaused: boolean}> extends CanvasTileLayerRenderer<L> {
+    override enqueueTiles(frame: FrameState, extent: number[], z: number, tilesByZ: Record<number, Set<Tile>>, preload: number): void {
+        super.enqueueTiles(frame, extent, z, tilesByZ, preload);
+        const layer = this.getLayer();
+        const source = layer.getRenderSource();
+        if (layer.requestsPaused && source) {
+            // Keep cached/fallback imagery drawable. The map's queue reprioritization drops
+            // unwanted requests before they occupy shared loading slots.
+            frame.wantedTiles[getUid(source)] = {};
+        }
+    }
+
     /**
      * Discards the reprojections that were built from the given source tile.
      *
@@ -71,6 +85,9 @@ class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRen
 }
 
 export class AbortableTileLayer<S extends TileSource> extends TileLayer<S> {
+    /** Suppresses new imagery requests while preserving cached tiles for rendering. */
+    requestsPaused = false;
+
     override createRenderer(): CanvasTileLayerRenderer<this> {
         return new AbortableTileLayerRenderer(this, {cacheSize: this.getCacheSize()});
     }

@@ -1,4 +1,5 @@
-import {Injectable, signal, Signal} from '@angular/core';
+import {effect, Injectable, signal, Signal} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {containsExtent as olExtentContainsExtent, getIntersection as olExtentGetIntersection} from 'ol/extent';
 import OlFeature from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
@@ -11,6 +12,7 @@ import {BehaviorSubject, Observable} from 'rxjs';
 import {distinctUntilChanged} from 'rxjs/operators';
 import {olExtentToTuple} from '@geoengine/common';
 import {MapContainerComponent} from './map-container/map-container.component';
+import {TileZoomDebounce} from './tile-zoom-debounce';
 
 /**
  * The viewport combines…
@@ -65,6 +67,44 @@ export class MapService {
 
     /** The current map view, including replacements after a projection change. */
     readonly view = this.viewSignal.asReadonly();
+
+    /** Delay shared by imagery, temporal availability and footprint polygons; zero loads immediately. */
+    readonly zoomDebounceMs = signal(0);
+    private readonly zoomPause = new BehaviorSubject(false);
+    private zoomAbortController = new AbortController();
+    readonly zoomPaused = toSignal(this.zoomPause, {requireSync: true});
+
+    constructor() {
+        effect((onCleanup) => {
+            const delay = this.zoomDebounceMs();
+            const view = this.view();
+            if (delay <= 0) return;
+
+            const debounce = new TileZoomDebounce(view, delay, (paused) => {
+                // moveend may arrive on the next frame after the zoom gesture ends.
+                // Publish the final viewport before any requests resume.
+                if (!paused) this.mapComponent?.emitViewportSize();
+                if (paused) this.zoomAbortController.abort();
+                else this.zoomAbortController = new AbortController();
+                this.zoomPause.next(paused);
+            });
+            onCleanup(() => {
+                debounce.dispose();
+                if (this.zoomAbortController.signal.aborted) this.zoomAbortController = new AbortController();
+                this.zoomPause.next(false);
+            });
+        });
+    }
+
+    /** Emits synchronously on every resolution change, so loaders also cancel within one zoom level. */
+    getZoomPauseStream(): Observable<boolean> {
+        return this.zoomPause.asObservable();
+    }
+
+    /** Cancels viewport queries immediately on zoom, even before resource effects run. Renewed on resume. */
+    getZoomAbortSignal(): AbortSignal {
+        return this.zoomAbortController.signal;
+    }
 
     /**
      * Returns events that indicate if the map is in grid or default mode

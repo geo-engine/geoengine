@@ -7,6 +7,7 @@ import {get as getProjection, transformExtent} from 'ol/proj';
 import TileWMS from 'ol/source/TileWMS';
 import Tile from 'ol/Tile';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import TileQueue, {getTilePriority} from 'ol/TileQueue';
 import TileState from 'ol/TileState';
 import View from 'ol/View';
 import {Observable, Subject} from 'rxjs';
@@ -14,7 +15,6 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {olExtentToTuple} from '@geoengine/common';
 import {AbortableTileLayer} from './abortable-tile-layer';
 import {TileDiagnostic, TileFrame, TileInView, TileLoadState, TileLoader, currentViewport, tileExtentInViewProjection} from './tile-loader';
-import {TileZoomDebounce} from './tile-zoom-debounce';
 
 /** Exposes the renderer's protected tile lookup so tests can exercise its real caches without drawing a map. */
 interface TileRendererAccess {
@@ -117,50 +117,41 @@ describe('TileLoader', () => {
         vi.useRealTimers();
     });
 
-    it('fetches only the settled zoom after cancelling intermediate queued tiles', async () => {
-        vi.useFakeTimers();
+    it('keeps a paused reprojection out of the loading queue and loads it on resume', () => {
         const signals: AbortSignal[] = [];
         stubHangingFetch(signals);
-        const view = new View({center: [0, 0], zoom: 5});
-        const debounce = new TileZoomDebounce(view, 400, () => loader.cancelPending('zoom resolution changed'));
+        const source = new TileWMS({url: 'https://example.com/wms', params: {LAYERS: 'test'}, projection: 'EPSG:4326', wrapX: false});
+        const layer = new AbortableTileLayer({source});
         const loader = new TileLoader({
             authHeaders: (): Record<string, string> => authHeaders,
-            waitBeforeLoad: (signal): Promise<void> => debounce.wait(signal),
+            onTileError: (tile): void => layer.invalidateAbortedTile(tile),
         });
-        const intermediate = makeTile(undefined, [6, 0, 0]);
-        view.setZoom(6);
-        loader.load(intermediate.tile, 'https://example.com/intermediate');
-        await vi.advanceTimersByTimeAsync(300);
-        view.setZoom(7);
-        loader.load(makeTile(undefined, [7, 0, 0]).tile, 'https://example.com/final');
-        await vi.advanceTimersByTimeAsync(399);
-        expect(fetch).not.toHaveBeenCalled();
-        expect(intermediate.setState).toHaveBeenCalledWith(TileState.IDLE);
-        await vi.advanceTimersByTimeAsync(1);
-        expect(fetch).toHaveBeenCalledExactlyOnceWith('https://example.com/final', expect.anything());
-        loader.abortAll();
-        debounce.dispose();
-        await vi.advanceTimersByTimeAsync(0);
-    });
+        source.setTileLoadFunction(loader.load);
+        const view = new View({center: [0, 0], zoom: 2});
+        const frame = {viewState: view.getState(), pixelRatio: 1, wantedTiles: {}} as FrameState;
+        frame.tileQueue = new TileQueue(
+            (tile, key, center, resolution): number => getTilePriority(frame, tile, key, center, resolution),
+            (): void => undefined,
+        );
+        const renderer = layer.getRenderer()!;
+        renderer.prepareFrame(frame);
+        try {
+            layer.requestsPaused = true;
+            renderer.enqueueTiles(frame, view.calculateExtent([256, 256]), 2, {}, 0);
+            frame.tileQueue.reprioritize();
+            frame.tileQueue.loadMoreTiles(16, 16);
+            expect(fetch).not.toHaveBeenCalled();
+            expect(frame.tileQueue.getTilesLoading()).toBe(0);
 
-    it('never fetches a tile cancelled while waiting for the zoom debounce', async () => {
-        vi.useFakeTimers();
-        const signals: AbortSignal[] = [];
-        stubHangingFetch(signals);
-        const view = new View({center: [0, 0], zoom: 5});
-        const debounce = new TileZoomDebounce(view, 400, () => undefined);
-        const loader = new TileLoader({
-            authHeaders: (): Record<string, string> => authHeaders,
-            waitBeforeLoad: (signal): Promise<void> => debounce.wait(signal),
-        });
-        view.setZoom(6);
-        const {tile, setState} = makeTile();
-        loader.load(tile, 'https://example.com/cancelled');
-        loader.abortAll();
-        await vi.advanceTimersByTimeAsync(1000);
-        expect(fetch).not.toHaveBeenCalled();
-        expect(setState).toHaveBeenCalledWith(TileState.IDLE);
-        debounce.dispose();
+            layer.requestsPaused = false;
+            renderer.enqueueTiles(frame, view.calculateExtent([256, 256]), 2, {}, 0);
+            frame.tileQueue.reprioritize();
+            frame.tileQueue.loadMoreTiles(16, 16);
+            expect(signals.length).toBeGreaterThan(0);
+        } finally {
+            loader.abortAll();
+            layer.dispose();
+        }
     });
 
     it('fetches the tile with the authentication headers and frees the object URL after loading', async () => {

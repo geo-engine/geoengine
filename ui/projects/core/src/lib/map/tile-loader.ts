@@ -68,9 +68,6 @@ export interface TileDiagnostic {
 }
 
 interface TileLoaderOptions {
-    /** Waits before fetching imagery, e.g. until a zoom has settled. Does not delay metadata. */
-    readonly waitBeforeLoad?: (signal: AbortSignal) => Promise<void>;
-
     /** Checks live visibility before a queued request or retry starts, including during animations. */
     readonly canLoad?: () => boolean;
 
@@ -453,10 +450,6 @@ export class TileLoader {
 
     private async request(tile: ImageTile, src: string, signal: AbortSignal): Promise<LoadOutcome> {
         try {
-            if (this.options.waitBeforeLoad) {
-                await this.options.waitBeforeLoad(signal);
-                this.throwIfAborted(signal);
-            }
             const response = await this.fetch(src, signal);
             this.throwIfAborted(signal);
             if (!response.ok) {

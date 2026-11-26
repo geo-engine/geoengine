@@ -7,13 +7,13 @@ import {TileZoomDebounce} from './tile-zoom-debounce';
 describe('TileZoomDebounce', () => {
     let view: View;
     let debounce: TileZoomDebounce;
-    let onZoom: ReturnType<typeof vi.fn<() => void>>;
+    let onPause: ReturnType<typeof vi.fn<(paused: boolean) => void>>;
 
     beforeEach(() => {
         vi.useFakeTimers();
         view = new View({center: [0, 0], zoom: 5});
-        onZoom = vi.fn();
-        debounce = new TileZoomDebounce(view, 400, onZoom);
+        onPause = vi.fn();
+        debounce = new TileZoomDebounce(view, 400, onPause);
     });
 
     afterEach(() => {
@@ -21,71 +21,79 @@ describe('TileZoomDebounce', () => {
         vi.useRealTimers();
     });
 
-    it('loads immediately initially and during a pan, including while the mouse is held', async () => {
-        await debounce.wait(new AbortController().signal);
+    it('leaves initial loading and panning immediate, including while the mouse is held', async () => {
         view.beginInteraction();
         view.setCenter([100, 100]);
-        const ready = vi.fn();
-        void debounce.wait(new AbortController().signal).then(ready);
-        await vi.advanceTimersByTimeAsync(0);
-        expect(ready).toHaveBeenCalledOnce();
-        expect(onZoom).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(onPause).not.toHaveBeenCalled();
     });
 
     it.each([7, 4])('restarts the delay on every zoom change and resumes at zoom %s', async (finalZoom: number) => {
         view.setZoom(6);
-        const ready = vi.fn();
-        void debounce.wait(new AbortController().signal).then(ready);
         await vi.advanceTimersByTimeAsync(300);
         view.setZoom(finalZoom);
         await vi.advanceTimersByTimeAsync(399);
-        expect(ready).not.toHaveBeenCalled();
+        expect(onPause.mock.calls).toEqual([[true], [true]]);
         await vi.advanceTimersByTimeAsync(1);
-        expect(ready).toHaveBeenCalledOnce();
-        expect(onZoom).toHaveBeenCalledTimes(2);
+        expect(onPause.mock.calls).toEqual([[true], [true], [false]]);
     });
 
-    it('holds requests through a paused pinch gesture', async () => {
+    it('holds requests through a paused pinch gesture without polling', async () => {
         view.beginInteraction();
         view.setZoom(6);
-        const ready = vi.fn();
-        void debounce.wait(new AbortController().signal).then(ready);
         await vi.advanceTimersByTimeAsync(1000);
-        expect(ready).not.toHaveBeenCalled();
+        expect(onPause.mock.calls).toEqual([[true]]);
+        expect(vi.getTimerCount()).toBe(0);
         view.endInteraction(0);
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ready).toHaveBeenCalledOnce();
+        expect(onPause).toHaveBeenLastCalledWith(false);
+    });
+
+    it('waits for the delay when the zoom gesture finishes early', async () => {
+        view.beginInteraction();
+        view.setZoom(6);
+        await vi.advanceTimersByTimeAsync(200);
+        view.endInteraction(0);
+        expect(onPause.mock.calls).toEqual([[true]]);
+        await vi.advanceTimersByTimeAsync(200);
+        expect(onPause).toHaveBeenLastCalledWith(false);
+    });
+
+    it('allows a pan started during the delay after a discrete zoom', async () => {
+        view.setZoom(6);
+        await vi.advanceTimersByTimeAsync(200);
+        view.beginInteraction();
+        view.setCenter([100, 100]);
+        await vi.advanceTimersByTimeAsync(200);
+        expect(onPause).toHaveBeenLastCalledWith(false);
+        expect(view.getInteracting()).toBe(true);
+    });
+
+    it('allows a new pan after the zoom gesture ends during the delay', async () => {
+        view.beginInteraction();
+        view.setZoom(6);
+        view.endInteraction(0);
+        view.beginInteraction();
+        view.setCenter([100, 100]);
+        await vi.advanceTimersByTimeAsync(400);
+        expect(onPause).toHaveBeenLastCalledWith(false);
     });
 
     it('waits through a zoom animation and the delay after its final frame', async () => {
         view.animate({zoom: 7, duration: 800});
-        await vi.advanceTimersByTimeAsync(100);
-        const ready = vi.fn();
-        void debounce.wait(new AbortController().signal).then(ready);
-        await vi.advanceTimersByTimeAsync(700);
-        expect(ready).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(800);
+        expect(onPause).not.toHaveBeenCalledWith(false);
         await vi.advanceTimersByTimeAsync(450);
-        expect(ready).toHaveBeenCalledOnce();
+        expect(onPause).toHaveBeenLastCalledWith(false);
     });
 
-    it('removes an aborted waiter before zooming finishes', async () => {
+    it('clears its timer and view listeners when disposed', async () => {
         view.setZoom(6);
-        const controller = new AbortController();
-        const result = expect(debounce.wait(controller.signal)).rejects.toMatchObject({name: 'AbortError'});
-        controller.abort();
-        await result;
-        await vi.advanceTimersByTimeAsync(400);
-    });
-
-    it('clears its timer and view listener when disposed', async () => {
-        view.setZoom(6);
-        const ready = vi.fn();
-        void debounce.wait(new AbortController().signal).then(ready);
         debounce.dispose();
-        await vi.advanceTimersByTimeAsync(0);
-        expect(ready).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(1000);
         expect(vi.getTimerCount()).toBe(0);
         view.setZoom(7);
-        expect(onZoom).toHaveBeenCalledOnce();
+        view.beginInteraction();
+        view.endInteraction(0);
+        expect(onPause.mock.calls).toEqual([[true]]);
     });
 });

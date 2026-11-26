@@ -1,4 +1,5 @@
 import {ComponentFixture, TestBed} from '@angular/core/testing';
+import ImageTile from 'ol/ImageTile';
 import {FrameState} from 'ol/Map';
 import {fromLonLat, get as getProjection} from 'ol/proj';
 import ReprojTile from 'ol/reproj/Tile';
@@ -82,7 +83,7 @@ describe('OGC map tile minimum matrix index', () => {
         fixture.detectChanges();
     }
 
-    function enqueueTiles(matrixIndex: number, preload = 0): {queue: TileQueue; tilesByZ: Record<number, Set<Tile>>} {
+    function enqueueTiles(matrixIndex: number, preload = 0): {frame: FrameState; queue: TileQueue; tilesByZ: Record<number, Set<Tile>>} {
         const frame = {viewState: view.getState(), pixelRatio: 1, wantedTiles: {}} as FrameState;
         const queue = new TileQueue(
             (tile, sourceKey, center, resolution): number => getTilePriority(frame, tile, sourceKey, center, resolution),
@@ -94,7 +95,9 @@ describe('OGC map tile minimum matrix index', () => {
         const tilesByZ: Record<number, Set<Tile>> = {};
         const renderer = fixture.componentInstance.mapLayer.getRenderer() as unknown as TileEnqueuer;
         renderer.enqueueTiles(frame, [0, -512000, 512000, 0], matrixIndex, tilesByZ, preload);
-        return {queue, tilesByZ};
+        // Map.handlePostRender reprioritizes against the current frame before starting requests.
+        queue.reprioritize();
+        return {frame, queue, tilesByZ};
     }
 
     beforeEach(async () => {
@@ -163,7 +166,7 @@ describe('OGC map tile minimum matrix index', () => {
 
     async function enableZoomDebounce(): Promise<void> {
         await setResolution(999);
-        fixture.componentRef.setInput('zoomDebounceMs', 400);
+        mapService.zoomDebounceMs.set(400);
         fixture.detectChanges();
         await fixture.whenStable();
         source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
@@ -172,6 +175,7 @@ describe('OGC map tile minimum matrix index', () => {
 
     it('debounces imagery from the real OpenLayers queue until the final zoom settles', async () => {
         await enableZoomDebounce();
+        const changed = vi.spyOn(fixture.componentInstance.mapLayer, 'changed');
         view.setResolution(800);
         const intermediate = enqueueTiles(4);
         intermediate.queue.loadMoreTiles(16, 16);
@@ -185,7 +189,11 @@ describe('OGC map tile minimum matrix index', () => {
         final.queue.loadMoreTiles(16, 16);
         await vi.advanceTimersByTimeAsync(399);
         expect(tileRequests).toHaveLength(0);
+        changed.mockClear();
         await vi.advanceTimersByTimeAsync(1);
+        expect(changed).toHaveBeenCalledOnce();
+        // The requested render queues the settled viewport again; no tile owns a waiting promise.
+        enqueueTiles(5).queue.loadMoreTiles(16, 16);
         expect(tileRequests.length).toBeGreaterThan(0);
         const urls = vi
             .mocked(fetch)
@@ -200,6 +208,101 @@ describe('OGC map tile minimum matrix index', () => {
         view.setCenter([2000, -2000]);
         enqueueTiles(4).queue.loadMoreTiles(16, 16);
         await vi.advanceTimersByTimeAsync(0);
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('loads during a pan started just after a discrete zoom', async () => {
+        await enableZoomDebounce();
+        view.setResolution(800);
+        await vi.advanceTimersByTimeAsync(200);
+        view.beginInteraction();
+        view.setCenter([2000, -2000]);
+        await vi.advanceTimersByTimeAsync(200);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(1);
+        expect(view.getInteracting()).toBe(true);
+    });
+
+    it('keeps the zoom gate through an imagery date change during a paused pinch', async () => {
+        await enableZoomDebounce();
+        view.beginInteraction();
+        view.setResolution(800);
+        fixture.componentRef.setInput('time', new Time(new Date('2026-04-02T00:00:00Z')));
+        fixture.detectChanges();
+        await vi.advanceTimersByTimeAsync(0);
+        await fixture.whenStable();
+        const previousSource = source;
+        source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
+        expect(source).not.toBe(previousSource);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(tileRequests).toHaveLength(0);
+        view.endInteraction(0);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('keeps shared loading slots available to another layer during a zoom pause', async () => {
+        await enableZoomDebounce();
+        view.setResolution(800);
+        const {frame, queue} = enqueueTiles(4);
+        queue.loadMoreTiles(16, 16);
+        expect(queue.getTilesLoading()).toBe(0);
+        const loadBasemap = vi.fn();
+        const basemap = new ImageTile([4, 0, 0], TileState.IDLE, 'https://base.test/4/0/0.png', {}, loadBasemap);
+        frame.wantedTiles['basemap'] = {[basemap.getKey()]: true};
+        queue.enqueue([basemap, 'basemap', [0, 0], 1000]);
+        queue.reprioritize();
+        queue.loadMoreTiles(1, 1);
+        expect(loadBasemap).toHaveBeenCalledOnce();
+        expect(tileRequests).toHaveLength(0);
+    });
+
+    it('rejects an earlier frame queue when zooming begins and reloads the tile after settling', async () => {
+        await enableZoomDebounce();
+        const {queue, tilesByZ} = enqueueTiles(4);
+        view.setResolution(800);
+        queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(0);
+        expect(queue.getTilesLoading()).toBe(0);
+        for (const tile of tilesByZ[4]) expect(tile.getState()).toBe(TileState.IDLE);
+        await vi.advanceTimersByTimeAsync(400);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('keeps cached imagery drawable during a zoom pause', async () => {
+        await enableZoomDebounce();
+        const cached = [...enqueueTiles(4).tilesByZ[4]][0] as ImageTile;
+        cached.setImage(document.createElement('canvas'));
+        view.setResolution(800);
+        const {queue, tilesByZ} = enqueueTiles(4);
+        expect(tilesByZ[4].has(cached)).toBe(true);
+        expect(cached.getState()).toBe(TileState.LOADED);
+        expect(queue.getCount()).toBe(0);
+        expect(tileRequests).toHaveLength(0);
+    });
+
+    it('cancels an in-flight request on zoom and requests the tile again after settling', async () => {
+        await enableZoomDebounce();
+        const {queue} = enqueueTiles(4);
+        queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(1);
+        view.setResolution(800);
+        expect(tileRequests[0].aborted).toBe(true);
+        await vi.advanceTimersByTimeAsync(400);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(2);
+        expect(tileRequests[1].aborted).toBe(false);
+    });
+
+    it('disabling debounce during a zoom resumes without replacing the source', async () => {
+        await enableZoomDebounce();
+        view.setResolution(800);
+        mapService.zoomDebounceMs.set(0);
+        TestBed.tick();
+        expect(fixture.componentInstance.mapLayer.getSource()).toBe(source);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
         expect(tileRequests).toHaveLength(1);
     });
 
@@ -228,6 +331,7 @@ describe('OGC map tile minimum matrix index', () => {
         await vi.advanceTimersByTimeAsync(399);
         expect(tileRequests).toHaveLength(0);
         await vi.advanceTimersByTimeAsync(1);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
         expect(tileRequests).toHaveLength(1);
         previousView.setResolution(500);
         expect(tileRequests[0].aborted).toBe(false);

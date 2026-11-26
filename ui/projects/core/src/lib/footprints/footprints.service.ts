@@ -8,7 +8,6 @@ import OlLayerVector from 'ol/layer/Vector';
 import OlSourceVector from 'ol/source/Vector';
 import {Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
-import {debounceTime} from 'rxjs/operators';
 import {RasterFootprintsPrecision, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {
     LayersService,
@@ -49,8 +48,6 @@ const MAX_REQUEST_TIME_STEPS = 100;
  * shortcut: a month of data with steps below an hour is cut off after 800 steps, it would need a window per day
  */
 const MAX_WINDOW_REQUESTS = 8;
-/** Requests wait until the view rests this long, so panning and zooming do not start catalog searches for every view in between. */
-const VIEWPORT_DEBOUNCE_MS = 500;
 /** Extra view widths and heights the overlay asks for on each side, so a scene larger than the view is not drawn as the view. */
 const OVERLAY_MARGIN = 0.25;
 /**
@@ -140,7 +137,7 @@ export class FootprintsService {
     });
     /** The calendar view that has one cell per time step. */
     readonly calendarStartView = computed(() => calendarStartView(this.timeStep()?.durationUnit));
-    private readonly viewport = toSignal(this.mapService.getViewportSizeStream().pipe(debounceTime(VIEWPORT_DEBOUNCE_MS)));
+    private readonly viewport = toSignal(this.mapService.getViewportSizeStream());
     /** The view the dates are asked for: the view and its buffer, kept while the view stays inside it at the same zoom. */
     private readonly datesViewport = linkedSignal<ViewportSize | undefined, ViewportSize | undefined>({
         source: () => this.viewport(),
@@ -198,6 +195,7 @@ export class FootprintsService {
 
     private readonly footprintsResource = resource({
         params: () => {
+            if (this.mapService.zoomPaused()) return undefined;
             const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
             const timeStep = this.timeStep();
@@ -211,8 +209,9 @@ export class FootprintsService {
         },
         loader: async ({
             params: {layer, mapSpatialReference, timeStep, viewport, window: requested, timeRange},
-            abortSignal,
+            abortSignal: resourceAbortSignal,
         }): Promise<Footprints | undefined> => {
+            const abortSignal = AbortSignal.any([resourceAbortSignal, this.mapService.getZoomAbortSignal()]);
             this.partialFootprints.set(undefined);
             // no dates before the data starts or after now, where there cannot be any; a window wholly after the data loads
             // its last steps and one before it its first ones, which are the nearest to the time, see `selectedOutsideData`
@@ -223,6 +222,7 @@ export class FootprintsService {
             const end = Math.min(Math.max(requested.end, minimalEnd.start.valueOf()), timeRange.end);
             if (window.start >= end) return undefined;
             const query = await this.queryOf(layer, mapSpatialReference, viewport);
+            abortSignal.throwIfAborted();
             if (!query) return undefined;
 
             // aborting makes the server stop starting catalog searches for a view the user already left
@@ -268,6 +268,7 @@ export class FootprintsService {
 
     /** The request disappears while zoomed out; temporal availability remains independent. */
     private readonly overlayRequest = computed(() => {
+        if (this.mapService.zoomPaused()) return undefined;
         const layer = this.layer();
         const mapSpatialReference = this.mapSpatialReference();
         const viewport = this.overlayViewport();
@@ -279,16 +280,17 @@ export class FootprintsService {
     /** The boxes of the selected time step alone, which the availability of the calendar window does not have. */
     private readonly overlayStepResource = resource({
         params: () => this.overlayRequest(),
-        loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
+        loader: async ({
+            params: {layer, mapSpatialReference, viewport, time},
+            abortSignal: resourceAbortSignal,
+        }): Promise<Footprints | undefined> => {
             this.overlayAbortController?.abort();
             const controller = new AbortController();
             this.overlayAbortController = controller;
-            const abort = (): void => controller.abort();
-            abortSignal.addEventListener('abort', abort, {once: true});
-            if (abortSignal.aborted) abort();
+            const abortSignal = AbortSignal.any([resourceAbortSignal, controller.signal, this.mapService.getZoomAbortSignal()]);
             try {
                 const query = await this.queryOf(layer, mapSpatialReference, viewport);
-                controller.signal.throwIfAborted();
+                abortSignal.throwIfAborted();
                 if (!query) return undefined;
                 return await footprintsOrTooLarge(
                     this.processingGraphsService.getFootprints(
@@ -300,11 +302,10 @@ export class FootprintsService {
                             limit: 1,
                             precision: RasterFootprintsPrecision.Coverage,
                         },
-                        controller.signal,
+                        abortSignal,
                     ),
                 );
             } finally {
-                abortSignal.removeEventListener('abort', abort);
                 if (this.overlayAbortController === controller) this.overlayAbortController = undefined;
             }
         },
@@ -335,7 +336,7 @@ export class FootprintsService {
         source: () => ({
             key: this.datesKey(),
             current: this.currentFootprints(),
-            isLoading: this.footprintsResource.isLoading(),
+            isLoading: this.datesPending(),
             time: this.time()?.start.valueOf(),
         }),
         computation: (source, previous) => {
@@ -406,7 +407,11 @@ export class FootprintsService {
      * them needs no search where the catalog can count.
      */
     readonly overlayTooLarge = computed(() => this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false));
+    /** Active date requests only; waiting for zoom must not show a loading indicator. */
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
+    private readonly datesPending = computed(
+        () => this.isLoading() || (this.datesWanted() && !!this.layer() && this.mapService.zoomPaused()),
+    );
     /** The dates of the view could not be loaded, see `retryDates`. */
     readonly datesFailed = computed(() => this.footprintsResource.status() === 'error');
     /**
@@ -417,7 +422,7 @@ export class FootprintsService {
     readonly selectedOutsideData = computed<{direction: 1 | -1; step: TimeStepFootprint} | undefined>(() => {
         const steps = this.stepsOfSelection();
         const time = this.time()?.start.valueOf();
-        if (this.isLoading() || time === undefined) return undefined;
+        if (this.datesPending() || time === undefined) return undefined;
         if (!steps.length) {
             // dates of a month the open calendar shows without the time tell nothing about it, see `stepsOfSelection`
             if (this.steps().length) return undefined;
@@ -447,7 +452,10 @@ export class FootprintsService {
         () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
     );
 
-    readonly overlayLoading = computed(() => this.overlayVisible() && this.overlayStepResource.isLoading());
+    readonly overlayLoading = computed(() => this.overlayVisible() && !this.overlayBlocked() && this.overlayStepResource.isLoading());
+    private readonly overlayPending = computed(
+        () => this.overlayLoading() || (this.overlayVisible() && !this.overlayBlocked() && this.mapService.zoomPaused()),
+    );
     /**
      * The boxes of the selected time step in the projection of the map, undefined until they are loaded.
      * The status an app shows is computed from these same boxes (`viewCoverage`), so the two cannot disagree.
@@ -466,7 +474,7 @@ export class FootprintsService {
     });
     /**
      * How much of the view the selected time step covers, `unknown` if the layer cannot tell, undefined until it is loaded.
-     * While the answer for a moved view loads (`overlayLoading`), the last one of the same layer and date stays.
+     * While the answer for a moved view loads or waits for zoom, the last one of the same layer and date stays.
      */
     readonly viewCoverage = linkedSignal<
         {key: string; isLoading: boolean; loaded?: ViewCoverage | 'unknown'},
@@ -480,7 +488,7 @@ export class FootprintsService {
                 viewport && mapSpatialReference && this.spatialReferenceService.clipBoundsIfAvailable(viewport.extent, mapSpatialReference);
             return {
                 key: this.overlayKey(),
-                isLoading: this.overlayLoading(),
+                isLoading: this.overlayPending(),
                 loaded: !overlay || !extent ? undefined : overlay.isUnknown ? 'unknown' : viewCoverage(overlay.features, extent),
             };
         },
@@ -577,7 +585,7 @@ export class FootprintsService {
         if (!time) return [];
         const timeMs = time.start.valueOf();
         // a part of the dates that loads first may end before the selected time, which the rest then reaches
-        if (this.isLoading() && !stepAt(this.stepsOfSelection(), timeMs)) return [];
+        if (this.datesPending() && !stepAt(this.stepsOfSelection(), timeMs)) return [];
         return stepsAround(this.stepsOfSelection(), timeMs, count);
     }
 
@@ -672,7 +680,7 @@ export class FootprintsService {
         // like map tiles, the boxes of the layer and date stay while those of a moved view load;
         // a new layer or date clears them at once, else the map would show the coverage of the wrong one
         const isSame = this.overlayKey() === this.overlayShows;
-        if (!overlay && this.overlayStepResource.isLoading() && isSame && this.overlayVisible()) {
+        if (!overlay && this.overlayPending() && isSame && this.overlayVisible()) {
             // faded, so the boxes of the earlier view are not taken for those of this one
             this.overlayLayer.setOpacity(STALE_OVERLAY_OPACITY);
             return;

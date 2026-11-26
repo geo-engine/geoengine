@@ -16,7 +16,7 @@ import {
     resource,
     signal,
 } from '@angular/core';
-import {toSignal} from '@angular/core/rxjs-interop';
+import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import type {EventsKey} from 'ol/events';
 import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
@@ -53,7 +53,6 @@ import {
     currentViewport,
     tileExtentInViewProjection,
 } from './tile-loader';
-import {TileZoomDebounce} from './tile-zoom-debounce';
 import {BackendService} from '../backend/backend.service';
 import {LoadingState} from '../project/loading-state.model';
 import {ProjectService} from '../project/project.service';
@@ -503,7 +502,7 @@ export type TMSId = 'Custom' | 'CustomWebMercator' | 'WebMercatorQuad';
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OlOgcApiMapTileLayerComponent
-    extends MapLayerComponent<OlLayerTile<OGCMapTile | TileDebug>, OGCMapTile | TileDebug | ImageTile, RasterSymbology>
+    extends MapLayerComponent<AbortableTileLayer<OGCMapTile | TileDebug>, OGCMapTile | TileDebug | ImageTile, RasterSymbology>
     implements OnDestroy
 {
     protected readonly backend = inject(BackendService);
@@ -514,8 +513,6 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
-    /** Wait after zooming before requesting imagery; zero keeps OpenLayers' immediate loading. */
-    readonly zoomDebounceMs = input(0);
     /** Minimum matrix index in minTileMatrixSetId, or the imagery's matrix set when omitted.
      * Ignored with a warning if that grid and the map use different projections.
      */
@@ -557,8 +554,6 @@ export class OlOgcApiMapTileLayerComponent
             minTileMatrixIndex: this.minTileMatrixIndex(),
             minTileMatrixSetId: this.minTileMatrixSetId(),
             tmsId: this.tmsId(),
-            zoomDebounceMs: this.zoomDebounceMs(),
-            zoomView: this.zoomDebounceMs() > 0 ? this.mapService.view() : undefined,
         }),
         loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
             this.limitMaxResolution.set(undefined);
@@ -576,12 +571,8 @@ export class OlOgcApiMapTileLayerComponent
             const sourceGrid = (): TileGrid => source.getTileGridForProjection(source.getProjection()!);
 
             // the abort signal covers both a changed set of params and the destruction of the layer
-            const zoomDebounce = params.zoomView
-                ? new TileZoomDebounce(params.zoomView, params.zoomDebounceMs, () => loader.cancelPending('zoom resolution changed'))
-                : undefined;
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
-                waitBeforeLoad: zoomDebounce ? (abort): Promise<void> => zoomDebounce.wait(abort) : undefined,
                 acceptsTile: (tile): boolean =>
                     this.maxResolution() !== undefined ||
                     separateLimitGrid ||
@@ -589,7 +580,7 @@ export class OlOgcApiMapTileLayerComponent
                     tile.getTileCoord()[0] >= params.minTileMatrixIndex,
                 canLoad: (): boolean => {
                     const view = this.mapService.view();
-                    return view.isDef() && this._mapLayer.isVisible(view);
+                    return !this._mapLayer.requestsPaused && view.isDef() && this._mapLayer.isVisible(view);
                 },
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
                 abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
@@ -615,7 +606,6 @@ export class OlOgcApiMapTileLayerComponent
                 }),
             });
             this.loader = loader;
-            abortSignal.addEventListener('abort', () => zoomDebounce?.dispose(), {once: true});
 
             // The catalogue's index belongs to a particular grid. Native imagery may use other
             // units, resolutions, and even fewer matrices, so never apply that index to its grid.
@@ -685,6 +675,15 @@ export class OlOgcApiMapTileLayerComponent
                 return new AbortableTileLayer();
             },
         );
+
+        this.mapService
+            .getZoomPauseStream()
+            .pipe(takeUntilDestroyed())
+            .subscribe((paused) => {
+                this._mapLayer.requestsPaused = paused;
+                if (paused) this.loader?.cancelPending('zoom resolution changed');
+                this._mapLayer.changed();
+            });
 
         effect(() => {
             const source = this.tileSource.value();
