@@ -335,6 +335,10 @@ max_file_percent = 25
 # and can drop them under memory pressure. On a tmpfs such as `/dev/shm`, the files count as memory
 # that cannot be dropped, and in containers `/dev/shm` is 64 MB unless set otherwise.
 directory = "gdal-byte-cache"
+# Workers that need chunks another worker is downloading wait for it, so they are downloaded once.
+# After this time they download them themselves, so that a download stuck in retries does not
+# stall them all.
+lock_wait_seconds = 10
 
 [data]
 volumes = { test_data = "test_data/" }

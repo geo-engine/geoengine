@@ -1469,6 +1469,7 @@ mod tests {
                         directory: dir.path().join("cache"),
                         size_bytes: 1 << 30,
                         max_file_bytes: 1 << 28,
+                        lock_wait: std::time::Duration::from_secs(10),
                     })
                     .expect("the cache installs");
                 (dir, cache)

@@ -91,6 +91,9 @@ const LOW_WATERMARK_PERCENT: u64 = 90;
 /// from the cache through handles that stay open.
 const TOUCH_INTERVAL: Duration = Duration::from_secs(60);
 
+/// The longest pause between two tries of a lock another worker holds.
+const LOCK_POLL_MAX: Duration = Duration::from_millis(10);
+
 /// `VSIErrorNum` of a missing object in an object store (`cpl_vsi_error.h`).
 const VSIE_OBJECT_NOT_FOUND: c_int = 8;
 
@@ -108,6 +111,9 @@ pub struct ByteCacheConfig {
     pub size_bytes: u64,
     /// the most one remote file may take
     pub max_file_bytes: u64,
+    /// how long a worker waits for chunks another worker downloads before it downloads them
+    /// itself, so that a download stuck in retries does not stall every worker that needs it
+    pub lock_wait: Duration,
 }
 
 /// Chunk counters of a process since the last [`ByteCache::take_counts`].
@@ -141,6 +147,7 @@ struct Version {
 pub struct ByteCache {
     directory: PathBuf,
     max_file_bytes: u64,
+    lock_wait: Duration,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
@@ -244,6 +251,7 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
     let cache: &'static ByteCache = Box::leak(Box::new(ByteCache {
         directory: config.directory.clone(),
         max_file_bytes: config.max_file_bytes,
+        lock_wait: config.lock_wait,
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
@@ -422,9 +430,9 @@ impl CacheFile {
             .write_all_at(&vec![1_u8; chunks as usize], self.size + first)
     }
 
-    /// Waits for the lock on the map bytes of chunks `first..first + count`.
-    fn lock(&self, first: u64, count: u64) -> Option<ChunkLock<'_>> {
-        ChunkLock::wait(&self.file, self.size + first, count)
+    /// Waits at most `limit` for the lock on the map bytes of chunks `first..first + count`.
+    fn lock(&self, first: u64, count: u64, limit: Duration) -> Option<ChunkLock<'_>> {
+        ChunkLock::wait(&self.file, self.size + first, count, limit)
     }
 
     fn allocated(&self) -> u64 {
@@ -441,13 +449,23 @@ struct ChunkLock<'a> {
 }
 
 impl<'a> ChunkLock<'a> {
-    /// Waits for the lock on bytes `start..start + len`. `None` if the file system does not
-    /// support such locks; the caller then reads without one and may download a chunk twice.
-    fn wait(file: &'a File, start: u64, len: u64) -> Option<Self> {
+    /// Waits at most `limit` for the lock on bytes `start..start + len`. `None` if it is still
+    /// held then, or the file system does not support such locks; the caller then reads without
+    /// one and may download a chunk twice. Tries without blocking, as a blocking wait cannot end
+    /// early.
+    fn wait(file: &'a File, start: u64, len: u64, limit: Duration) -> Option<Self> {
+        let deadline = Instant::now() + limit;
+        let mut pause = Duration::from_millis(1);
         loop {
-            match fcntl_lock(file, libc::F_OFD_SETLKW, libc::F_WRLCK, start, len) {
+            match fcntl_lock(file, libc::F_OFD_SETLK, libc::F_WRLCK, start, len) {
                 Ok(()) => return Some(Self { file, start, len }),
-                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(err)
+                    if matches!(err.raw_os_error(), Some(libc::EAGAIN | libc::EACCES))
+                        && Instant::now() < deadline =>
+                {
+                    std::thread::sleep(pause);
+                    pause = (pause * 2).min(LOCK_POLL_MAX);
+                }
                 Err(_) => return None,
             }
         }
@@ -534,7 +552,7 @@ impl Handle {
         let mut downloaded = vec![false; present.len()];
         for (a, b) in runs(present.len(), |i| present[i] != 1) {
             let (a, b) = (first + a, first + b);
-            let _lock = file.lock(a, b - a + 1);
+            let _lock = file.lock(a, b - a + 1, self.cache.lock_wait);
             let now = file.present(a, b);
             let missing = runs(now.len(), |i| now[i] != 1);
             let still = missing.iter().map(|(c, d)| d - c + 1).sum::<u64>();
@@ -989,6 +1007,9 @@ mod tests {
     /// file may take at most [`TEST_FILE_CAP`].
     const TEST_FILE_CAP: u64 = 256 * CHUNK_SIZE;
 
+    /// How long the tests' workers wait for another worker's lock.
+    const TEST_LOCK_WAIT: Duration = Duration::from_secs(1);
+
     fn cache() -> &'static (tempfile::TempDir, &'static ByteCache) {
         static CACHE: OnceLock<(tempfile::TempDir, &'static ByteCache)> = OnceLock::new();
         CACHE.get_or_init(|| {
@@ -997,6 +1018,7 @@ mod tests {
                 directory: dir.path().join("cache"),
                 size_bytes: 1 << 30,
                 max_file_bytes: TEST_FILE_CAP,
+                lock_wait: TEST_LOCK_WAIT,
             })
             .unwrap();
             (dir, cache)
@@ -1202,7 +1224,9 @@ mod tests {
         let (_dir, path, _) = file(len);
         // another worker holds the lock on chunk 0 while it downloads
         let other = file_of(&path, 5, len as u64);
-        let lock = other.lock(0, 1).expect("OFD locks on the test file system");
+        let lock = other
+            .lock(0, 1, Duration::ZERO)
+            .expect("OFD locks on the test file system");
 
         let cached = cached_path(&path, 5);
         let reader = std::thread::spawn(move || read_range(&cached, 0, 100));
@@ -1221,12 +1245,29 @@ mod tests {
         );
     }
 
+    /// A worker whose download hangs, e.g. in retries, holds its lock: the others wait at most
+    /// the limit, then read the chunks themselves.
+    #[test]
+    fn it_reads_the_chunks_itself_after_waiting_the_limit() {
+        let _ = cache();
+        let len = CHUNK_SIZE as usize * 2;
+        let (_dir, path, bytes) = file(len);
+        let other = file_of(&path, 17, len as u64);
+        let _hanging = other.lock(0, 1, Duration::ZERO).unwrap();
+
+        let start = Instant::now();
+        assert_eq!(read_range(&cached_path(&path, 17), 0, 100), bytes[..100]);
+        let waited = start.elapsed();
+        assert!(waited >= TEST_LOCK_WAIT, "waited {waited:?}");
+        assert!(waited < TEST_LOCK_WAIT * 3, "waited {waited:?}");
+    }
+
     #[test]
     fn it_releases_the_locks_of_a_closed_file() {
         let _ = cache();
         let (_dir, path, _) = file(CHUNK_SIZE as usize);
         let first = file_of(&path, 6, CHUNK_SIZE);
-        let held = first.lock(0, 1).unwrap();
+        let held = first.lock(0, 1, Duration::ZERO).unwrap();
         let second = file_of(&path, 6, CHUNK_SIZE);
         let try_lock = |file: &CacheFile| {
             fcntl_lock(&file.file, libc::F_OFD_SETLK, libc::F_WRLCK, CHUNK_SIZE, 1)
