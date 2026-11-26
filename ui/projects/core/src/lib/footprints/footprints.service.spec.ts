@@ -1,9 +1,13 @@
+import {signal as angularSignal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
+import View from 'ol/View';
 import {BehaviorSubject, Observable, of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {RasterFootprints, RasterFootprintsPrecision, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, ProcessingGraphsService, RasterLayerMetadata, Time} from '@geoengine/common';
 import {FootprintsService} from './footprints.service';
+import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
+import type {MapContainerComponent} from '../map/map-container/map-container.component';
 import {MapService} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
@@ -46,6 +50,7 @@ describe('FootprintsService overlay', () => {
 
         TestBed.configureTestingModule({
             providers: [
+                {provide: CoreConfig, useValue: DEFAULT_CORE_CONFIG},
                 {
                     provide: LayersService,
                     useValue: {
@@ -66,6 +71,8 @@ describe('FootprintsService overlay', () => {
                     provide: MapService,
                     useValue: {
                         getViewportSizeStream: (): Observable<unknown> => viewport,
+                        zoomPaused: angularSignal(false),
+                        getZoomAbortSignal: (): AbortSignal => new AbortController().signal,
                     },
                 },
                 {
@@ -98,16 +105,182 @@ describe('FootprintsService overlay', () => {
         service.showDate(new Date(2026, 3, 1), 'month');
     }
 
-    /** The viewport is debounced, then the requests of the resources run. */
+    /** Lets the resources and their asynchronous requests settle. */
     async function settle(): Promise<void> {
         for (let i = 0; i < 4; i++) {
             TestBed.tick();
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await new Promise((resolve) => setTimeout(resolve, 0));
         }
     }
 
     const boxesRequests = (): number =>
         getFootprints.mock.calls.filter(([, query]) => query.precision === RasterFootprintsPrecision.Coverage).length;
+
+    /** Real map zoom state shared with the raster loader, with controlled resource scheduling. */
+    function createZoomService(): {service: FootprintsService; map: MapService; view: View} {
+        vi.useFakeTimers();
+        TestBed.overrideProvider(MapService, {useFactory: (): MapService => new MapService()});
+        const map = TestBed.inject(MapService);
+        const view = new View({center: [0, 0], zoom: 5});
+        map.setView(view);
+        map.setViewportSize({extent: [0, 0, 1, 1], resolution: 1});
+        map.zoomDebounceMs.set(400);
+        const service = createService();
+        openCalendar(service);
+        service.overlayVisible.set(true);
+        return {service, map, view};
+    }
+
+    async function flushRequests(): Promise<void> {
+        for (let i = 0; i < 6; i++) {
+            TestBed.tick();
+            await vi.advanceTimersByTimeAsync(0);
+        }
+    }
+
+    it('starts dates and coverage on the shared zoom deadline using the final viewport', async () => {
+        const {map, view} = createZoomService();
+        await flushRequests();
+        getFootprints.mockClear();
+        // moveend can be later than the zoom gesture's end; resume must refresh the viewport first.
+        map.registerMapComponent({
+            emitViewportSize: (): void => map.setViewportSize({extent: [10, 10, 12, 12], resolution: 0.25}),
+        } as MapContainerComponent);
+        view.setZoom(6);
+        map.setViewportSize({extent: [0, 0, 2, 2], resolution: 0.5});
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(300);
+        view.setZoom(7);
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(399);
+        expect(map.zoomPaused()).toBe(true);
+        expect(getFootprints).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1);
+        await flushRequests();
+        expect(map.zoomPaused()).toBe(false);
+        expect(getFootprints).toHaveBeenCalledWith(
+            'graph',
+            expect.objectContaining({precision: RasterFootprintsPrecision.Availability, spatialBounds: '9.9,9.9,12.1,12.1'}),
+            expect.anything(),
+        );
+        expect(getFootprints).toHaveBeenCalledWith(
+            'graph',
+            expect.objectContaining({precision: RasterFootprintsPrecision.Coverage, spatialBounds: '9.5,9.5,12.5,12.5'}),
+            expect.anything(),
+        );
+    });
+
+    it('does not request footprints between a paused fractional pinch and its snap animation', async () => {
+        const {map, view} = createZoomService();
+        view.setConstrainResolution(true);
+        await flushRequests();
+        getFootprints.mockClear();
+        view.beginInteraction();
+        view.setZoom(5.4);
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(map.zoomPaused()).toBe(true);
+        view.endInteraction(400, -1);
+        expect(view.getAnimating()).toBe(true);
+        await flushRequests();
+        expect(getFootprints).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(799);
+        await flushRequests();
+        expect(getFootprints).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(50);
+        await flushRequests();
+        expect(map.zoomPaused()).toBe(false);
+        expect(getFootprints).toHaveBeenCalled();
+    });
+
+    it('holds both queries through a paused pinch and resumes them when the gesture ends', async () => {
+        const {map, view} = createZoomService();
+        await flushRequests();
+        getFootprints.mockClear();
+        view.beginInteraction();
+        view.setZoom(6);
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(getFootprints).not.toHaveBeenCalled();
+        expect(map.zoomPaused()).toBe(true);
+        view.endInteraction(0);
+        await flushRequests();
+        expect(map.zoomPaused()).toBe(false);
+        expect(boxesRequests()).toBe(1);
+        expect(getFootprints.mock.calls.some(([, query]) => query.precision === RasterFootprintsPrecision.Availability)).toBe(true);
+    });
+
+    it('aborts both in-flight queries when zoom starts', async () => {
+        const signals: AbortSignal[] = [];
+        getFootprints.mockImplementation((_id, _query, signal) => {
+            signals.push(signal!);
+            return new Promise((_resolve, reject) => {
+                signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {once: true});
+            });
+        });
+        const {view} = createZoomService();
+        await flushRequests();
+        expect(signals).toHaveLength(2);
+        view.setZoom(6);
+        expect(signals.every((signal) => signal.aborted)).toBe(true);
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(399);
+        expect(signals).toHaveLength(2);
+        await vi.advanceTimersByTimeAsync(1);
+        await flushRequests();
+        expect(signals).toHaveLength(4);
+        expect(signals.slice(2).every((signal) => !signal.aborted)).toBe(true);
+    });
+
+    it('keeps dates and cached polygons while zooming waits', async () => {
+        const step = {
+            time: {start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 3, 2)},
+            status: TimeStepFootprintStatus.Data,
+            bounds: [{upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}}],
+        };
+        getFootprints.mockResolvedValue({...FOOTPRINTS, steps: [step]});
+        const {service, view} = createZoomService();
+        await flushRequests();
+        const dates = service.steps();
+        const coverage = service.viewCoverage();
+        expect(dates.length).toBeGreaterThan(0);
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(1);
+        view.setZoom(6);
+        await flushRequests();
+        expect(service.steps()).toBe(dates);
+        expect(service.isLoading()).toBe(false);
+        expect(service.overlayLoading()).toBe(false);
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(1);
+        expect(service.viewCoverage()).toBe(coverage);
+    });
+
+    it('shows loading only while the queries after the zoom delay are active', async () => {
+        const {service, view} = createZoomService();
+        await flushRequests();
+        const complete: Array<() => void> = [];
+        getFootprints.mockClear().mockImplementation(() => new Promise((resolve) => complete.push(() => resolve(FOOTPRINTS))));
+        view.setZoom(6);
+        await flushRequests();
+        expect(service.isLoading()).toBe(false);
+        expect(service.overlayLoading()).toBe(false);
+        await vi.advanceTimersByTimeAsync(399);
+        await flushRequests();
+        expect(getFootprints).not.toHaveBeenCalled();
+        expect(service.isLoading()).toBe(false);
+        expect(service.overlayLoading()).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await flushRequests();
+        expect(service.isLoading()).toBe(true);
+        expect(service.overlayLoading()).toBe(true);
+        for (let i = 0; i < 4; i++) {
+            for (const finish of complete.splice(0)) finish();
+            await flushRequests();
+        }
+        expect(service.isLoading()).toBe(false);
+        expect(service.overlayLoading()).toBe(false);
+    });
 
     it('asks for the boxes of its step alone', async () => {
         const service = createService();

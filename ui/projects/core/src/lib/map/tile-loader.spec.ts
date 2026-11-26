@@ -7,6 +7,7 @@ import {get as getProjection, transformExtent} from 'ol/proj';
 import TileWMS from 'ol/source/TileWMS';
 import Tile from 'ol/Tile';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import TileQueue, {getTilePriority} from 'ol/TileQueue';
 import TileState from 'ol/TileState';
 import View from 'ol/View';
 import {Observable, Subject} from 'rxjs';
@@ -114,6 +115,43 @@ describe('TileLoader', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it('keeps a paused reprojection out of the loading queue and loads it on resume', () => {
+        const signals: AbortSignal[] = [];
+        stubHangingFetch(signals);
+        const source = new TileWMS({url: 'https://example.com/wms', params: {LAYERS: 'test'}, projection: 'EPSG:4326', wrapX: false});
+        const layer = new AbortableTileLayer({source});
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            onTileError: (tile): void => layer.invalidateAbortedTile(tile),
+        });
+        source.setTileLoadFunction(loader.load);
+        const view = new View({center: [0, 0], zoom: 2});
+        const frame = {viewState: view.getState(), pixelRatio: 1, wantedTiles: {}} as FrameState;
+        frame.tileQueue = new TileQueue(
+            (tile, key, center, resolution): number => getTilePriority(frame, tile, key, center, resolution),
+            (): void => undefined,
+        );
+        const renderer = layer.getRenderer()!;
+        renderer.prepareFrame(frame);
+        try {
+            layer.requestsPaused = true;
+            renderer.enqueueTiles(frame, view.calculateExtent([256, 256]), 2, {}, 0);
+            frame.tileQueue.reprioritize();
+            frame.tileQueue.loadMoreTiles(16, 16);
+            expect(fetch).not.toHaveBeenCalled();
+            expect(frame.tileQueue.getTilesLoading()).toBe(0);
+
+            layer.requestsPaused = false;
+            renderer.enqueueTiles(frame, view.calculateExtent([256, 256]), 2, {}, 0);
+            frame.tileQueue.reprioritize();
+            frame.tileQueue.loadMoreTiles(16, 16);
+            expect(signals.length).toBeGreaterThan(0);
+        } finally {
+            loader.abortAll();
+            layer.dispose();
+        }
     });
 
     it('fetches the tile with the authentication headers and frees the object URL after loading', async () => {

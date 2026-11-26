@@ -670,7 +670,8 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
         // });
     }
 
-    private emitViewportSize(): void {
+    /** Publishes the current view before viewport-dependent requests resume. */
+    emitViewportSize(): void {
         const resolution = this.view.getResolution();
         if (!resolution) {
             return;

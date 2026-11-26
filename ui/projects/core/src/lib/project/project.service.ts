@@ -6,6 +6,7 @@ import OlGeometry from 'ol/geom/Geometry';
 import {
     BehaviorSubject,
     combineLatest,
+    EMPTY,
     firstValueFrom,
     from,
     merge,
@@ -17,7 +18,7 @@ import {
     Subscription,
     zip,
 } from 'rxjs';
-import {debounceTime, distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
+import {distinctUntilChanged, filter, finalize, first, map, mergeMap, pairwise, switchMap, take, tap} from 'rxjs/operators';
 import {
     CollectionItem,
     GeoJson,
@@ -1373,69 +1374,81 @@ export class ProjectService implements OnDestroy {
         return combineLatest({
             time: this.getTimeStream(),
             spatialReference: this.getSpatialReferenceStream(),
-            viewport: this.mapService.getViewportSizeStream(),
+            viewport: this.mapService.getRequestViewportStream(),
             isClusteredOrSimplified: isClusteredOrSimplified$,
             workflowMetadata: this.getVectorLayerMetadata(layer),
             originalWorkflow: this.processingGraphsService.getProcessingGraph(layer.workflowId), // TODO: capture possible changes to the layers's workflow?
         })
             .pipe(
-                debounceTime(this.config.DELAYS.DEBOUNCE),
-                tap(() => loadingState$.next(LoadingState.LOADING)),
-                switchMap(async ({time, spatialReference, viewport, isClusteredOrSimplified, workflowMetadata, originalWorkflow}) => {
-                    let workflowId: UUID;
-                    const cacheEntry = workflowIdCache.get([spatialReference, viewport.resolution]);
-                    if (cacheEntry) {
-                        workflowId = cacheEntry;
-                    } else if (isClusteredOrSimplified) {
-                        let workflow;
-                        switch (layer.symbology.getSymbologyType()) {
-                            case SymbologyType.POINT: {
-                                workflow = createClusteredPointLayerQueryWorkflow(
-                                    originalWorkflow,
-                                    workflowMetadata,
-                                    spatialReference,
-                                    viewport.resolution,
-                                );
-                                break;
+                switchMap(({time, spatialReference, viewport, isClusteredOrSimplified, workflowMetadata, originalWorkflow}) => {
+                    if (!viewport) {
+                        loadingState$.next(LoadingState.OK);
+                        return EMPTY;
+                    }
+                    loadingState$.next(LoadingState.LOADING);
+                    const controller = new AbortController();
+                    const request = async (): Promise<VectorData> => {
+                        let workflowId: UUID;
+                        const cacheEntry = workflowIdCache.get([spatialReference, viewport.resolution]);
+                        if (cacheEntry) {
+                            workflowId = cacheEntry;
+                        } else if (isClusteredOrSimplified) {
+                            let workflow;
+                            switch (layer.symbology.getSymbologyType()) {
+                                case SymbologyType.POINT: {
+                                    workflow = createClusteredPointLayerQueryWorkflow(
+                                        originalWorkflow,
+                                        workflowMetadata,
+                                        spatialReference,
+                                        viewport.resolution,
+                                    );
+                                    break;
+                                }
+                                case SymbologyType.LINE:
+                                case SymbologyType.POLYGON: {
+                                    workflow = createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
+                                        originalWorkflow,
+                                        workflowMetadata,
+                                        spatialReference,
+                                        viewport.resolution,
+                                    );
+                                    break;
+                                }
+                                default:
+                                    throw new Error(`Unsupported symbology type for simplification: ${layer.symbology.getSymbologyType()}`);
                             }
-                            case SymbologyType.LINE:
-                            case SymbologyType.POLYGON: {
-                                workflow = createSimplifiedLinesOrPolygonsLayerQueryWorkflow(
-                                    originalWorkflow,
-                                    workflowMetadata,
-                                    spatialReference,
-                                    viewport.resolution,
-                                );
-                                break;
-                            }
-                            default:
-                                throw new Error(`Unsupported symbology type for simplification: ${layer.symbology.getSymbologyType()}`);
+
+                            workflowId = await this.processingGraphsService.registerProcessingGraph(workflow);
+
+                            workflowIdCache.set([spatialReference, viewport.resolution], workflowId);
+                        } else {
+                            // no need to change the workflow
+                            workflowId = layer.workflowId;
                         }
 
-                        workflowId = await this.processingGraphsService.registerProcessingGraph(workflow);
+                        const ogcWfsApi = await firstValueFrom(this.ogcWfsApi);
+                        controller.signal.throwIfAborted();
 
-                        workflowIdCache.set([spatialReference, viewport.resolution], workflowId);
-                    } else {
-                        // no need to change the workflow
-                        workflowId = layer.workflowId;
-                    }
+                        const wfsResponse = await ogcWfsApi.wfsHandler(
+                            {
+                                service: 'WFS',
+                                version: '2.0.0',
+                                request: 'GetFeature',
+                                processingGraph: workflowId,
+                                typeNames: workflowId,
+                                bbox: bboxDictToExtent(extentToBboxDict(viewport.extent)).join(','),
+                                time: `${unixTimestampToIsoString(time.toDict().start)}/${unixTimestampToIsoString(time.toDict().end)}`,
+                                srsName: spatialReference.srsString,
+                            },
+                            {signal: controller.signal},
+                        );
+                        controller.signal.throwIfAborted();
+                        addTimeToProperties(wfsResponse);
 
-                    const ogcWfsApi = await firstValueFrom(this.ogcWfsApi);
-
-                    const wfsResponse = await ogcWfsApi.wfsHandler({
-                        service: 'WFS',
-                        version: '2.0.0',
-                        request: 'GetFeature',
-                        processingGraph: workflowId,
-                        typeNames: workflowId,
-                        bbox: bboxDictToExtent(extentToBboxDict(viewport.extent)).join(','),
-                        time: `${unixTimestampToIsoString(time.toDict().start)}/${unixTimestampToIsoString(time.toDict().end)}`,
-                        srsName: spatialReference.srsString,
-                    });
-                    addTimeToProperties(wfsResponse);
-
-                    const requestExtent: [number, number, number, number] = [0, 0, 0, 0]; // TODO: why is this empty?
-                    return VectorData.olParse(time, spatialReference, requestExtent, wfsResponse);
+                        const requestExtent: [number, number, number, number] = [0, 0, 0, 0]; // TODO: why is this empty?
+                        return VectorData.olParse(time, spatialReference, requestExtent, wfsResponse);
+                    };
+                    return from(request()).pipe(finalize(() => controller.abort()));
                 }),
                 tap({
                     next: () => loadingState$.next(LoadingState.OK),
@@ -1503,46 +1516,50 @@ export class ProjectService implements OnDestroy {
         error$: Observer<GeoEngineError | undefined>,
         loadingState$: Observer<LoadingState>,
     ): Subscription {
-        const observables: [Observable<Time>, Observable<ViewportSize>, Observable<SpatialReference>] = [
+        const observables: [Observable<Time>, Observable<ViewportSize | undefined>, Observable<SpatialReference>] = [
             this.getTimeStream(),
-            this.mapService.getViewportSizeStream(),
+            this.mapService.getRequestViewportStream(),
             this.getSpatialReferenceStream(),
         ];
 
         return combineLatest(observables)
             .pipe(
-                debounceTime(this.config.DELAYS.DEBOUNCE),
-                tap(() => loadingState$.next(LoadingState.LOADING)),
-                switchMap(
-                    ([time, viewport, sref]) =>
-                        // TODO: add image size for png
-                        new Observable<WrappedPlotOutput>((subscriber) => {
-                            const abortController = new AbortController();
+                switchMap(([time, viewport, sref]) => {
+                    if (!viewport) {
+                        loadingState$.next(LoadingState.OK);
+                        return EMPTY;
+                    }
+                    // TODO: add image size for png
+                    return new Observable<WrappedPlotOutput>((subscriber) => {
+                        const abortController = new AbortController();
+                        loadingState$.next(LoadingState.LOADING);
 
-                            // no resolution, so that the plot is computed on the native resolution of the data
-                            this.plotsService
-                                .getPlot(plot.workflowId, extentToBboxDict(viewport.extent), time, undefined, sref, abortController.signal)
-                                .then((data) => {
-                                    loadingState$.next(LoadingState.OK);
-                                    subscriber.next(data);
-                                    subscriber.complete();
-                                })
-                                .catch(async (error: unknown) => {
-                                    if (abortController.signal.aborted) {
-                                        return;
-                                    }
+                        // no resolution, so that the plot is computed on the native resolution of the data
+                        this.plotsService
+                            .getPlot(plot.workflowId, extentToBboxDict(viewport.extent), time, undefined, sref, abortController.signal)
+                            .then((data) => {
+                                if (abortController.signal.aborted) return;
+                                loadingState$.next(LoadingState.OK);
+                                subscriber.next(data);
+                                subscriber.complete();
+                            })
+                            .catch(async (error: unknown) => {
+                                if (abortController.signal.aborted) {
+                                    return;
+                                }
 
-                                    const plotError = await plotErrorFromResponse(error);
-                                    this.notificationService.error(`${plot.name}: ${plotError.name} ${plotError.message}`);
+                                const plotError = await plotErrorFromResponse(error);
+                                if (abortController.signal.aborted) return;
+                                this.notificationService.error(`${plot.name}: ${plotError.name} ${plotError.message}`);
 
-                                    error$.next(plotError);
-                                    loadingState$.next(LoadingState.ERROR);
-                                    subscriber.complete();
-                                });
+                                error$.next(plotError);
+                                loadingState$.next(LoadingState.ERROR);
+                                subscriber.complete();
+                            });
 
-                            return (): void => abortController.abort();
-                        }),
-                ),
+                        return (): void => abortController.abort();
+                    });
+                }),
             )
             .subscribe((data) => data$.next(data));
     }

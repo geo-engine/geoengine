@@ -7,7 +7,7 @@ import {Observable, of} from 'rxjs';
 import {beforeEach, describe, expect, it, type Mock, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
-import {FootprintsService, MapService, ProjectService} from '@geoengine/core';
+import {CoreConfig, DEFAULT_CORE_CONFIG, FootprintsService, MapService, ProjectService} from '@geoengine/core';
 import {formatDate, LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
 
@@ -195,6 +195,7 @@ describe('LayersComponent', () => {
                     useValue: {getLayerCollectionItems, getLayer, registerAndGetLayerProcessingGraphId, getProcessingGraphIdMetadata},
                 },
                 EOdysseyLayerService,
+                {provide: CoreConfig, useValue: DEFAULT_CORE_CONFIG},
                 MapService,
                 {
                     provide: ProjectService,
