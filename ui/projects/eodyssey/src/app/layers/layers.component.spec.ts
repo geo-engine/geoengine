@@ -362,7 +362,7 @@ describe('LayersComponent', () => {
         // the first preset is on the map at once
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(eodysseyLayerService.selectedPreset()?.layerId);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('radarRegion');
-        fixture.componentInstance.applySelectedPreset();
+        eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedMaxMapExtent()).toEqual({width: 1000000, height: 1400000});
         expect(setTime).not.toHaveBeenCalled();
         await fixture.whenStable();
@@ -1088,7 +1088,7 @@ describe('LayersComponent', () => {
         expect(setTime).not.toHaveBeenCalled();
 
         eodysseyLayerService.setSelectedPreset('preset-1');
-        fixture.componentInstance.applySelectedPreset();
+        eodysseyLayerService.applySelectedPreset();
         const appliedLayer = eodysseyLayerService.mapTileLayer();
         const timeCalls = setTime.mock.calls.length;
         expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'preset-1'});
@@ -1205,7 +1205,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        fixture.componentInstance.applySelectedPreset();
+        eodysseyLayerService.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
         expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
@@ -1217,7 +1217,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         expect(eodysseyLayerService.canApplyPreset()).toBe(true);
 
-        fixture.componentInstance.applySelectedPreset();
+        eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
         expect(setTime).not.toHaveBeenCalled();
     });

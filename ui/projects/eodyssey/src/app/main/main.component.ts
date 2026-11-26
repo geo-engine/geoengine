@@ -40,6 +40,8 @@ import {mapExtentMaxResolution, zoomBelowResolution} from './map-extent';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
+import {viewportOutsideCoverage} from '../layers/coverage';
+import type {MapViewport} from '../layers/coverage';
 import {formatDate} from '../layers/layers.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
 
@@ -128,7 +130,13 @@ export class MainComponent {
     readonly zoomRequired = this.eodysseyLayerService.zoomRequired;
     private readonly mapSize = signal<readonly number[]>([0, 0]);
     private readonly mapRotation = signal(0);
+    private readonly mapViewport = signal<MapViewport | undefined>(undefined);
     private readonly destroyRef = inject(DestroyRef);
+    private readonly outOfBoundsVariant = computed(() => {
+        const variant = this.eodysseyLayerService.appliedVariant();
+        const viewport = this.mapViewport();
+        return variant?.coverage && viewport && viewportOutsideCoverage(variant.coverage, viewport) ? variant : undefined;
+    });
     /** The exclusive map resolution cutoff shared by imagery and footprint polygons. */
     readonly maxResolution = computed(() => mapExtentMaxResolution(this.tileLayer()?.maxMapExtent, this.mapSize(), this.mapRotation()));
     /** Loadability at the raster's exact cutoff, also when the imagery is hidden. */
@@ -154,6 +162,20 @@ export class MainComponent {
                     run: (): void => void this.moveBack(),
                 },
                 close: (): void => this.eodysseyLayerService.dateMoved.set(undefined),
+            };
+        }
+        const outOfBounds = this.outOfBoundsVariant();
+        if (outOfBounds) {
+            const layers = this.eodysseyLayerService;
+            const centerVariant = layers.mapCenterVariantKey();
+            const canSelectRegion =
+                !!centerVariant &&
+                centerVariant !== layers.selectedVariantKey() &&
+                layers.appliedDataSource()?.key === layers.selectedDataSource()?.key;
+            return {
+                icon: 'location_off',
+                title: `Outside the data bounds for ${outOfBounds.name}`,
+                action: canSelectRegion ? {label: 'Select at map center', run: (): void => layers.selectMapCenterVariant()} : undefined,
             };
         }
         const shown = !!this.mapTileLayer() || footprints.overlayVisible();
@@ -252,11 +274,29 @@ export class MainComponent {
                 // A new view signals that we must observe the current map instance again.
                 const view = this.mapService.view();
                 const map = this.mapComponent().getMap();
-                const updateSize = (): void => this.mapSize.set([...(map.getSize() ?? [0, 0])]);
-                const updateRotation = (): void => this.mapRotation.set(view.getRotation());
+                const updateViewport = (): void => {
+                    const size = map.getSize();
+                    this.mapViewport.set(
+                        size && size[0] > 0 && size[1] > 0 && view.isDef()
+                            ? {extent: view.calculateExtent(size), projection: view.getProjection()}
+                            : undefined,
+                    );
+                };
+                const updateSize = (): void => {
+                    this.mapSize.set([...(map.getSize() ?? [0, 0])]);
+                    updateViewport();
+                };
+                const updateRotation = (): void => {
+                    this.mapRotation.set(view.getRotation());
+                    updateViewport();
+                };
                 updateSize();
-                updateRotation();
-                const listeners = [map.on('change:size', updateSize), view.on('change:rotation', updateRotation)];
+                this.mapRotation.set(view.getRotation());
+                const listeners = [
+                    map.on('change:size', updateSize),
+                    view.on('change:rotation', updateRotation),
+                    ...view.on(['change:center', 'change:resolution'], updateViewport),
+                ];
                 onCleanup(() => unByKey(listeners));
             },
         });

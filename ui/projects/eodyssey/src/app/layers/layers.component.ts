@@ -18,7 +18,6 @@ import {
     stepContains,
 } from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
-import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
 
 /** The dates the strip below the date shows. */
@@ -852,14 +851,6 @@ export class LayersComponent {
             this.footprintsService.overlayVisible.set(this.availabilityShown());
             this.footprintsService.overlayLight.set(this.shown() === 'preset');
         });
-        // the map follows the selected preset while imagery is shown
-        effect(() => {
-            if (this.shown() !== 'preset') {
-                untracked(() => this.eodysseyLayerService.removeVisualization());
-            } else if (this.eodysseyLayerService.canApplyPreset()) {
-                untracked(() => this.applySelectedPreset());
-            }
-        });
         effect(() => {
             const pending = this.moveToDataPending();
             const footprints = this.footprintsService;
@@ -890,20 +881,6 @@ export class LayersComponent {
         const key = presetKey ?? this.eodysseyLayerService.currentPresets()[0]?.key;
         if (key) this.eodysseyLayerService.setSelectedPreset(key);
         this.shown.set(presetKey ? 'preset' : 'none');
-    }
-
-    /** The time step of a data source is applied with it. */
-    private applyDataSourceTimeStep(dataSource: DataSourceDefinition): void {
-        if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
-    }
-
-    applySelectedPreset(): void {
-        if (!this.eodysseyLayerService.canApplyPreset()) return;
-
-        const source = this.eodysseyLayerService.selectedDataSource();
-        const sourceChanged = source !== this.eodysseyLayerService.dataSourceOfTime();
-        this.eodysseyLayerService.applySelectedPreset();
-        if (source && sourceChanged) this.applyDataSourceTimeStep(source);
     }
 
     async timeForward(): Promise<void> {

@@ -3,7 +3,7 @@ import {unByKey} from 'ol/Observable';
 import {toLonLat} from 'ol/proj';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
 import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, timeStepDictTotimeStepDuration} from '@geoengine/common';
-import {MapService} from '@geoengine/core';
+import {MapService, ProjectService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, MapExtent, VisualizationPreset} from './data-sources';
@@ -21,6 +21,7 @@ const INITIAL_DATA_SOURCE = {
 export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
+    private readonly projectService = inject(ProjectService);
 
     readonly selectedCategory = linkedSignal<DataSourceCategory[] | undefined, DataSourceCategory | undefined>({
         source: () => (this.catalogueLoading() ? undefined : this.categories()),
@@ -107,7 +108,9 @@ export class EOdysseyLayerService {
     /** The map does not load the tiles of the imagery at this zoom yet. Set by the map. */
     readonly zoomRequired = signal(false);
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
-    private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    private readonly appliedVisualization = signal<
+        {source: DataSourceDefinition; variant: DataSourceVariant; preset: VisualizationPreset} | undefined
+    >(undefined);
     /**
      * The data source whose time step was applied last. Removing the visualization keeps it, so applying the same
      * data source again does not reset the step.
@@ -115,6 +118,7 @@ export class EOdysseyLayerService {
     private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
     readonly dataSourceOfTime = this.timeSource.asReadonly();
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
+    readonly appliedVariant = computed(() => this.appliedVisualization()?.variant);
     readonly appliedMaxMapExtent = computed(() => this.appliedDataSource()?.maxMapExtent);
     /** The selected source's limit, including when imagery is hidden and only availability is shown. */
     readonly selectedMaxMapExtent = computed(() => this.selectedDataSource()?.maxMapExtent);
@@ -193,8 +197,14 @@ export class EOdysseyLayerService {
     });
     readonly canApplyPreset = computed(() => {
         const selected = this.selectedPreset();
-        const applied = this.appliedVisualization()?.preset;
-        return !!selected && (selected.connectorId !== applied?.connectorId || selected.layerId !== applied?.layerId);
+        const applied = this.appliedVisualization();
+        return (
+            !!selected &&
+            (selected.connectorId !== applied?.preset.connectorId ||
+                selected.layerId !== applied?.preset.layerId ||
+                this.selectedVariant()?.key !== applied?.variant.key ||
+                this.selectedDataSource()?.key !== applied?.source.key)
+        );
     });
     readonly mapTileLayer = computed<DataSourceLayer | undefined>(() => {
         const preset = this.appliedVisualization()?.preset;
@@ -219,6 +229,14 @@ export class EOdysseyLayerService {
             const source = this.selectedDataSource();
             const variant = this.selectedVariant();
             if (source && variant) untracked(() => void this.ensureVariantPresets(source, variant));
+        });
+        // Map notices can change the selected region while another panel is open.
+        effect(() => {
+            if (this.shown() !== 'preset') {
+                untracked(() => this.removeVisualization());
+            } else if (this.canApplyPreset()) {
+                untracked(() => this.applySelectedPreset());
+            }
         });
     }
 
@@ -275,10 +293,13 @@ export class EOdysseyLayerService {
 
     applySelectedPreset(): void {
         const source = this.selectedDataSource();
+        const variant = this.selectedVariant();
         const preset = this.selectedPreset();
-        if (source && preset && this.canApplyPreset()) {
-            this.appliedVisualization.set({source, preset});
+        if (source && variant && preset && this.canApplyPreset()) {
+            const sourceChanged = source !== this.timeSource();
+            this.appliedVisualization.set({source, variant, preset});
             this.timeSource.set(source);
+            if (sourceChanged && source.defaultTimeStep) this.projectService.setTimeStepDuration(source.defaultTimeStep);
         }
     }
 
