@@ -70,9 +70,16 @@ impl MultiBandGdalMetaData
 
     async fn loading_info(
         &self,
-        _query: MultiBandGdalLoadingInfoQueryRectangle,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
     ) -> crate::util::Result<MultiBandGdalLoadingInfo> {
-        Ok(stream::once(future::ready(Ok(self.loading_info.clone()))).boxed())
+        // the same steps as `time_steps`; the files of other steps are never read
+        let time = query.query_rectangle.time_interval();
+        let mut part = self.loading_info.clone();
+        part.time_steps.retain(|step| step.intersects(&time));
+        if part.time_steps.is_empty() {
+            return Ok(stream::empty().boxed());
+        }
+        Ok(stream::once(future::ready(Ok(part))).boxed())
     }
 
     fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData> {
@@ -212,6 +219,54 @@ impl MultiBandGdalLoadingInfoPart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::TimeDescriptor;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::primitives::BandSelection;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::util::test::TestDefault;
+
+    #[tokio::test]
+    async fn it_answers_the_time_and_the_data_of_static_meta_data_with_the_same_steps() {
+        let first = TimeInterval::new_unchecked(0, 5);
+        let meta_data = StaticMetaData {
+            loading_info: MultiBandGdalLoadingInfoPart::new(
+                vec![first, TimeInterval::new_unchecked(5, 10)],
+                Vec::new(),
+                None,
+            ),
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+                GridBoundingBox2D::new([0, 0], [0, 0]).unwrap(),
+                GeoTransform::test_default(),
+                TimeDescriptor::new_irregular(None),
+            ),
+            phantom: Default::default(),
+        };
+
+        let time_steps: Vec<_> = meta_data
+            .time_steps(first)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let parts: Vec<_> = meta_data
+            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                first,
+                BandSelection::first(),
+            ))
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+
+        assert_eq!(time_steps, vec![first]);
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].time_steps(), time_steps.as_slice());
+    }
 
     #[test]
     fn it_tells_the_areas_of_the_files_of_each_step_and_none_for_a_step_without_files() {
