@@ -11,6 +11,7 @@ import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
 import OlLayerVector from 'ol/layer/Vector';
 import OlMap from 'ol/Map';
+import {fromLonLat} from 'ol/proj';
 import View from 'ol/View';
 import {of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, Mock, vi} from 'vitest';
@@ -26,6 +27,8 @@ import {
 } from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 import {MainComponent} from './main.component';
+import {parseCoverage} from '../layers/coverage';
+import type {DataSourceVariant} from '../layers/data-sources';
 import {EOdysseyLayerService} from '../layers/layers.service';
 
 // Keep the real toolbar and bindings; the map and its HTTP requests are tested in core.
@@ -33,8 +36,10 @@ describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
     let map: OlMap;
     let view: View;
+    const selectMapCenterVariant = vi.fn();
 
     beforeEach(async () => {
+        selectMapCenterVariant.mockClear();
         vi.stubGlobal(
             'ResizeObserver',
             class {
@@ -112,8 +117,12 @@ describe('EOdyssey debug reprojection', () => {
                         selectedMaxMapExtent: signal({width: 500000, height: 700000}),
                         selectedPreset: vi.fn().mockReturnValue(undefined),
                         selectedDataSource: vi.fn().mockReturnValue(undefined),
+                        selectedVariantKey: signal('EPSG:32632'),
                         appliedDataSource: vi.fn().mockReturnValue(undefined),
+                        appliedVariant: signal(undefined),
                         dataSourceOfTime: vi.fn().mockReturnValue(undefined),
+                        mapCenterVariantKey: signal(undefined),
+                        selectMapCenterVariant,
                         zoomRequired: signal(false),
                         dateMoved: signal(undefined),
                     },
@@ -191,6 +200,39 @@ describe('EOdyssey debug reprojection', () => {
         view.setRotation(Math.PI / 2);
         fixture.detectChanges();
         expect(fixture.componentInstance.maxResolution()).toBeCloseTo(1400);
+    });
+
+    it('uses the map notice for a disjoint view and offers a region covering the map center', () => {
+        const layers = TestBed.inject(EOdysseyLayerService);
+        const appliedVariant = layers.appliedVariant as WritableSignal<DataSourceVariant | undefined>;
+        const centerVariant = layers.mapCenterVariantKey as WritableSignal<string | undefined>;
+        appliedVariant.set({
+            key: 'EPSG:32632',
+            name: 'UTM 32N',
+            crs: 'EPSG:32632',
+            collectionId: 'region-32',
+            coverage: parseCoverage('{"type":"Polygon","coordinates":[[[6,0],[12,0],[12,84],[6,84],[6,0]]]}'),
+        });
+        const element = fixture.nativeElement as HTMLElement;
+        view.setCenter(fromLonLat([13, 51]));
+        fixture.detectChanges();
+        expect(element.querySelector('.map-notice')).toBeNull();
+
+        view.setResolution(100);
+        fixture.detectChanges();
+        expect(element.querySelector('.map-notice')?.textContent).toContain('Outside the data bounds for UTM 32N');
+        expect(element.querySelector('.notice-action')).toBeNull();
+
+        centerVariant.set('EPSG:32633');
+        fixture.detectChanges();
+        const action = element.querySelector<HTMLButtonElement>('.map-notice .notice-action');
+        expect(action?.textContent?.trim()).toBe('Select at map center');
+        action?.click();
+        expect(selectMapCenterVariant).toHaveBeenCalledOnce();
+
+        map.setSize([3000, 700]);
+        fixture.detectChanges();
+        expect(element.querySelector('.map-notice')).toBeNull();
     });
 
     it('starts observing the real map after asynchronous project initialization replaces the placeholder', async () => {

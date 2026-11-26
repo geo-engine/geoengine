@@ -1,9 +1,11 @@
 import {equals, squaredDistance} from 'ol/coordinate';
-import {containsExtent} from 'ol/extent';
+import {buffer, containsExtent} from 'ol/extent';
+import type {Extent} from 'ol/extent';
 import GeoJSON from 'ol/format/GeoJSON';
 import MultiPolygon from 'ol/geom/MultiPolygon';
 import Polygon from 'ol/geom/Polygon';
-import {toLonLat} from 'ol/proj';
+import {toLonLat, transformExtent} from 'ol/proj';
+import type Projection from 'ol/proj/Projection';
 
 export interface GeographicCenter {
     longitude: number;
@@ -12,6 +14,11 @@ export interface GeographicCenter {
 
 /** Coverage geometries remain in GeoJSON's WGS84 longitude/latitude coordinates. */
 export type GeographicCoverage = Polygon | MultiPolygon;
+
+export interface MapViewport {
+    extent: Extent;
+    projection: Projection;
+}
 
 const geoJSON = new GeoJSON();
 
@@ -44,6 +51,12 @@ export function coverageContains(coverage: GeographicCoverage, center: Geographi
             // intersectsCoordinate excludes boundaries; getClosestPoint also covers hole boundaries.
             squaredDistance(point, coverage.getClosestPoint(point)) <= 1e-20,
     );
+}
+
+/** Match the unwrapped coverage of the map's OGC tiles. A touching edge counts as overlap. */
+export function viewportOutsideCoverage(coverage: GeographicCoverage, viewport: MapViewport): boolean {
+    const extent = transformExtent(viewport.extent, viewport.projection, 'EPSG:4326', 8);
+    return extent.every(Number.isFinite) && !coverage.intersectsExtent(buffer(extent, 1e-10));
 }
 
 function isUsablePolygon(polygon: Polygon): boolean {

@@ -1,5 +1,6 @@
+import {get as getProjection, transformExtent} from 'ol/proj';
 import {describe, expect, it} from 'vitest';
-import {coverageContains, parseCoverage} from './coverage';
+import {coverageContains, parseCoverage, viewportOutsideCoverage} from './coverage';
 
 const polygon = (coordinates: number[][][]): string => JSON.stringify({type: 'Polygon', coordinates});
 
@@ -61,6 +62,33 @@ describe('geographic coverage', () => {
         expect(coverageContains(coverage!, {longitude: 175, latitude: 0})).toBe(false);
         expect(coverageContains(coverage!, {longitude: -175, latitude: 0})).toBe(true);
         expect(coverageContains(coverage!, {longitude: 185, latitude: 0})).toBe(true);
+        const projection = getProjection('EPSG:4326')!;
+        expect(viewportOutsideCoverage(coverage!, {extent: [174, -1, 176, 1], projection})).toBe(true);
+        expect(viewportOutsideCoverage(coverage!, {extent: [174, -1, 177, 1], projection})).toBe(false);
+        expect(viewportOutsideCoverage(coverage!, {extent: [179, -1, 181, 1], projection})).toBe(false);
+    });
+
+    it('detects complete separation in the projected map viewport', () => {
+        const coverage = parseCoverage(
+            polygon([
+                [
+                    [6, 0],
+                    [12, 0],
+                    [12, 84],
+                    [6, 84],
+                    [6, 0],
+                ],
+            ]),
+        )!;
+        const projection = getProjection('EPSG:3857')!;
+        const outside = (extent: number[]): boolean =>
+            viewportOutsideCoverage(coverage, {extent: transformExtent(extent, 'EPSG:4326', projection), projection});
+
+        expect(outside([11, 48, 16, 52])).toBe(false);
+        expect(outside([12, 48, 16, 52])).toBe(false);
+        expect(outside([12.01, 48, 16, 52])).toBe(true);
+        expect(outside([0, -10, 20, 85])).toBe(false);
+        expect(outside([367, 48, 370, 52])).toBe(true);
     });
 
     it.each([false, true])('includes every exterior and hole edge regardless of winding (reversed: %s)', (reversed) => {
