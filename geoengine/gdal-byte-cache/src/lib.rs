@@ -31,7 +31,9 @@
 //! system for a version shares it with the others through a symbolic link `<hash>.version` whose
 //! target is the version. For [`VERSION_CHECK_INTERVAL`], opening a known file costs no request,
 //! and the remote file is only opened when a chunk is missing. After that time, or at once after
-//! [`ByteCache::forget`], a worker asks again.
+//! [`ByteCache::forget`], a worker asks again. While the link's cache file exists, asking again
+//! downloads only the least of the file's start, whatever the dataset's
+//! `GDAL_INGESTED_BYTES_AT_OPEN`, as the cache holds the start.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -322,13 +324,15 @@ unsafe fn inner_path(filename: *const c_char) -> Option<CString> {
 /// Deletes the least recently used remote files while the directory holds more than
 /// `size_bytes`, down to [`LOW_WATERMARK_PERCENT`] of it; with a size of 0, all of them. Counts
 /// the allocated blocks, not the length, as the files are sparse. Touches only files the cache
-/// names ([`is_cache_stem`]). Also deletes version links older than [`VERSION_CHECK_INTERVAL`].
+/// names ([`is_cache_stem`]). Also deletes the version links of deleted files.
 /// Returns the bytes kept and the files deleted.
 ///
 /// # Errors
 /// Fails if the directory cannot be listed.
 pub fn sweep(directory: &Path, size_bytes: u64) -> std::io::Result<(u64, u64)> {
     let mut files: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
+    // version links with the stem of their cache file
+    let mut links: Vec<(PathBuf, Option<String>)> = Vec::new();
     for entry in std::fs::read_dir(directory)?.flatten() {
         let path = entry.path();
         let Ok(meta) = entry.metadata() else {
@@ -340,14 +344,10 @@ pub fn sweep(directory: &Path, size_bytes: u64) -> std::io::Result<(u64, u64)> {
             .is_some_and(is_cache_stem);
         if meta.is_symlink() && stem_ok && path.extension().is_some_and(|e| e == VERSION_EXTENSION)
         {
-            let outdated = meta
-                .modified()
+            let stem = std::fs::read_link(&path)
                 .ok()
-                .and_then(|m| m.elapsed().ok())
-                .is_none_or(|age| age >= VERSION_CHECK_INTERVAL);
-            if outdated || size_bytes == 0 {
-                let _ = std::fs::remove_file(&path);
-            }
+                .and_then(|target| target.to_str()?.rsplit(' ').next().map(str::to_string));
+            links.push((path, stem));
             continue;
         }
         let ours = meta.is_file()
@@ -362,19 +362,27 @@ pub fn sweep(directory: &Path, size_bytes: u64) -> std::io::Result<(u64, u64)> {
         }
     }
     let mut total: u64 = files.iter().map(|(_, bytes, _)| bytes).sum();
-    if total <= size_bytes && size_bytes > 0 {
-        return Ok((total, 0));
-    }
     files.sort_unstable_by_key(|(used, _, _)| *used);
     let low = size_bytes / 100 * LOW_WATERMARK_PERCENT;
     let mut deleted = 0;
+    let mut kept = std::collections::HashSet::new();
+    let above = total > size_bytes || size_bytes == 0;
     for (_, bytes, path) in files {
-        if total <= low && size_bytes > 0 {
-            break;
-        }
-        if std::fs::remove_file(path).is_ok() {
+        if !above || (total <= low && size_bytes > 0) || std::fs::remove_file(&path).is_err() {
+            kept.extend(
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(str::to_string),
+            );
+        } else {
             total -= bytes;
             deleted += 1;
+        }
+    }
+    // a link outlives its check, so a later check knows the start is cached; not its cache file
+    for (link, stem) in links {
+        if !stem.is_some_and(|stem| kept.contains(&stem)) {
+            let _ = std::fs::remove_file(link);
         }
     }
     Ok((total, deleted))
@@ -610,9 +618,7 @@ impl Handle {
             // SAFETY: a valid path; the handle is closed in `close`. The size is known, so the open
             // need not download the file's start (`GDAL_INGESTED_BYTES_AT_OPEN`, at least one chunk)
             let inner = unsafe {
-                with_thread_local_option(c"GDAL_INGESTED_BYTES_AT_OPEN", c"1024", || {
-                    gdal_sys::VSIFOpenExL(self.path.as_ptr(), c"rb".as_ptr(), 0)
-                })
+                with_least_ingest(|| gdal_sys::VSIFOpenExL(self.path.as_ptr(), c"rb".as_ptr(), 0))
             };
             if inner.is_null() {
                 return Err(());
@@ -699,6 +705,23 @@ fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
     Some(version)
 }
 
+/// Whether this or another worker knew a version of the remote file, even an outdated one: the
+/// cache then holds the file's start, so checking the version need not download it again.
+fn seen(cache: &ByteCache, key: &str, inner: &CStr) -> bool {
+    lock(&cache.versions).contains(&(key.to_string(), inner.to_bytes().to_vec()))
+        || std::fs::symlink_metadata(version_link(cache, key, inner.to_bytes())).is_ok()
+}
+
+/// Runs `f` with an open of a remote file downloading only the least of its start
+/// (`GDAL_INGESTED_BYTES_AT_OPEN`), for opens whose start the cache has or that need only its size.
+///
+/// # Safety
+/// As [`with_thread_local_option`].
+unsafe fn with_least_ingest<R>(f: impl FnOnce() -> R) -> R {
+    // SAFETY: as the caller promises
+    unsafe { with_thread_local_option(c"GDAL_INGESTED_BYTES_AT_OPEN", c"1024", f) }
+}
+
 /// Remembers the version of a remote file that the inner file system just reported, for this
 /// worker and, through its link, for the others.
 fn remember(cache: &ByteCache, key: &str, inner: &CStr, stat: &libc::stat64) -> Version {
@@ -783,22 +806,33 @@ unsafe extern "C" fn open(
             // SAFETY: a valid path and buffer; the handle is closed in `close` or below. Opened as
             // without the cache, with errors reported, so that a missing file stays "not found"
             // (see `open_failed`); the stat after it is answered from what the open learned.
-            unsafe {
+            let check = || unsafe {
                 VSIErrorReset();
                 let handle = gdal_sys::VSIFOpenExL(inner.as_ptr(), c"rb".as_ptr(), 1);
                 if handle.is_null() {
                     open_failed();
-                    return std::ptr::null_mut();
+                    return None;
                 }
                 let mut stat: libc::stat64 = std::mem::zeroed();
                 if gdal_sys::VSIStatExL(inner.as_ptr(), (&raw mut stat).cast(), 0) != 0
                     || stat.st_mode & libc::S_IFMT != libc::S_IFREG
                 {
                     gdal_sys::VSIFCloseL(handle);
-                    return std::ptr::null_mut();
+                    return None;
                 }
-                (remember(cache, key, &inner, &stat), handle)
-            }
+                Some((remember(cache, key, &inner, &stat), handle))
+            };
+            // a first open downloads the start as the dataset sets it; a version check does not
+            // SAFETY: `check` does not set the option
+            let checked = if seen(cache, key, &inner) {
+                unsafe { with_least_ingest(check) }
+            } else {
+                check()
+            };
+            let Some(checked) = checked else {
+                return std::ptr::null_mut();
+            };
+            checked
         }
     };
     let size = version.size;
@@ -869,7 +903,11 @@ unsafe extern "C" fn stat(
         return 0;
     }
     // SAFETY: the buffer is GDAL's, filled by the inner file system
-    let result = unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) };
+    let result = if seen(cache, key, &inner) {
+        unsafe { with_least_ingest(|| gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags)) }
+    } else {
+        unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) }
+    };
     // SAFETY: filled, as the stat succeeded
     if result == 0 && unsafe { (*buffer).st_mode } & libc::S_IFMT == libc::S_IFREG {
         remember(cache, key, &inner, unsafe { &*buffer });
@@ -1390,6 +1428,94 @@ mod tests {
         );
     }
 
+    /// A version checked again after its interval, by a worker that has not seen the file: the
+    /// check downloads only the least of the file's start, not the dataset's ingest.
+    #[test]
+    #[serial_test::serial]
+    fn it_checks_an_outdated_version_without_downloading_the_start_again() {
+        let _ = cache();
+        let server =
+            super::test_range_server::RangeServer::start(test_data("raster"), Duration::ZERO);
+        let endpoint = server
+            .vsicurl_path("")
+            .trim_start_matches("/vsicurl/http://")
+            .trim_end_matches('/')
+            .to_string();
+        // S3, as only S3-like file systems download the start to learn the size
+        let remote = PathBuf::from("/vsis3/landcover/landcover.tif");
+        let cached = wrap(&remote, &key(12)).expect("a remote path");
+        // process-wide, hence serial
+        let options = [
+            ("AWS_S3_ENDPOINT", endpoint.as_str()),
+            ("AWS_HTTPS", "NO"),
+            ("AWS_VIRTUAL_HOSTING", "FALSE"),
+            ("AWS_NO_SIGN_REQUEST", "YES"),
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif"),
+            ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
+            ("GDAL_HTTP_NETRC", "NO"),
+            ("GDAL_INGESTED_BYTES_AT_OPEN", "1048576"),
+        ];
+        for (name, value) in options {
+            gdal::config::set_config_option(name, value).unwrap();
+        }
+        let read = || {
+            gdal::Dataset::open(&cached)
+                .unwrap()
+                .rasterband(1)
+                .unwrap()
+                .read_band_as::<u8>()
+                .unwrap()
+                .data()
+                .to_vec()
+        };
+        let first = read();
+        let (requests, bytes) = server.totals();
+        assert!(bytes >= 1_048_576, "the first open ingests the start");
+
+        // as another worker after the interval: not in its versions, and the shared link outdated
+        unsafe { gdal_sys::VSICurlClearCache() };
+        lock(&cache().1.versions).clear();
+        let inner = CString::new(remote.to_str().unwrap()).unwrap();
+        let link = CString::new(
+            version_link(cache().1, &key(12), inner.to_bytes())
+                .into_os_string()
+                .into_encoded_bytes(),
+        )
+        .unwrap();
+        let old = libc::timespec {
+            tv_sec: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as libc::time_t
+                - 3600,
+            tv_nsec: 0,
+        };
+        // SAFETY: a valid path and two times
+        let set = unsafe {
+            libc::utimensat(
+                libc::AT_FDCWD,
+                link.as_ptr(),
+                [old, old].as_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        };
+        assert_eq!(set, 0);
+        assert_eq!(known(cache().1, &key(12), &inner), None, "outdated");
+
+        let again = read();
+        for (name, _) in options {
+            gdal::config::clear_config_option(name).unwrap();
+        }
+        assert_eq!(again, first);
+        let (requests_again, bytes_again) = server.totals();
+        assert!(requests_again > requests, "the version is checked");
+        assert!(
+            bytes_again - bytes < CHUNK_SIZE,
+            "only the least of the start: {} bytes",
+            bytes_again - bytes
+        );
+    }
+
     /// The inner directory's listing, so that drivers find sibling files by one listing.
     #[test]
     fn it_lists_the_inner_directory() {
@@ -1500,17 +1626,29 @@ mod tests {
         let middle = cache_file(2, 4, 200);
         let recent = cache_file(3, 4, 100);
         let name = |n: u64| dir.path().join(format!("{}.{EXTENSION}", key(n)));
+        // version links, named by another hash, pointing to cache files
+        let link = |n: u64| {
+            dir.path()
+                .join(format!("{}.{VERSION_EXTENSION}", key(n + 100)))
+        };
+        for n in [1, 2] {
+            std::os::unix::fs::symlink(format!("1 0 {}", key(n)), link(n)).unwrap();
+        }
 
         // above the size: delete the oldest until at most 90% of it remain
         let size = old + middle + recent - 1;
         assert_eq!(sweep(dir.path(), size).unwrap(), (middle + recent, 1));
         assert!(!name(1).exists());
         assert!(name(2).exists());
+        // a link goes with its cache file, else stays however old
+        assert!(std::fs::symlink_metadata(link(1)).is_err());
+        assert!(std::fs::symlink_metadata(link(2)).is_ok());
 
         // under the size: nothing goes
         assert_eq!(sweep(dir.path(), size).unwrap(), (middle + recent, 0));
         // size 0, as at start and when clearing the caches: everything goes
         assert_eq!(sweep(dir.path(), 0).unwrap(), (0, 2));
+        assert!(std::fs::symlink_metadata(link(2)).is_err());
     }
 
     /// A directory set to one with other files by mistake: the sweep and clearing the caches

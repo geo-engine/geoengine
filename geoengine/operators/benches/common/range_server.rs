@@ -162,11 +162,13 @@ fn serve_connection(
             std::thread::sleep(latency);
         }
 
-        // only plain file names: nothing outside of `root` is served
+        // paths below `root`, e.g. `bucket/key` as S3 asks for it, but nothing outside of it
         let file_path = root.join(&path);
-        let file = (!path.is_empty() && !path.contains('/') && !path.contains(".."))
-            .then(|| std::fs::File::open(&file_path).ok())
-            .flatten();
+        let file = (!path
+            .split('/')
+            .any(|part| part.is_empty() || part == ".." || part == "."))
+        .then(|| std::fs::File::open(&file_path).ok())
+        .flatten();
         let Some(mut file) = file else {
             writer.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")?;
             continue;
