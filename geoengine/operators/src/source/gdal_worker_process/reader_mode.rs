@@ -138,10 +138,28 @@ impl GdalReaderMode {
         }
     }
 
+    /// The read advise for the block read, see
+    /// [`OverviewReaderState::tiling_to_refined_read_advise`]. At the full resolution it is the
+    /// same as [`Self::tiling_to_dataset_read_advise`].
+    pub fn tiling_to_refined_read_advise(
+        &self,
+        actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition,
+        tile: &SpatialGridDefinition,
+    ) -> Option<GdalReadAdvise> {
+        match self {
+            GdalReaderMode::OriginalResolution(re) => {
+                re.tiling_to_dataset_read_advise(actual_gdal_dataset_spatial_grid_definition, tile)
+            }
+            GdalReaderMode::OverviewLevel(rs) => {
+                rs.tiling_to_refined_read_advise(actual_gdal_dataset_spatial_grid_definition, tile)
+            }
+        }
+    }
+
     /// How many times coarser than the dataset's native resolution a file is, if it is coarser.
     ///
-    /// Metadata returns such files for overview levels, to read less data. GDAL resamples them
-    /// to the tile: a tile with such a file is read through GDAL as a whole, not through blocks.
+    /// Metadata returns such files for overview levels, to read less data. Seen from the dataset,
+    /// the levels of such a file are at this factor times the factors of its own levels.
     pub fn coarser_file_factor(&self, file: &SpatialGridDefinition) -> Option<NonZeroUsize> {
         let native = match self {
             GdalReaderMode::OriginalResolution(rs) => rs.dataset_spatial_grid,
@@ -181,6 +199,26 @@ impl OverviewReaderState {
         &self,
         actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition, // This is the spatial grid of an actual gdal file
         tile: &SpatialGridDefinition, // This is a tile inside the grid we use for the global dataset consisting of potentially many gdal files...
+    ) -> Option<GdalReadAdvise> {
+        self.read_advise(actual_gdal_dataset_spatial_grid_definition, tile, true)
+    }
+
+    /// Like [`Self::tiling_to_dataset_read_advise`], but the window of a file coarser than the
+    /// dataset stays in the file's pixels refined to the dataset's resolution, not rounded to the
+    /// file's pixels: the block read picks the file's level and its pixels from it itself.
+    pub fn tiling_to_refined_read_advise(
+        &self,
+        actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition,
+        tile: &SpatialGridDefinition,
+    ) -> Option<GdalReadAdvise> {
+        self.read_advise(actual_gdal_dataset_spatial_grid_definition, tile, false)
+    }
+
+    fn read_advise(
+        &self,
+        actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition,
+        tile: &SpatialGridDefinition,
+        round_to_file_pixels: bool,
     ) -> Option<GdalReadAdvise> {
         let (native_file_grid, coarseness) =
             self.native_file_grid(actual_gdal_dataset_spatial_grid_definition)?;
@@ -271,15 +309,17 @@ impl OverviewReaderState {
             axis_y.window_start
         };
 
-        let read_window = coarsen_read_window(
-            GdalReadWindow {
-                start_x: axis_x.window_start,
-                start_y: window_start_y,
-                size_x: axis_x.window_size,
-                size_y: axis_y.window_size,
-            },
-            coarseness,
-        );
+        let refined_window = GdalReadWindow {
+            start_x: axis_x.window_start,
+            start_y: window_start_y,
+            size_x: axis_x.window_size,
+            size_y: axis_y.window_size,
+        };
+        let read_window = if round_to_file_pixels {
+            coarsen_read_window(refined_window, coarseness)
+        } else {
+            refined_window
+        };
 
         let read_window_bounds = GridBoundingBox2D::new_unchecked(
             [axis_y.target_bounds[0], axis_x.target_bounds[0]],

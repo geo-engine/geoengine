@@ -204,6 +204,11 @@ impl BlockIo {
     /// (see [`source_pixels`]). For the full resolution, and for a level whose size fits its
     /// factor, those are the level's pixels as they are, and nothing is resampled.
     ///
+    /// A file `file_factor` times coarser than the dataset, e.g. the 60 m file of a 10 m band, has
+    /// its levels at `file_factor` times the factors of its own levels, and its full resolution
+    /// at `file_factor`: the same rule picks among these, at least its full resolution.
+    /// `read_advise` is then in the file's pixels refined to the dataset's resolution.
+    ///
     /// # Errors
     /// Returns an error if a header or block read fails, or if the read is not inside the file.
     ///
@@ -214,6 +219,7 @@ impl BlockIo {
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
         factor: NonZeroUsize,
+        file_factor: NonZeroUsize,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
@@ -225,11 +231,17 @@ impl BlockIo {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
         // A file without the level reads its coarsest finer one, at last the full resolution,
-        // and resamples it, as GDAL does. Only a header without any level has none.
+        // and resamples it, as GDAL does. Only a header without any level has none. The levels
+        // of a coarser file are counted in its own pixels.
+        let own_factor =
+            NonZeroUsize::new(factor.get() / file_factor.get()).unwrap_or(NonZeroUsize::MIN);
         let Some(file_level) = info
-            .level_of_factor(factor)
-            .map(|index| FileLevel { index, factor })
-            .or_else(|| finer_level(&info, factor))
+            .level_of_factor(own_factor)
+            .map(|index| FileLevel {
+                index,
+                factor: own_factor,
+            })
+            .or_else(|| finer_level(&info, own_factor))
         else {
             return Err(IpcProcessError::MissingOverviewLevel {
                 file: params.file_path.display().to_string(),
@@ -247,14 +259,15 @@ impl BlockIo {
             }
             .into()
         };
-        if file_level.factor != factor && newly_cached {
+        if file_level.factor.get() * file_factor.get() != factor.get() && newly_cached {
             tracing::info!(
                 "{} has no overview level {factor}, its level {} is read and resampled",
                 params.file_path.display(),
                 file_level.factor,
             );
         }
-        let Some(LevelRead { advise, picked }) = level_read(&info, file_level, factor, read_advise)
+        let Some(LevelRead { advise, picked }) =
+            level_read(&info, file_level, factor, file_factor, read_advise)
         else {
             return Err(not_inside());
         };
@@ -656,23 +669,34 @@ fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<FileLevel> {
 
 /// The read of `file_level` for `read_advise` of the level `factor`: its window, and the pixels
 /// of it that the output takes, unless those are the whole window. `None` if the read is not
-/// inside the file.
+/// inside the file. A file `file_factor` times coarser than the dataset has its full size in
+/// the dataset's pixels, as `read_advise`.
 fn level_read(
     info: &RasterInfo,
     file_level: FileLevel,
     factor: NonZeroUsize,
+    file_factor: NonZeroUsize,
     read_advise: GdalReadAdvise,
 ) -> Option<LevelRead> {
     let layout = info.levels.get(file_level.index)?;
     let full = info.levels.first()?;
     let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
-    let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
     let [out_y, out_x] = read_advise.read_window_bounds.axis_size();
     // a file without pixels has no read inside it
-    let full_y = NonZeroUsize::new(full.size_y)?;
-    let full_x = NonZeroUsize::new(full.size_x)?;
+    let full_y = NonZeroUsize::new(full.size_y.checked_mul(file_factor.get())?)?;
+    let full_x = NonZeroUsize::new(full.size_x.checked_mul(file_factor.get())?)?;
     let rows = source_pixels(start_y, out_y, factor, layout.size_y, full_y)?;
     let columns = source_pixels(start_x, out_x, factor, layout.size_x, full_x)?;
+    // the read's size in the file's own full-resolution pixels; for a coarser file, the pixels
+    // of the level the output takes, as the size in the dataset's pixels is not the file's
+    let (size_x, size_y) = if file_factor.get() == 1 {
+        read_advise.gdal_read_widow.gdal_window_size()
+    } else {
+        (
+            (columns[columns.len() - 1] - columns[0] + 1) * file_level.factor.get(),
+            (rows[rows.len() - 1] - rows[0] + 1) * file_level.factor.get(),
+        )
+    };
     // the pixels the output takes, as a read of the finer level starting at its first one
     let advise = GdalReadAdvise {
         gdal_read_widow: GdalReadWindow::new(
@@ -960,7 +984,14 @@ mod tests {
             factor: factor(4),
         };
         // the full resolution: the window as it is
-        let read = level_read(&fits, full, factor(1), advise([8, 8], [16, 16], [16, 16])).unwrap();
+        let read = level_read(
+            &fits,
+            full,
+            factor(1),
+            factor(1),
+            advise([8, 8], [16, 16], [16, 16]),
+        )
+        .unwrap();
         assert!(read.picked.is_none());
         assert_eq!(read.advise.gdal_read_widow.gdal_window_start(), (8, 8));
         // the level itself: its window as it is
@@ -968,11 +999,18 @@ mod tests {
             &fits,
             level_4,
             factor(4),
+            factor(1),
             advise([0, 0], [64, 64], [16, 16]),
         );
         assert!(read.unwrap().picked.is_none());
         // level 8 from level 4: every second pixel
-        let read = level_read(&fits, level_4, factor(8), advise([0, 0], [64, 64], [8, 8]));
+        let read = level_read(
+            &fits,
+            level_4,
+            factor(8),
+            factor(1),
+            advise([0, 0], [64, 64], [8, 8]),
+        );
         assert_eq!(
             read.unwrap().picked.unwrap().rows,
             vec![1, 3, 5, 7, 9, 11, 13, 15]
@@ -984,11 +1022,64 @@ mod tests {
             &shifted,
             level_4,
             factor(4),
+            factor(1),
             advise([0, 0], [61, 61], [16, 16]),
         );
         let picked = read.unwrap().picked.unwrap();
         assert_eq!(picked.rows.len(), 16);
         assert_ne!(picked.rows, (0..16).collect::<Vec<_>>());
+    }
+
+    /// A file 6 times coarser than the dataset, like the 60 m file of a 10 m band: 60 px with a
+    /// level 2 of 30 px under a dataset of 360 px. Each output pixel takes the pixel of the
+    /// file's level under its center, placed in the dataset's pixels.
+    #[test]
+    fn it_picks_the_pixels_of_a_coarser_file_under_the_output_pixels() {
+        let coarser = raster_info(vec![level(60, 16), level(30, 16)]);
+        // the pixel of a level of `level_factor` under the center of output pixel `p` of level
+        // `factor`, both in the dataset's pixels: the file's pixels are 6 of them wide
+        let expected = |factor: usize, level_factor: usize| -> Vec<usize> {
+            (0..8)
+                .map(|p| (2 * p + 1) * factor / (2 * 6 * level_factor))
+                .collect()
+        };
+
+        // level 8 reads the file's full resolution (6 of the dataset's pixels per pixel)
+        let full = FileLevel {
+            index: 0,
+            factor: factor(1),
+        };
+        let read = level_read(
+            &coarser,
+            full,
+            factor(8),
+            factor(6),
+            advise([0, 0], [360, 360], [45, 45]),
+        )
+        .unwrap();
+        let picked = read.picked.unwrap();
+        assert_eq!(picked.rows[..8], expected(8, 1)[..]);
+        assert_eq!(picked.rows[..5], [0, 2, 3, 4, 6]);
+        // the read covers the picked pixels of the file's full resolution
+        assert_eq!(read.advise.gdal_read_widow.gdal_window_start(), (0, 0));
+        assert_eq!(read.advise.gdal_read_widow.gdal_window_size(), (60, 60));
+
+        // level 16 reads the file's level 2 (12 of the dataset's pixels per pixel)
+        let level_2 = FileLevel {
+            index: 1,
+            factor: factor(2),
+        };
+        let read = level_read(
+            &coarser,
+            level_2,
+            factor(16),
+            factor(6),
+            advise([0, 0], [352, 352], [22, 22]),
+        )
+        .unwrap();
+        let picked = read.picked.unwrap();
+        assert_eq!(picked.rows[..8], expected(16, 2)[..]);
+        assert_eq!(picked.rows[..3], [0, 2, 3]);
     }
 
     #[test]

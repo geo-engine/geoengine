@@ -68,18 +68,14 @@ enum ReadPath<'a> {
 
 impl<'a> ReadPath<'a> {
     /// Blocks, if there is a block reader, the blocks read for the tile stay cached, and the
-    /// reader reads every file of the tile: with `block_reads = "auto"` all are remote, and none
-    /// is coarser than the dataset. Such a file has no level of the dataset, GDAL resamples it.
-    fn of(blocks: Option<&'a BlockIo>, plan: &TilePlan, reader_mode: &GdalReaderMode) -> Self {
+    /// reader reads every file of the tile: with `block_reads = "auto"` all are remote. A file
+    /// coarser than the dataset is read through blocks as well, from its own levels (see
+    /// [`BlockIo::read`]).
+    fn of(blocks: Option<&'a BlockIo>, plan: &TilePlan) -> Self {
         match blocks {
             Some(blocks)
                 if blocks.caches(plan.cache_hint)
-                    && plan.files.iter().all(|file| {
-                        blocks.reads(file)
-                            && reader_mode
-                                .coarser_file_factor(&file.spatial_grid_definition())
-                                .is_none()
-                    }) =>
+                    && plan.files.iter().all(|file| blocks.reads(file)) =>
             {
                 ReadPath::Blocks(blocks)
             }
@@ -131,9 +127,14 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
     let factor = reader_mode.level_factor();
-    let path = ReadPath::of(blocks, &plan, &reader_mode);
+    let path = ReadPath::of(blocks, &plan);
 
-    let files = FileRead::of_tile(plan.files, &plan.tile, &reader_mode);
+    let files = FileRead::of_tile(
+        plan.files,
+        &plan.tile,
+        &reader_mode,
+        matches!(path, ReadPath::Blocks(_)),
+    );
     let areas: Vec<GridBoundingBox2D> = files.iter().map(|file| file.area).collect();
 
     // reads in flight, merged in the order of the files (highest z-index first) as they finish
@@ -233,14 +234,19 @@ struct FileRead {
     /// whether the read has a margin of one pixel around the tile, and its pixels next to no data
     /// are uncertain, see [`reads_low_pass_level`]
     erodes: bool,
+    /// how many times coarser than the dataset the file is, 1 for a file of its resolution
+    file_factor: NonZeroUsize,
 }
 
 impl FileRead {
-    /// The reads of the files of `tile` that intersect it, in their order.
+    /// The reads of the files of `tile` that intersect it, in their order. For `blocks`, the read
+    /// of a file coarser than the dataset stays in the dataset's pixels, see
+    /// [`GdalReaderMode::tiling_to_refined_read_advise`].
     fn of_tile(
         files: Vec<GdalDatasetParameters>,
         tile: &TileInformation,
         reader_mode: &GdalReaderMode,
+        blocks: bool,
     ) -> Vec<Self> {
         let tile_bounds = tile.global_pixel_bounds();
         let tile_spatial_grid = tile.spatial_grid_definition();
@@ -258,11 +264,19 @@ impl FileRead {
             .filter_map(|params| {
                 let file_grid = params.spatial_grid_definition();
                 let erodes = reads_low_pass_level(&params, reader_mode);
-                let read_advise = if erodes {
-                    reader_mode.tiling_to_dataset_read_advise(&file_grid, &margin_grid)
+                let grid = if erodes {
+                    &margin_grid
                 } else {
-                    reader_mode.tiling_to_dataset_read_advise(&file_grid, &tile_spatial_grid)
+                    &tile_spatial_grid
                 };
+                let read_advise = if blocks {
+                    reader_mode.tiling_to_refined_read_advise(&file_grid, grid)
+                } else {
+                    reader_mode.tiling_to_dataset_read_advise(&file_grid, grid)
+                };
+                let file_factor = reader_mode
+                    .coarser_file_factor(&file_grid)
+                    .unwrap_or(NonZeroUsize::MIN);
                 // the part of the read inside the tile, which the read is cut to
                 let area = read_advise.and_then(|read_advise| {
                     read_advise.read_window_bounds.intersection(&tile_bounds)
@@ -280,6 +294,7 @@ impl FileRead {
                     read_advise,
                     area,
                     erodes,
+                    file_factor,
                 })
             })
             .collect()
@@ -300,11 +315,12 @@ async fn read_file<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType
         read_advise,
         area,
         erodes,
+        file_factor,
     } = file;
     let read = match path {
         ReadPath::Blocks(blocks) => {
             blocks
-                .read::<T>(&params, read_advise, factor, cache_hint)
+                .read::<T>(&params, read_advise, factor, file_factor, cache_hint)
                 .await?
         }
         ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await?,
@@ -1127,30 +1143,21 @@ mod tests {
             files,
             cache_hint: CacheHint::max_duration(),
         };
-        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
-            dataset_spatial_grid: local.spatial_grid_definition(),
-        });
         let all_remote = plan(vec![remote(remote_paths[0]), remote(remote_paths[1])]);
         let mixed = plan(vec![remote(remote_paths[0]), local.clone()]);
         assert!(matches!(
-            ReadPath::of(Some(&auto), &all_remote, &reader_mode),
+            ReadPath::of(Some(&auto), &all_remote),
             ReadPath::Blocks(_)
         ));
+        assert!(matches!(ReadPath::of(Some(&auto), &mixed), ReadPath::Gdal));
         assert!(matches!(
-            ReadPath::of(Some(&auto), &mixed, &reader_mode),
-            ReadPath::Gdal
-        ));
-        assert!(matches!(
-            ReadPath::of(Some(&on), &mixed, &reader_mode),
+            ReadPath::of(Some(&on), &mixed),
             ReadPath::Blocks(_)
         ));
-        assert!(matches!(
-            ReadPath::of(None, &all_remote, &reader_mode),
-            ReadPath::Gdal
-        ));
+        assert!(matches!(ReadPath::of(None, &all_remote), ReadPath::Gdal));
 
-        // a file twice as coarse as the dataset has no level of the dataset: its tile goes
-        // through GDAL as a whole
+        // a file twice as coarse as the dataset is read from its own levels: its tile stays on
+        // the block path
         let coarser = GdalDatasetParameters {
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
@@ -1163,8 +1170,8 @@ mod tests {
         };
         let with_coarser = plan(vec![local.clone(), coarser]);
         assert!(matches!(
-            ReadPath::of(Some(&on), &with_coarser, &reader_mode),
-            ReadPath::Gdal
+            ReadPath::of(Some(&on), &with_coarser),
+            ReadPath::Blocks(_)
         ));
     }
 
@@ -1923,6 +1930,148 @@ mod tests {
             );
             assert_eq!(stats.reads + stats.reads_joined, cache.stats().stored);
         }
+    }
+
+    /// A TIFF file 3 times coarser than the 256 px dataset of [`tiff_filled_with_3000`], like the
+    /// 60 m file of a 10 m band (but not a power of two of it), with levels 2 and 4 of its own.
+    /// Each pixel holds its own position, `y * 256 + x + 1`.
+    fn coarser_tiff_with_positions(dir: &std::path::Path) -> GdalDatasetParameters {
+        let size = 86;
+        let file_path = dir.join("coarser.tif");
+        let mut dataset = gdal::DriverManager::get_driver_by_name("GTiff")
+            .unwrap()
+            .create_with_band_type::<u16, _>(&file_path, size, size, 1)
+            .unwrap();
+        dataset
+            .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(32632).unwrap())
+            .unwrap();
+        dataset
+            .set_geo_transform(&[0., 3., 0., 256., 0., -3.])
+            .unwrap();
+        let positions = (0..size * size)
+            .map(|i| ((i / size) * 256 + i % size + 1) as u16)
+            .collect();
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .write(
+                (0, 0),
+                (size, size),
+                &mut gdal::raster::Buffer::new((size, size), positions),
+            )
+            .unwrap();
+        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        dataset.close().unwrap();
+
+        GdalDatasetParameters {
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 256.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(3.),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-3.),
+            },
+            width: size,
+            height: size,
+            file_path,
+            ..tiff_filled_with_3000(dir)
+        }
+    }
+
+    /// A file coarser than the dataset goes through the blocks like the files of the dataset's
+    /// resolution and reads its own levels: each output pixel takes the pixel under its center
+    /// of the coarsest level of the file not coarser than the read, placed by the level's real
+    /// size. The levels 4, 8 and 16 of the dataset read the coarser file's full resolution, its
+    /// level 2, and (lacking a level 5) its level 4.
+    #[tokio::test]
+    async fn it_reads_a_coarser_file_through_blocks_from_its_own_levels() {
+        let dir = tempfile::tempdir().unwrap();
+        let below = tiff_filled_with_3000(dir.path());
+        let coarser = coarser_tiff_with_positions(dir.path());
+        let dataset_grid = below.spatial_grid_definition();
+        // the pixels of the coarser file's levels as they are stored
+        let stored: Vec<(usize, Vec<u16>)> = {
+            let dataset = gdal::Dataset::open(&coarser.file_path).unwrap();
+            let band = dataset.rasterband(1).unwrap();
+            let full = band.read_band_as::<u16>().unwrap();
+            let mut levels = vec![(full.shape().1, full.data().to_vec())];
+            for index in 0..2 {
+                let overview = band.overview(index).unwrap();
+                let level = overview.read_band_as::<u16>().unwrap();
+                levels.push((level.shape().1, level.data().to_vec()));
+            }
+            levels
+        };
+
+        let block_pool = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let block_worker = block_pool.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(
+            cache.clone(),
+            block_worker.clone(),
+            CacheTtlSeconds::new(60),
+        );
+
+        for (level, level_index, level_factor) in [(4_usize, 0, 1), (8, 1, 2), (16, 2, 4)] {
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: dataset_grid,
+                overview_level: NonZeroUsize::new(level).unwrap(),
+            });
+            let (level_size, pixels) = &stored[level_index];
+            // the level's pixel under the center of output pixel `p`, in the dataset's pixels:
+            // the file's full resolution is 3 times coarser, its level `level_factor` times more
+            let under =
+                |p: usize| ((2 * p + 1) * level * level_size / (2 * 86 * 3)).min(level_size - 1);
+            let tile_size = 256 / level / 2;
+            for tile_y in 0..2 {
+                for tile_x in 0..2 {
+                    let plan = TilePlan {
+                        tile: TileInformation::new(
+                            [tile_y as isize, tile_x as isize].into(),
+                            GridShape2D::new([tile_size, tile_size]),
+                            GeoTransform::new_unchecked(
+                                (0., 256.).into(),
+                                level as f64,
+                                -(level as f64),
+                            ),
+                        ),
+                        time: TimeInterval::default(),
+                        band: 0,
+                        files: vec![coarser.clone(), below.clone()],
+                        cache_hint: CacheHint::max_duration(),
+                    };
+                    let tile =
+                        assemble_tile::<u16>(plan, reader_mode, &block_worker, Some(&blocks))
+                            .await
+                            .unwrap()
+                            .grid_array
+                            .into_materialized_masked_grid();
+                    for y in 0..tile_size {
+                        for x in 0..tile_size {
+                            let (row, column) =
+                                (under(tile_y * tile_size + y), under(tile_x * tile_size + x));
+                            assert_eq!(
+                                tile.inner_grid.data[y * tile_size + x],
+                                pixels[row * level_size + column],
+                                "level {level} (the file's level {level_factor}), tile [{tile_y}, {tile_x}], pixel [{y}, {x}]"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // every read stored a unit: no file of the tiles went through GDAL
+        let stats = block_pool.request_stats();
+        assert!(
+            cache.stats().stored > 0,
+            "the reads went through the blocks"
+        );
+        assert_eq!(stats.reads + stats.reads_joined, cache.stats().stored);
     }
 
     #[tokio::test]
