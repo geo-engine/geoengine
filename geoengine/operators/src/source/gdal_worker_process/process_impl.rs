@@ -343,6 +343,19 @@ impl GdalDatasetHolder {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
+        // only this worker builds cache paths: a dataset must not pick the key its bytes are
+        // read under
+        if dataset_params
+            .file_path
+            .to_string_lossy()
+            .contains(super::byte_cache::PREFIX)
+        {
+            return Err(GdalError::BadArgument(format!(
+                "a dataset path must not contain {}",
+                super::byte_cache::PREFIX
+            )));
+        }
+
         // reverts the process-global configs on drop
         let thread_local_configs: Option<GdalConfigOptions> = dataset_params
             .gdal_config_options_for_request()
@@ -1748,6 +1761,27 @@ mod tests {
         ));
 
         assert_eq!(through, without);
+    }
+
+    /// A dataset cannot name a cache path itself, with or without the cache.
+    #[test]
+    fn it_rejects_dataset_paths_that_name_the_byte_cache() {
+        let ds = GdalDatasetParameters {
+            file_path: format!("/vsigecache/{}/vsis3/bucket/a.tif", "0".repeat(64)).into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+        let result = GdalDatasetHolder::default().open_ex(&ds);
+        assert!(matches!(result, Err(GdalError::BadArgument(_))));
     }
 
     /// A remote file that does not exist stays "not found" when the worker reads through the byte

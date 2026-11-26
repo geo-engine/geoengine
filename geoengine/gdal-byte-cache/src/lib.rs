@@ -298,16 +298,22 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
 /// cached; wrap the inner path where the driver builds it if such datasets need the cache.
 pub fn wrap(path: &Path, key: &str) -> Option<PathBuf> {
     let path = path.to_str()?;
-    (key.len() == KEY_LEN && REMOTE_FILE_SYSTEMS.iter().any(|fs| path.starts_with(fs)))
-        .then(|| PathBuf::from(format!("{PREFIX}{key}{path}")))
+    (is_cache_stem(key) && is_remote(path)).then(|| PathBuf::from(format!("{PREFIX}{key}{path}")))
+}
+
+fn is_remote(path: &str) -> bool {
+    REMOTE_FILE_SYSTEMS.iter().any(|fs| path.starts_with(fs))
 }
 
 /// The key and inner path of a cache path, with or without the prefix: GDAL passes the plugin's
-/// callbacks the path after it.
+/// callbacks the path after it. Only what [`wrap`] builds: a path that reaches GDAL from elsewhere
+/// must not read local files through the cache or pick its key freely.
 fn unwrap(path: &str) -> Option<(&str, &str)> {
     let rest = path.strip_prefix(PREFIX).unwrap_or(path);
     let (key, inner) = rest.split_at_checked(KEY_LEN)?;
-    inner.starts_with('/').then_some((key, inner))
+    // the tests read local files as remote ones
+    (is_cache_stem(key) && inner.starts_with('/') && (cfg!(test) || is_remote(inner)))
+        .then_some((key, inner))
 }
 
 /// The inner path of a path GDAL passes a callback, for the inner file system.
@@ -1163,6 +1169,9 @@ mod tests {
         );
         assert_eq!(unwrap(&format!("{PREFIX}{wrapped}")), unwrap(&wrapped));
         assert_eq!(unwrap("/vsigecache/short"), None);
+        // not what `wrap` builds: a key that is no hash, a local path
+        assert_eq!(unwrap(&format!("{}/vsis3/a.jp2", "K".repeat(64))), None);
+        assert!(!is_remote("/etc/passwd") && is_remote("/vsis3/bucket/a.jp2"));
     }
 
     #[test]
