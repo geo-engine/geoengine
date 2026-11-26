@@ -82,8 +82,10 @@ const REMOTE_FILE_SYSTEMS: [&str; 7] = [
 const REMEMBERED_FILES: std::num::NonZeroUsize =
     std::num::NonZeroUsize::new(4096).expect("not zero");
 
-/// How long a process trusts a file's version before asking the remote file system again, so that
-/// a file replaced by one of the same size gets a new cache file within this time.
+/// How long a process trusts a file's version before asking the remote file system again. A
+/// replaced file gets a new cache file by then if its size or modification time changed; if the
+/// remote file system reports no modification time, only after a read of it failed
+/// ([`ByteCache::forget`]).
 pub const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The sweep deletes down to this share of the size, so that it does not delete on every run.
@@ -183,7 +185,15 @@ impl ByteCache {
         for id in ids {
             // the other workers must not take the version from the link either
             let _ = std::fs::remove_file(version_link(self, &id.0, &id.1));
-            versions.pop(&id);
+            // without a modification time, a replaced file of the same size has the same
+            // version, so only a new cache file reads it anew. Else the next check tells, and
+            // the cached bytes survive failures that are not about the file, e.g. a rate limit.
+            if let Some((version, _)) = versions.pop(&id)
+                && version.mtime == 0
+            {
+                let file = format!("{}.{EXTENSION}", version.stem);
+                let _ = std::fs::remove_file(self.directory.join(file));
+            }
         }
     }
 
@@ -1633,13 +1643,32 @@ mod tests {
         assert_eq!(known(cache, &key(16), &inner), Some(version.clone()));
         // as another worker: only the link knows it
         lock(&cache.versions).pop(&(key(16), inner.to_bytes().to_vec()));
-        assert_eq!(known(cache, &key(16), &inner), Some(version), "shared");
+        assert_eq!(
+            known(cache, &key(16), &inner),
+            Some(version.clone()),
+            "shared"
+        );
+        let cache_file = |version: &Version| {
+            cache
+                .directory
+                .join(format!("{}.{EXTENSION}", version.stem))
+        };
+        let _ = file_of(&path, 16, 10);
         cache.forget(&path);
         assert_eq!(
             known(cache, &key(16), &inner),
             None,
             "forgotten by all workers"
         );
+        assert!(cache_file(&version).exists(), "the next check tells");
+
+        // no modification time: a replaced file would look the same, so its bytes go, too
+        let mut stat: libc::stat64 = unsafe { std::mem::zeroed() };
+        stat.st_size = 10;
+        let timeless = remember(cache, &key(16), &inner, &stat);
+        let _ = CacheFile::open(&cache.directory, &timeless.stem, 10).unwrap();
+        cache.forget(&path);
+        assert!(!cache_file(&timeless).exists());
     }
 
     #[test]
