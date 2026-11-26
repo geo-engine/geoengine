@@ -657,6 +657,8 @@ pub struct ByteCacheSettings {
     pub directory: std::path::PathBuf,
     /// how long a worker waits for chunks another worker downloads before it downloads them itself
     pub lock_wait_seconds: u64,
+    /// how long the workers trust a remote file's version before they ask for it again
+    pub version_check_seconds: u64,
 }
 
 impl Default for ByteCacheSettings {
@@ -666,6 +668,7 @@ impl Default for ByteCacheSettings {
             max_file_percent: 25,
             directory: "gdal-byte-cache".into(),
             lock_wait_seconds: 10,
+            version_check_seconds: 60,
         }
     }
 }
@@ -756,6 +759,9 @@ impl From<GdalProcessPoolWorkerConfig>
                     size_bytes,
                     max_file_bytes: size_bytes / 100 * config.byte_cache.max_file_percent.min(100),
                     lock_wait: std::time::Duration::from_secs(config.byte_cache.lock_wait_seconds),
+                    version_check: std::time::Duration::from_secs(
+                        config.byte_cache.version_check_seconds,
+                    ),
                 }
             }),
         }
@@ -1234,6 +1240,7 @@ mod tests {
                     size_bytes: 2 * 1024 * 1024,
                     max_file_bytes: 2 * 1024 * 1024 / 100 * 25,
                     lock_wait: std::time::Duration::from_secs(10),
+                    version_check: std::time::Duration::from_secs(60),
                 }
             )
         );

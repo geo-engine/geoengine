@@ -364,6 +364,10 @@ directory = "gdal-byte-cache"
 # After this time they download them themselves, so that a download stuck in retries does not
 # stall them all.
 lock_wait_seconds = 10
+# How long the workers trust the size and modification time of a remote file before one of them
+# asks for them again, with one small request. A file replaced in between can be read as a mix of
+# old and new bytes for that long. Raise it for archives whose files never change.
+version_check_seconds = 60
 
 [data]
 volumes = { test_data = "test_data/" }

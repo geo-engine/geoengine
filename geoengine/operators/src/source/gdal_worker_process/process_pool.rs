@@ -2048,6 +2048,7 @@ mod tests {
                     size_bytes: 1 << 20,
                     max_file_bytes: 1 << 18,
                     lock_wait: std::time::Duration::from_secs(10),
+                    version_check: std::time::Duration::from_secs(60),
                 }),
                 ..WorkerConfig::default()
             },
@@ -2077,6 +2078,7 @@ mod tests {
                     size_bytes: 1 << 20,
                     max_file_bytes: 1 << 18,
                     lock_wait: std::time::Duration::from_secs(10),
+                    version_check: std::time::Duration::from_secs(60),
                 }),
                 ..WorkerConfig::default()
             },

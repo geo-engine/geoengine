@@ -29,7 +29,7 @@
 //! allowed to download but it is not. The version adds the file's size and modification time
 //! (`Last-Modified`), so a changed file gets a new file. The worker that asked the remote file
 //! system for a version shares it with the others through a symbolic link `<hash>.version` whose
-//! target is the version. For [`VERSION_CHECK_INTERVAL`], opening a known file costs no request,
+//! target is the version. For [`ByteCacheConfig::version_check`], opening a known file costs no request,
 //! and the remote file is only opened when a chunk is missing. After that time, or at once after
 //! [`ByteCache::forget`], a worker asks again. While the link's cache file exists, asking again
 //! downloads only the least of the file's start, whatever the dataset's
@@ -77,16 +77,10 @@ const REMOTE_FILE_SYSTEMS: [&str; 7] = [
 ];
 
 /// Files whose version a process remembers, so that it asks the remote file system for a file's
-/// version once per [`VERSION_CHECK_INTERVAL`], not for every handle (GDAL opens one per decoding
+/// version once per [`ByteCacheConfig::version_check`], not for every handle (GDAL opens one per decoding
 /// thread).
 const REMEMBERED_FILES: std::num::NonZeroUsize =
     std::num::NonZeroUsize::new(4096).expect("not zero");
-
-/// How long a process trusts a file's version before asking the remote file system again. A
-/// replaced file gets a new cache file by then if its size or modification time changed; if the
-/// remote file system reports no modification time, only after a read of it failed
-/// ([`ByteCache::forget`]).
-pub const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The sweep deletes down to this share of the size, so that it does not delete on every run.
 const LOW_WATERMARK_PERCENT: u64 = 90;
@@ -118,6 +112,11 @@ pub struct ByteCacheConfig {
     /// how long a worker waits for chunks another worker downloads before it downloads them
     /// itself, so that a download stuck in retries does not stall every worker that needs it
     pub lock_wait: Duration,
+    /// How long the workers trust a file's version before asking the remote file system again. A
+    /// replaced file gets a new cache file by then if its size or modification time changed; if
+    /// the remote file system reports no modification time, only after a read of it failed
+    /// ([`ByteCache::forget`]).
+    pub version_check: Duration,
 }
 
 /// Chunk counters of a process since the last [`ByteCache::take_counts`].
@@ -152,6 +151,7 @@ pub struct ByteCache {
     directory: PathBuf,
     max_file_bytes: u64,
     lock_wait: Duration,
+    version_check: Duration,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
@@ -277,6 +277,7 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         directory: config.directory.clone(),
         max_file_bytes: config.max_file_bytes,
         lock_wait: config.lock_wait,
+        version_check: config.version_check,
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
@@ -709,11 +710,11 @@ fn version_link(cache: &ByteCache, key: &str, inner: &[u8]) -> PathBuf {
 }
 
 /// The version of a remote file that this or another worker checked less than
-/// [`VERSION_CHECK_INTERVAL`] ago.
+/// [`ByteCacheConfig::version_check`] ago.
 fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
     let id = (key.to_string(), inner.to_bytes().to_vec());
     if let Some((version, checked)) = lock(&cache.versions).get(&id)
-        && checked.elapsed() < VERSION_CHECK_INTERVAL
+        && checked.elapsed() < cache.version_check
     {
         return Some(version.clone());
     }
@@ -724,7 +725,7 @@ fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
         .ok()?
         .elapsed()
         .ok()?;
-    if age >= VERSION_CHECK_INTERVAL {
+    if age >= cache.version_check {
         return None;
     }
     let target = std::fs::read_link(&link).ok()?;
@@ -1095,6 +1096,7 @@ mod tests {
                 size_bytes: 1 << 30,
                 max_file_bytes: TEST_FILE_CAP,
                 lock_wait: TEST_LOCK_WAIT,
+                version_check: Duration::from_secs(60),
             })
             .unwrap();
             (dir, cache)
