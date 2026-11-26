@@ -266,6 +266,7 @@ docs/PolygonRasterizationValueConstant.md
 docs/PolygonRasterizationValueCount.md
 docs/PolygonSymbology.md
 docs/ProcessingGraph.md
+docs/ProcessingGraphReadStatus.md
 docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
@@ -753,6 +754,7 @@ geoengine_api_client/models/polygon_rasterization_value_constant.py
 geoengine_api_client/models/polygon_rasterization_value_count.py
 geoengine_api_client/models/polygon_symbology.py
 geoengine_api_client/models/processing_graph.py
+geoengine_api_client/models/processing_graph_read_status.py
 geoengine_api_client/models/project.py
 geoengine_api_client/models/project_layer.py
 geoengine_api_client/models/project_listing.py
@@ -1228,6 +1230,7 @@ test/test_polygon_rasterization_value_constant.py
 test/test_polygon_rasterization_value_count.py
 test/test_polygon_symbology.py
 test/test_processing_graph.py
+test/test_processing_graph_read_status.py
 test/test_processing_graphs_api.py
 test/test_project.py
 test/test_project_layer.py

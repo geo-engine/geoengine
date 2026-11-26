@@ -265,6 +265,7 @@ docs/PolygonRasterizationValueConstant.md
 docs/PolygonRasterizationValueCount.md
 docs/PolygonSymbology.md
 docs/ProcessingGraph.md
+docs/ProcessingGraphReadStatus.md
 docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
@@ -750,6 +751,7 @@ src/models/polygon_rasterization_value_constant.rs
 src/models/polygon_rasterization_value_count.rs
 src/models/polygon_symbology.rs
 src/models/processing_graph.rs
+src/models/processing_graph_read_status.rs
 src/models/project.rs
 src/models/project_layer.rs
 src/models/project_listing.rs

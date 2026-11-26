@@ -15,6 +15,7 @@ use crate::{
     permissions::PermissionDb,
     processing_graphs::{processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry},
     projects::ProjectDb,
+    queries::read_status::ProcessingGraphReadStatus,
     quota::ComputationId,
     tasks::{TaskContext, TaskManager},
     users::{OidcManager, RoleDb, UserAuth, UserDb},
@@ -47,7 +48,9 @@ use geoengine_operators::{
     source::{
         GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
         OgrSourceDataset,
-        gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
+        gdal_worker_process::{
+            GdalProcessPool, GdalProcessPoolAccess, ReadStatusListener, noop_read_status_listener,
+        },
     },
 };
 use rayon::ThreadPool;
@@ -112,10 +115,26 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
         &self,
         processing_graph: ProcessingGraphId,
         computation: ComputationId,
+    ) -> Result<Self::QueryContext> {
+        self.query_context_reported_as(processing_graph, computation, processing_graph)
+    }
+
+    /// Like [`Self::query_context`], but reports the rate limited reads of the query as reads of
+    /// `reported_processing_graph`, see [`Self::read_status`]: the processing graph that the user
+    /// knows, when the query runs a graph wrapped around it, e.g. an OGC API tile of a layer.
+    fn query_context_reported_as(
+        &self,
+        processing_graph: ProcessingGraphId,
+        computation: ComputationId,
+        reported_processing_graph: ProcessingGraphId,
     ) -> Result<Self::QueryContext>;
 
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
+
+    /// The processing graphs of this session whose queries currently wait for reads that their
+    /// data source rate limits
+    fn read_status(&self) -> Vec<ProcessingGraphReadStatus>;
 
     /// Get the list of available data volumes
     fn volumes(&self) -> Result<Vec<Volume>>;
@@ -159,9 +178,12 @@ pub struct QueryContextImpl {
     gdal_process_pool: Arc<GdalProcessPool>,
     gdal_read_ahead: GdalReadAhead,
     processing_runtime: tokio::runtime::Handle,
+    /// hears about the reads of this query that their data source rate limits
+    read_status_listener: Arc<dyn ReadStatusListener>,
 }
 
 impl QueryContextImpl {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
@@ -170,6 +192,7 @@ impl QueryContextImpl {
         default_cache_ttl: CacheTtlSeconds,
         gdal_read_ahead: GdalReadAhead,
         processing_runtime: tokio::runtime::Handle,
+        read_status_listener: Arc<dyn ReadStatusListener>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -186,6 +209,7 @@ impl QueryContextImpl {
             gdal_process_pool,
             gdal_read_ahead,
             processing_runtime,
+            read_status_listener,
         }
     }
 
@@ -202,6 +226,7 @@ impl QueryContextImpl {
         quota_checker: Option<QuotaChecker>,
         gdal_read_ahead: GdalReadAhead,
         processing_runtime: tokio::runtime::Handle,
+        read_status_listener: Arc<dyn ReadStatusListener>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -218,6 +243,7 @@ impl QueryContextImpl {
             gdal_process_pool,
             gdal_read_ahead,
             processing_runtime,
+            read_status_listener,
         }
     }
 }
@@ -278,6 +304,9 @@ impl QueryContext for QueryContextImpl {
 impl GdalProcessPoolAccess for QueryContextImpl {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
+    }
+    fn read_status_listener(&self) -> Arc<dyn ReadStatusListener> {
+        self.read_status_listener.clone()
     }
 }
 
@@ -500,6 +529,10 @@ where
 {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
+    }
+    /// Execution contexts initialize operators and run no user query, so there is no one to tell.
+    fn read_status_listener(&self) -> Arc<dyn ReadStatusListener> {
+        noop_read_status_listener()
     }
 }
 

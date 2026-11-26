@@ -6,6 +6,7 @@ pub mod process_impl;
 mod process_pool;
 pub mod reader;
 pub mod reader_mode;
+pub mod throttle;
 
 use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition};
 use num::integer::div_floor;
@@ -24,6 +25,9 @@ pub use process_pool::{
 };
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
+pub use throttle::{
+    NoopReadStatusListener, ReadStatusListener, ThrottleEvent, noop_read_status_listener,
+};
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
@@ -71,8 +75,16 @@ pub(crate) fn overview_level_spatial_grid(
 
 pub trait GdalProcessPoolAccess {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool>;
+
+    /// Hears about the reads of this context that their data source rate limits, e.g. to tell
+    /// the user of a query. Required, so that a new query context decides whether its users
+    /// hear about rate limits; contexts without a user to tell return
+    /// [`throttle::noop_read_status_listener`].
+    fn read_status_listener(&self) -> std::sync::Arc<dyn ReadStatusListener>;
+
     fn get_gdal_worker(&self) -> GdalPoolDispatcher {
         GdalPoolDispatcher::new(self.get_gdal_pool().clone())
+            .with_read_status_listener(self.read_status_listener())
     }
 }
 

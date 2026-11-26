@@ -1,14 +1,15 @@
 import {Clipboard} from '@angular/cdk/clipboard';
 import {CdkDragHandle} from '@angular/cdk/drag-drop';
 import {AsyncPipe} from '@angular/common';
-import {Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, input} from '@angular/core';
+import {Component, ChangeDetectionStrategy, ChangeDetectorRef, computed, inject, input} from '@angular/core';
+import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {MatIconButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
 import {MatIcon} from '@angular/material/icon';
 import {MatMenu, MatMenuItem, MatMenuTrigger} from '@angular/material/menu';
 import {MatProgressBar} from '@angular/material/progress-bar';
 import {MatTooltip} from '@angular/material/tooltip';
-import {last, map, Observable, startWith} from 'rxjs';
+import {last, map, Observable, of, startWith, switchMap} from 'rxjs';
 import {RasterBandDescriptor} from '@geoengine/api-client';
 import {
     IconStyle,
@@ -32,6 +33,7 @@ import {DataTableComponent} from '../../../datatable/table/table.component';
 import {DownloadLayerComponent} from '../../../download-layer/download-layer.component';
 import {LayoutService} from '../../../layout.service';
 import {MapService} from '../../../map/map.service';
+import {ReadStatusService} from '../../../map/read-status.service';
 import {LoadingState} from '../../../project/loading-state.model';
 import {ProjectService} from '../../../project/project.service';
 import {LineageGraphComponent} from '../../../provenance/lineage-graph/lineage-graph.component';
@@ -86,6 +88,26 @@ export class LayerListElementComponent {
     readonly layer = input.required<Layer>();
 
     readonly menu = input(true);
+
+    private readonly readStatusService = inject(ReadStatusService);
+
+    /** Whether the tiles of this layer are loading; only raster layers read tiles. */
+    private readonly tilesLoading = toSignal(
+        toObservable(this.layer).pipe(
+            switchMap((layer) =>
+                layer.layerType === 'raster'
+                    ? this.projectService.getLayerDataStatusStream(layer).pipe(map((state) => state === LoadingState.LOADING))
+                    : of(false),
+            ),
+        ),
+        {initialValue: false},
+    );
+
+    /** Whether the tiles of this raster layer wait for reads that their data source rate limits. */
+    readonly rateLimited = this.readStatusService.throttled(
+        this.tilesLoading,
+        computed(() => this.layer().workflowId),
+    );
 
     readonly LayoutService = LayoutService;
     readonly ST = SymbologyType;

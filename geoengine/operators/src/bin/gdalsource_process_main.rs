@@ -10,6 +10,10 @@ use geoengine_operators::source::gdal_worker_process::{
         IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, WorkerRetryConfig, setup_client},
+    throttle::{
+        is_throttling_status, parse_gdal_http_retry_warning, report_throttled,
+        set_throttle_reporter,
+    },
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -66,6 +70,12 @@ fn reroute_gdal_logging() {
             }
             gdal::errors::CplErrType::Warning => {
                 tracing::warn!(target: LOG_TARGET, "GDAL Warning {error_num}: {error_msg}");
+                // GDAL warns before it retries an HTTP request
+                if let Some(retry) = parse_gdal_http_retry_warning(error_msg)
+                    && is_throttling_status(retry.http_status)
+                {
+                    report_throttled(retry.into());
+                }
             }
             gdal::errors::CplErrType::Failure => {
                 tracing::error!(target: LOG_TARGET, "GDAL Failure {error_num}: {error_msg}");
@@ -324,6 +334,14 @@ fn run(token: Token, retry: WorkerRetryConfig) {
         Ok(pair) => pair,
         Err(err) => exit_with_error(err),
     };
+
+    // GDAL reports rate limits from any of its threads while a read runs, before its result
+    let throttle_sender = sender.clone();
+    set_throttle_reporter(move |event| {
+        if let Err(err) = throttle_sender.send(WorkerResponse::Throttled(event)) {
+            tracing::debug!("Failed to report a rate limited request: {err:?}");
+        }
+    });
 
     let mut dataset_cache = GdalDatasetHolder::new(retry);
 

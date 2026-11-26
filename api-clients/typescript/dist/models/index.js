@@ -268,6 +268,7 @@ __exportStar(require("./PolygonRasterizationValueConstant"), exports);
 __exportStar(require("./PolygonRasterizationValueCount"), exports);
 __exportStar(require("./PolygonSymbology"), exports);
 __exportStar(require("./ProcessingGraph"), exports);
+__exportStar(require("./ProcessingGraphReadStatus"), exports);
 __exportStar(require("./Project"), exports);
 __exportStar(require("./ProjectLayer"), exports);
 __exportStar(require("./ProjectListing"), exports);

@@ -9,7 +9,9 @@ use crate::{
             spatial_references::{AxisOrder, SpatialReferenceSpecification},
             tasks::TaskResponse,
             upload::{UploadFileLayersResponse, UploadFilesResponse},
-            users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
+            users::{
+                AddRole, ProcessingGraphReadStatus, Quota, UpdateQuota, UsageSummaryGranularity,
+            },
             wfs::{CollectionType, GeoJson},
         },
         model::{
@@ -187,6 +189,7 @@ use utoipa::{
         handlers::users::remove_role_handler,
         handlers::users::revoke_role_handler,
         handlers::users::session_handler,
+        handlers::users::read_status_handler,
         handlers::users::update_user_quota_handler,
         handlers::wcs::wcs_handler,
         handlers::wfs::wfs_handler,
@@ -223,6 +226,7 @@ use utoipa::{
             UserRegistration,
             UserInfo,
             Quota,
+            ProcessingGraphReadStatus,
             UpdateQuota,
             ComputationQuota,
             OperatorQuota,

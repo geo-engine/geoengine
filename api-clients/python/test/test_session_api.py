@@ -61,6 +61,13 @@ class TestSessionApi(unittest.TestCase):
         """
         pass
 
+    def test_read_status_handler(self) -> None:
+        """Test case for read_status_handler
+
+        Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+        """
+        pass
+
     def test_register_user_handler(self) -> None:
         """Test case for register_user_handler
 

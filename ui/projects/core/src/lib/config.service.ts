@@ -9,6 +9,13 @@ interface Delays extends CommonDelays {
     readonly DEBOUNCE: number;
     readonly STORAGE_DEBOUNCE: number;
     readonly GUEST_LOGIN_HINT: number;
+    /** When to ask the backend whether a loading layer waits for rate limited reads, see `ReadStatusService`. */
+    readonly READ_STATUS: {
+        /** How long a layer must load before the first request, in milliseconds. */
+        readonly AFTER_LOADING: number;
+        /** The interval between two requests while a layer loads, in milliseconds. */
+        readonly POLL_INTERVAL: number;
+    };
 }
 
 export interface ConfigDefaults {
@@ -126,6 +133,10 @@ export const DEFAULT_CORE_CONFIG: CoreConfigStructure = {
         DEBOUNCE: 400,
         STORAGE_DEBOUNCE: 1500,
         GUEST_LOGIN_HINT: 5000,
+        READ_STATUS: {
+            AFTER_LOADING: 3000,
+            POLL_INTERVAL: 3000,
+        },
     },
     MAP: {
         DEFAULT_BASEMAP: 'Natural Earth Countries 10m',

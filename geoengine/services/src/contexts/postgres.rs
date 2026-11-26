@@ -18,6 +18,7 @@ use crate::{
     },
     machine_learning::error::MachineLearningError,
     processing_graphs::processing_graph::ProcessingGraphId,
+    queries::read_status::{ProcessingGraphReadStatus, ReadStatusRegistry},
     quota::{ComputationId, QuotaTrackingFactory, initialize_quota_tracking},
     tasks::{SimpleTaskManagerContext, TypedTaskManagerBackend, UserTaskManager},
     users::{OidcManager, UserAuth, UserSession},
@@ -73,6 +74,8 @@ where
     provider_registry: Arc<DataConnectorRegistry>,
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
+    /// the rate limited reads of the queries of all sessions, see [`ReadStatusRegistry`]
+    read_status_registry: Arc<ReadStatusRegistry>,
     ort_environment: OrtEnvironment,
     expression_environment: ExpressionEnvironment,
     gdal_read_ahead: GdalReadAhead,
@@ -170,6 +173,9 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            read_status_registry: Arc::new(ReadStatusRegistry::new(
+                gdal_process_pool_config.throttling.status_expiry,
+            )),
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
@@ -249,6 +255,9 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            read_status_registry: Arc::new(ReadStatusRegistry::new(
+                gdal_process_pool_config.throttling.status_expiry,
+            )),
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
@@ -337,6 +346,9 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            read_status_registry: Arc::new(ReadStatusRegistry::new(
+                gdal_process_pool_config.throttling.status_expiry,
+            )),
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
@@ -464,6 +476,12 @@ where
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
     }
+    /// The application context runs no query itself, so there is no user to tell.
+    fn read_status_listener(
+        &self,
+    ) -> Arc<dyn geoengine_operators::source::gdal_worker_process::ReadStatusListener> {
+        geoengine_operators::source::gdal_worker_process::noop_read_status_listener()
+    }
 }
 
 enum DatabaseStatus {
@@ -567,10 +585,11 @@ where
         UserTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(
+    fn query_context_reported_as(
         &self,
         processing_graph: ProcessingGraphId,
         computation: ComputationId,
+        reported_processing_graph: ProcessingGraphId,
     ) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
@@ -590,7 +609,16 @@ where
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
             self.context.gdal_read_ahead,
             self.context.processing_runtime.clone(),
+            self.context
+                .read_status_registry
+                .listener(self.session.id, reported_processing_graph),
         ))
+    }
+
+    fn read_status(&self) -> Vec<ProcessingGraphReadStatus> {
+        self.context
+            .read_status_registry
+            .session_status(self.session.id)
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {

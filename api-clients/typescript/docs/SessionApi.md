@@ -9,6 +9,7 @@ All URIs are relative to *https://geoengine.io/api*
 | [**logoutHandler**](SessionApi.md#logouthandler) | **POST** /logout | Ends a session. |
 | [**oidcInit**](SessionApi.md#oidcinit) | **POST** /oidcInit | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider. |
 | [**oidcLogin**](SessionApi.md#oidclogin) | **POST** /oidcLogin | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call. |
+| [**readStatusHandler**](SessionApi.md#readstatushandler) | **GET** /session/readStatus | Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited. |
 | [**registerUserHandler**](SessionApi.md#registeruserhandler) | **POST** /user | Registers a user. |
 | [**sessionHandler**](SessionApi.md#sessionhandler) | **GET** /session | Retrieves details about the current session. |
 | [**sessionProjectHandler**](SessionApi.md#sessionprojecthandler) | **POST** /session/project/{project} | Sets the active project of the session. |
@@ -332,6 +333,69 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | The created session |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## readStatusHandler
+
+> Array&lt;ProcessingGraphReadStatus&gt; readStatusHandler()
+
+Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+
+Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  SessionApi,
+} from '@geoengine/api-client';
+import type { ReadStatusHandlerRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new SessionApi(config);
+
+  try {
+    const data = await api.readStatusHandler();
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+This endpoint does not need any parameter.
+
+### Return type
+
+[**Array&lt;ProcessingGraphReadStatus&gt;**](ProcessingGraphReadStatus.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | The rate limited processing graphs of the session |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

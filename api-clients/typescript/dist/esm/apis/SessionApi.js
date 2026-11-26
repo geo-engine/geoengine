@@ -22,6 +22,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 import * as runtime from '../runtime';
 import { AuthCodeRequestURLFromJSON, } from '../models/AuthCodeRequestURL';
 import { AuthCodeResponseToJSON, } from '../models/AuthCodeResponse';
+import { ProcessingGraphReadStatusFromJSON, } from '../models/ProcessingGraphReadStatus';
 import { STRectangleToJSON, } from '../models/STRectangle';
 import { UserCredentialsToJSON, } from '../models/UserCredentials';
 import { UserRegistrationToJSON, } from '../models/UserRegistration';
@@ -234,6 +235,50 @@ export class SessionApi extends runtime.BaseAPI {
     oidcLogin(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
             const response = yield this.oidcLoginRaw(requestParameters, initOverrides);
+            return yield response.value();
+        });
+    }
+    /**
+     * Creates request options for readStatusHandler without sending the request
+     */
+    readStatusHandlerRequestOpts() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const queryParameters = {};
+            const headerParameters = {};
+            if (this.configuration && this.configuration.accessToken) {
+                const token = this.configuration.accessToken;
+                const tokenString = yield token("session_token", []);
+                if (tokenString) {
+                    headerParameters["Authorization"] = `Bearer ${tokenString}`;
+                }
+            }
+            let urlPath = `/session/readStatus`;
+            return {
+                path: urlPath,
+                method: 'GET',
+                headers: headerParameters,
+                query: queryParameters,
+            };
+        });
+    }
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    readStatusHandlerRaw(initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestOptions = yield this.readStatusHandlerRequestOpts();
+            const response = yield this.request(requestOptions, initOverrides);
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProcessingGraphReadStatusFromJSON));
+        });
+    }
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    readStatusHandler(initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield this.readStatusHandlerRaw(initOverrides);
             return yield response.value();
         });
     }

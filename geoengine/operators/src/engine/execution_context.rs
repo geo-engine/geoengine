@@ -332,6 +332,12 @@ impl GdalProcessPoolAccess for MockExecutionContext {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         &self.gdal_process_pool
     }
+
+    fn read_status_listener(
+        &self,
+    ) -> Arc<dyn crate::source::gdal_worker_process::ReadStatusListener> {
+        crate::source::gdal_worker_process::noop_read_status_listener()
+    }
 }
 
 #[async_trait::async_trait]
@@ -639,6 +645,12 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 impl GdalProcessPoolAccess for StatisticsWrappingMockExecutionContext {
     fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
         self.inner.get_gdal_pool()
+    }
+
+    fn read_status_listener(
+        &self,
+    ) -> Arc<dyn crate::source::gdal_worker_process::ReadStatusListener> {
+        self.inner.read_status_listener()
     }
 }
 

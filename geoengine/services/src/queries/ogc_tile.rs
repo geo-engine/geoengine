@@ -11,7 +11,10 @@ use crate::{
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
-    processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
+    processing_graphs::{
+        processing_graph::{ProcessingGraph, ProcessingGraphId},
+        registry::ProcessingGraphRegistry,
+    },
     projects::Symbology,
     queries::raster_grid::{RasterEncoding, encode},
     quota::ComputationId,
@@ -182,6 +185,13 @@ pub async fn render_tile<C: ApplicationContext>(
         .symbology
         .and_then(Symbology::into_raster_symbology)
         .map(|symbology| symbology.raster_colorizer);
+    // the user knows the layer's processing graph, not the one around it that the tile is read
+    // with; registered like `/layers/{provider}/{layer}/processingGraphId` does, so the ids match
+    let layer_processing_graph = ctx
+        .db()
+        .register_processing_graph(layer.processing_graph.clone())
+        .instrument(debug_span!("register_layer_processing_graph"))
+        .await?;
     let tile = tile_on_grid(
         layer.processing_graph,
         &execution_context,
@@ -207,6 +217,7 @@ pub async fn render_tile<C: ApplicationContext>(
 
     let (processor, query_ctx, computation_id) = create_query_processor_and_query_context(
         tile.processing_graph,
+        layer_processing_graph,
         &tile.initialized_operator,
         &ctx,
     )
@@ -346,6 +357,13 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
         .instrument(debug_span!("load_processing_graph"))
         .await?;
 
+    // the user knows the layer's processing graph, not the one around it that the tile is read
+    // with; registered like `/layers/{provider}/{layer}/processingGraphId` does, so the ids match
+    let layer_processing_graph = ctx
+        .db()
+        .register_processing_graph(layer.processing_graph.clone())
+        .instrument(debug_span!("register_layer_processing_graph"))
+        .await?;
     // nearest neighbour, so that the values are values of the data
     let tile = tile_on_grid(layer.processing_graph, &execution_context, &query, |_| {
         Ok((WarpMethods::NEAREST, ()))
@@ -367,6 +385,7 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
 
     let (processor, query_ctx, computation_id) = create_query_processor_and_query_context(
         tile.processing_graph,
+        layer_processing_graph,
         &tile.initialized_operator,
         &ctx,
     )
@@ -388,8 +407,11 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
     Ok((image_bytes, cache_hint, computation_id))
 }
 
+/// `reported_processing_graph` is the processing graph that rate limited reads are reported as,
+/// see [`SessionContext::query_context_reported_as`].
 async fn create_query_processor_and_query_context<C: SessionContext>(
     processing_graph: ProcessingGraph,
+    reported_processing_graph: ProcessingGraphId,
     initialized_operator: &dyn InitializedRasterOperator,
     ctx: &C,
 ) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
@@ -399,7 +421,11 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
         .instrument(debug_span!("register_processing_graph"))
         .await?; // TODO: can we get this without re-registering it?
     let computation_id = ComputationId::new();
-    let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
+    let query_ctx = ctx.query_context_reported_as(
+        processing_graph_id,
+        computation_id,
+        reported_processing_graph,
+    )?;
 
     let query_processor = initialized_operator
         .query_processor()

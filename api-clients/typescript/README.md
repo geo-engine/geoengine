@@ -130,6 +130,7 @@ All URIs are relative to *https://geoengine.io/api*
 *SessionApi* | [**logoutHandler**](docs/SessionApi.md#logouthandler) | **POST** /logout | Ends a session.
 *SessionApi* | [**oidcInit**](docs/SessionApi.md#oidcinit) | **POST** /oidcInit | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 *SessionApi* | [**oidcLogin**](docs/SessionApi.md#oidclogin) | **POST** /oidcLogin | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call.
+*SessionApi* | [**readStatusHandler**](docs/SessionApi.md#readstatushandler) | **GET** /session/readStatus | Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
 *SessionApi* | [**registerUserHandler**](docs/SessionApi.md#registeruserhandler) | **POST** /user | Registers a user.
 *SessionApi* | [**sessionHandler**](docs/SessionApi.md#sessionhandler) | **GET** /session | Retrieves details about the current session.
 *SessionApi* | [**sessionProjectHandler**](docs/SessionApi.md#sessionprojecthandler) | **POST** /session/project/{project} | Sets the active project of the session.
@@ -410,6 +411,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [PolygonRasterizationValueCount](docs/PolygonRasterizationValueCount.md)
 - [PolygonSymbology](docs/PolygonSymbology.md)
 - [ProcessingGraph](docs/ProcessingGraph.md)
+- [ProcessingGraphReadStatus](docs/ProcessingGraphReadStatus.md)
 - [Project](docs/Project.md)
 - [ProjectLayer](docs/ProjectLayer.md)
 - [ProjectListing](docs/ProjectListing.md)

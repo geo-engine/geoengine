@@ -127,7 +127,7 @@
         </geoengine-map-container>
 
         @if (mapTileLayer() && zoomRequired()) {
-            <div class="zoom-prompt" role="status">
+            <div class="map-prompt zoom-prompt" role="status">
                 <mat-icon aria-hidden="true">zoom_in</mat-icon>
                 <span>Zoom in further to load the selected layer.</span>
             </div>
@@ -135,6 +135,13 @@
 
         @if (isLoading()) {
             <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+        }
+
+        @if (tilesRateLimited()) {
+            <div class="map-prompt rate-limit-prompt" role="status">
+                <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
+                <span>The data source is limiting requests right now. Tiles will load with a delay.</span>
+            </div>
         }
 
         <div class="side-buttons">

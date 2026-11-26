@@ -23,6 +23,7 @@ use super::{
         IpcProcessRasterResult, RasterInfo, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
+    throttle::{ReadStatusListener, ThrottleEvent},
 };
 
 // --- Core Structural Parameters & Tuning Constants ---
@@ -102,6 +103,7 @@ struct WorkerJob {
     request: IpcChannelMessage,
     respond_to: oneshot::Sender<ReadResult>,
     dataset_hash: u64,
+    status: ReadStatus,
 }
 
 #[derive(Debug, Clone)]
@@ -264,6 +266,7 @@ struct QueuedRequest {
     /// Closed once the leader task drops its receiver because all callers gave up (see
     /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
+    status: ReadStatus,
 }
 
 /// Result of a read operation, carrying the IPC payload and the companion
@@ -307,7 +310,13 @@ enum BrokerCommand {
 struct InFlightRead {
     request: IpcChannelMessage,
     tx: InFlightTile,
+    status: ReadStatus,
 }
+
+/// The latest [`ThrottleEvent`] of a read, `None` while its data source did not rate limit it.
+/// Shared by all callers of a deduplicated read, so that each of them can tell its user. The
+/// worker's companion thread updates it while the read runs.
+type ReadStatus = Arc<tokio::sync::watch::Sender<Option<ThrottleEvent>>>;
 
 type SharedResult = Option<
     Arc<(
@@ -598,14 +607,16 @@ impl GdalProcessPool {
                     let result = sender
                         .send(WorkerRequest::ClearCaches)
                         .map_err(GdalProcessPoolError::from)
-                        .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
+                        .and_then(|()| Self::recv_skipping_throttled(receiver, |_| {}))
                         .and_then(|response| match response {
                             WorkerResponse::CachesCleared => Ok(()),
-                            WorkerResponse::ReadResult(_) => Err(IpcProcessError::IpcOther {
-                                msg: "Unexpected worker response: expected CachesCleared, received ReadResult"
-                                    .to_owned(),
+                            WorkerResponse::ReadResult(_) | WorkerResponse::Throttled(_) => {
+                                Err(IpcProcessError::IpcOther {
+                                    msg: "Unexpected worker response: expected CachesCleared, received ReadResult"
+                                        .to_owned(),
+                                }
+                                .into())
                             }
-                            .into()),
                         });
                     let failed = result.is_err();
                     let notification = if failed {
@@ -636,17 +647,29 @@ impl GdalProcessPool {
 
             let companion_span = Some(tracing::Span::current());
 
+            let status = &job.status;
             let res = sender
                 .send(WorkerRequest::Read(Box::new(job.request)))
                 .map_err(GdalProcessPoolError::from)
-                .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
+                .and_then(|()| {
+                    Self::recv_skipping_throttled(receiver, |event| {
+                        tracing::debug!(
+                            http_status = event.http_status,
+                            retry_in = ?event.retry_in,
+                            "GDAL worker read is rate limited"
+                        );
+                        status.send_replace(Some(event));
+                    })
+                })
                 .and_then(|response| match response {
                     WorkerResponse::ReadResult(result) => Ok(result),
-                    WorkerResponse::CachesCleared => Err(IpcProcessError::IpcOther {
-                        msg: "Unexpected worker response: expected ReadResult, received CachesCleared"
-                            .to_owned(),
+                    WorkerResponse::CachesCleared | WorkerResponse::Throttled(_) => {
+                        Err(IpcProcessError::IpcOther {
+                            msg: "Unexpected worker response: expected ReadResult, received CachesCleared"
+                                .to_owned(),
+                        }
+                        .into())
                     }
-                    .into()),
                 });
 
             let is_dead = res.is_err();
@@ -670,6 +693,20 @@ impl GdalProcessPool {
                 window,
                 read_failed,
             });
+        }
+    }
+
+    /// Receives the next response of a worker that is not a [`WorkerResponse::Throttled`],
+    /// handing those to `on_throttled`: a worker sends them while it reads, before the result.
+    fn recv_skipping_throttled(
+        receiver: &IpcReceiver<WorkerResponse>,
+        mut on_throttled: impl FnMut(ThrottleEvent),
+    ) -> Result<WorkerResponse, GdalProcessPoolError> {
+        loop {
+            match receiver.recv()? {
+                WorkerResponse::Throttled(event) => on_throttled(event),
+                response => return Ok(response),
+            }
         }
     }
 
@@ -1187,6 +1224,7 @@ impl BrokerState {
                 request: req.request,
                 respond_to: req.respond_to,
                 dataset_hash: req.dataset_hash,
+                status: req.status,
             })));
         }
 
@@ -1206,6 +1244,64 @@ fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> u64 
 #[derive(Clone)]
 pub struct GdalPoolDispatcher {
     pool: Arc<GdalProcessPool>,
+    read_status_listener: Arc<dyn ReadStatusListener>,
+}
+
+/// Tells a [`ReadStatusListener`] about the [`ThrottleEvent`]s of one read, and that it ended
+/// once it had any, also if the caller stops waiting.
+struct ThrottleReport<'l> {
+    listener: &'l dyn ReadStatusListener,
+    throttled: bool,
+}
+
+impl ThrottleReport<'_> {
+    fn report(&mut self, event: ThrottleEvent) {
+        self.listener.read_throttled(event, !self.throttled);
+        self.throttled = true;
+    }
+}
+
+impl Drop for ThrottleReport<'_> {
+    fn drop(&mut self) {
+        if self.throttled {
+            self.listener.throttled_read_ended();
+        }
+    }
+}
+
+/// Waits for the result of a read, reporting its rate limits to `listener` meanwhile.
+async fn await_shared_result(
+    rx: &mut tokio::sync::watch::Receiver<SharedResult>,
+    status_rx: &mut tokio::sync::watch::Receiver<Option<ThrottleEvent>>,
+    listener: &dyn ReadStatusListener,
+) -> Result<(), GdalProcessPoolError> {
+    let mut throttle_report = ThrottleReport {
+        listener,
+        throttled: false,
+    };
+    // a follower may join a read that is already rate limited
+    if let Some(event) = *status_rx.borrow_and_update() {
+        throttle_report.report(event);
+    }
+    let mut status_open = true;
+    while rx.borrow().is_none() {
+        tokio::select! {
+            changed = rx.changed() => {
+                if changed.is_err() {
+                    // Background task panicked before sending
+                    return Err(GdalProcessPoolError::WorkerPanic);
+                }
+            }
+            changed = status_rx.changed(), if status_open => {
+                // the status closes when the read ends, its result follows
+                status_open = changed.is_ok();
+                if let Some(event) = status_open.then(|| *status_rx.borrow_and_update()).flatten() {
+                    throttle_report.report(event);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 struct LeaderCleanupGuard {
@@ -1284,7 +1380,18 @@ async fn await_read_or_abandon(
 
 impl GdalPoolDispatcher {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            read_status_listener: super::throttle::noop_read_status_listener(),
+        }
+    }
+
+    /// Reports the rate limited reads of this dispatcher to `listener`, see
+    /// [`ReadStatusListener`].
+    #[must_use]
+    pub fn with_read_status_listener(mut self, listener: Arc<dyn ReadStatusListener>) -> Self {
+        self.read_status_listener = listener;
+        self
     }
 
     /// Read gdal tiles.
@@ -1377,7 +1484,7 @@ impl GdalPoolDispatcher {
         request.full_hash(&mut s);
         let tile_key = s.finish();
 
-        let mut rx = {
+        let (mut rx, mut status_rx) = {
             // holds the shard lock of the key until the entry is dropped
             let entry = self.pool.in_flight_tiles.entry(tile_key);
 
@@ -1389,18 +1496,21 @@ impl GdalPoolDispatcher {
             if let Some(in_flight) = in_flight.filter(|r| same_read(&r.request, &request)) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
                 self.pool.counters.count(&request, true);
-                in_flight.tx.subscribe()
+                (in_flight.tx.subscribe(), in_flight.status.subscribe())
             } else {
                 self.pool.counters.count(&request, false);
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
                 let tx = Arc::new(tx);
+                let (status, status_rx) = tokio::sync::watch::channel(None);
+                let status = Arc::new(status);
                 // a different request with the same hash reads on its own, unregistered; either
                 // way the shard lock is released here, before the leader is spawned
                 if let Entry::Vacant(vacant) = entry {
                     vacant.insert(InFlightRead {
                         request: request.clone(),
                         tx: tx.clone(),
+                        status: status.clone(),
                     });
                 }
 
@@ -1428,6 +1538,7 @@ impl GdalPoolDispatcher {
                             dataset_hash: routing_hash,
                             request: request_clone,
                             respond_to: oneshot_tx,
+                            status,
                         })))
                         .await;
 
@@ -1452,17 +1563,12 @@ impl GdalPoolDispatcher {
                     let _ = tx.send(Some(std::sync::Arc::new((leader_res, companion_span))));
                 });
 
-                rx
+                (rx, status_rx)
             }
         };
 
         // ALL requests (including the one that spawned the background task) wait for the task.
-        while rx.borrow().is_none() {
-            if rx.changed().await.is_err() {
-                // Background task panicked before sending
-                return Err(GdalProcessPoolError::WorkerPanic);
-            }
-        }
+        await_shared_result(&mut rx, &mut status_rx, self.read_status_listener.as_ref()).await?;
 
         let shared_res = rx
             .borrow()
@@ -1488,6 +1594,11 @@ fn same_read(a: &IpcChannelMessage, b: &IpcChannelMessage) -> bool {
 impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool> {
         self
+    }
+
+    /// The pool itself serves no query, so there is no user to tell.
+    fn read_status_listener(&self) -> Arc<dyn ReadStatusListener> {
+        super::throttle::noop_read_status_listener()
     }
 }
 
@@ -1968,6 +2079,7 @@ mod tests {
                     dataset_hash: 0,
                     request: request.request.clone(),
                     respond_to: tx,
+                    status: Arc::default(),
                 })))
                 .await
                 .unwrap();
@@ -2221,6 +2333,83 @@ mod tests {
         }
     }
 
+    /// A worker reports the rate limit of a request that GDAL retries, and the read still
+    /// succeeds: rate limits never abort a read.
+    #[tokio::test]
+    async fn it_reports_rate_limited_http_requests_of_a_real_worker() {
+        use httptest::{Expectation, Server, cycle, matchers::request, responders::status_code};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("data.tif");
+        {
+            let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+            let mut dataset = driver
+                .create_with_band_type::<u8, _>(&path, 1, 1, 1)
+                .unwrap();
+            dataset
+                .set_geo_transform(&[0., 1., 0., 0., 0., -1.])
+                .unwrap();
+            dataset.rasterband(1).unwrap().fill(1., None).unwrap();
+            dataset.flush_cache().unwrap();
+        }
+        let bytes = std::fs::read(path).unwrap();
+        let server = Server::run();
+        let ok_head = || status_code(200).insert_header("Content-Length", bytes.len().to_string());
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/data.tif"))
+                .times(1..)
+                .respond_with(cycle![
+                    status_code(429),
+                    ok_head(),
+                    ok_head(),
+                    ok_head(),
+                    ok_head(),
+                    ok_head(),
+                ]),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/data.tif"))
+                .times(1..)
+                .respond_with(status_code(200).body(bytes.clone())),
+        );
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let listener = Arc::new(RecordingListener::default());
+        let dispatcher = GdalPoolDispatcher::new(pool).with_read_status_listener(listener.clone());
+
+        let (mut request, _) = make_request(0, 1, window([0, 0], [0, 0]));
+        let params = &mut request.request.0.dataset_params;
+        params.file_path = server.url_str("/data.tif").into();
+        params.width = 1;
+        params.height = 1;
+        params.no_data_value = None;
+        params.gdal_config_options = Some(vec![
+            ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".into(), ".tif".into()),
+            ("GDAL_HTTP_MAX_RETRY".into(), "3".into()),
+            ("GDAL_HTTP_RETRY_DELAY".into(), "0.01".into()),
+        ]);
+        let GdalRequest::Read { read_advise, .. } = &mut request.request.0.request else {
+            panic!("expected a pixel read request");
+        };
+        read_advise.gdal_read_widow = GdalReadWindow::new([0, 0].into(), [1, 1].into());
+
+        let payload = dispatcher.read_data::<u8>(request.request).await.unwrap();
+        assert!(matches!(payload.data_variant,
+            super::super::process_common::GdalDataGridVariant::AllValid { data } if data == vec![1]));
+
+        let calls = listener.0.lock().unwrap();
+        let Some((Some((event, true)), "throttled")) = calls.first() else {
+            panic!("expected a rate limited request, got {:?}", *calls);
+        };
+        assert_eq!(event.http_status, 429);
+        assert_eq!(calls.last(), Some(&(None, "ended")));
+    }
+
     fn make_request(
         dataset_hash: u64,
         band: usize,
@@ -2245,6 +2434,7 @@ mod tests {
             dataset_hash,
             request: msg,
             respond_to: tx,
+            status: Arc::default(),
         });
         (req, rx)
     }
@@ -2629,6 +2819,144 @@ mod tests {
 
         let _ = queued.respond_to.send(empty_read_result());
         assert!(follower.await.unwrap().is_ok());
+    }
+
+    /// A call of a [`ReadStatusListener`]: the event and `first` of `read_throttled`, `None` for
+    /// `throttled_read_ended`, and the name of the method.
+    type ListenerCall = (Option<(ThrottleEvent, bool)>, &'static str);
+
+    /// Records the calls of a [`ReadStatusListener`].
+    #[derive(Default)]
+    struct RecordingListener(Mutex<Vec<ListenerCall>>);
+
+    impl ReadStatusListener for RecordingListener {
+        fn read_throttled(&self, event: ThrottleEvent, first: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push((Some((event, first)), "throttled"));
+        }
+
+        fn throttled_read_ended(&self) {
+            self.0.lock().unwrap().push((None, "ended"));
+        }
+    }
+
+    fn throttle_event(retry_in_ms: u64) -> ThrottleEvent {
+        ThrottleEvent {
+            http_status: 429,
+            retry_in: Duration::from_millis(retry_in_ms),
+        }
+    }
+
+    #[tokio::test]
+    async fn it_reports_rate_limits_to_the_leader_and_late_followers() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let leader_listener = Arc::new(RecordingListener::default());
+        let follower_listener = Arc::new(RecordingListener::default());
+        let w = window([0, 0], [255, 255]);
+        let (msg_a, _) = make_request(42, 1, w);
+        let (msg_b, _) = make_request(42, 1, w);
+
+        let leader_dispatcher = GdalPoolDispatcher::new(pool.clone())
+            .with_read_status_listener(leader_listener.clone());
+        let leader =
+            tokio::spawn(async move { leader_dispatcher.read_data::<u8>(msg_a.request).await });
+        let queued = held.recv().await.unwrap();
+
+        queued.status.send_replace(Some(throttle_event(500)));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // joins the read after its first event
+        let follower_dispatcher =
+            GdalPoolDispatcher::new(pool).with_read_status_listener(follower_listener.clone());
+        let follower =
+            tokio::spawn(async move { follower_dispatcher.read_data::<u8>(msg_b.request).await });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        queued.status.send_replace(Some(throttle_event(1000)));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let _ = queued.respond_to.send(empty_read_result());
+        drop(queued.status);
+        assert!(leader.await.unwrap().is_ok());
+        assert!(follower.await.unwrap().is_ok());
+
+        assert_eq!(
+            *leader_listener.0.lock().unwrap(),
+            vec![
+                (Some((throttle_event(500), true)), "throttled"),
+                (Some((throttle_event(1000), false)), "throttled"),
+                (None, "ended"),
+            ]
+        );
+        assert_eq!(
+            *follower_listener.0.lock().unwrap(),
+            vec![
+                (Some((throttle_event(500), true)), "throttled"),
+                (Some((throttle_event(1000), false)), "throttled"),
+                (None, "ended"),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_reports_nothing_for_reads_without_rate_limits() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let listener = Arc::new(RecordingListener::default());
+        let (msg, _) = make_request(42, 1, window([0, 0], [255, 255]));
+
+        let dispatcher = GdalPoolDispatcher::new(pool).with_read_status_listener(listener.clone());
+        let read = tokio::spawn(async move { dispatcher.read_data::<u8>(msg.request).await });
+        let queued = held.recv().await.unwrap();
+        let _ = queued.respond_to.send(empty_read_result());
+
+        assert!(read.await.unwrap().is_ok());
+        assert!(listener.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_ends_the_report_of_a_rate_limited_read_when_the_caller_stops_waiting() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let listener = Arc::new(RecordingListener::default());
+        let (msg, _) = make_request(42, 1, window([0, 0], [255, 255]));
+
+        let dispatcher = GdalPoolDispatcher::new(pool).with_read_status_listener(listener.clone());
+        let read = tokio::spawn(async move { dispatcher.read_data::<u8>(msg.request).await });
+        let queued = held.recv().await.unwrap();
+        queued.status.send_replace(Some(throttle_event(500)));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        read.abort();
+        let _ = read.await;
+
+        assert_eq!(
+            *listener.0.lock().unwrap(),
+            vec![
+                (Some((throttle_event(500), true)), "throttled"),
+                (None, "ended"),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_hands_throttle_events_over_before_the_result() {
+        let (sender, receiver) = ipc_channel::ipc::channel::<WorkerResponse>().unwrap();
+        sender
+            .send(WorkerResponse::Throttled(throttle_event(500)))
+            .unwrap();
+        sender
+            .send(WorkerResponse::Throttled(throttle_event(1000)))
+            .unwrap();
+        sender.send(WorkerResponse::CachesCleared).unwrap();
+
+        let mut events = Vec::new();
+        let response =
+            GdalProcessPool::recv_skipping_throttled(&receiver, |event| events.push(event))
+                .unwrap();
+
+        assert!(matches!(response, WorkerResponse::CachesCleared));
+        assert_eq!(events, vec![throttle_event(500), throttle_event(1000)]);
     }
 
     #[test]

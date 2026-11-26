@@ -1,5 +1,7 @@
 use crate::{
-    api::model::{quota::ComputationQuota, responses::IdResponse},
+    api::model::{
+        processing_graphs::ProcessingGraphId, quota::ComputationQuota, responses::IdResponse,
+    },
     config,
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
@@ -14,8 +16,10 @@ use crate::{
 };
 use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::error::BoxedResultExt;
+use geoengine_datatypes::util::NonNegativeFiniteF64;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use std::num::NonZeroU64;
 use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
@@ -33,6 +37,9 @@ where
                 .route(web::post().to(session_project_handler::<C>)),
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
+        .service(
+            web::resource("/session/readStatus").route(web::get().to(read_status_handler::<C>)),
+        )
         .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
         .service(
             web::resource("/quota/computations")
@@ -188,6 +195,82 @@ pub(crate) async fn logout_handler<C: ApplicationContext<Session = UserSession>>
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
 pub(crate) async fn session_handler<C: ApplicationContext>(session: C::Session) -> impl Responder {
     web::Json(session)
+}
+
+/// A processing graph whose queries in the current session wait for reads that their data source
+/// rate limits. The reads are retried until they succeed, so its tiles arrive late, not never.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessingGraphReadStatus {
+    pub processing_graph_id: ProcessingGraphId,
+    /// The number of reads that are currently rate limited.
+    #[schema(value_type = u64, minimum = 1)]
+    pub throttled_reads: NonZeroU64,
+    /// How long the first of these reads has been rate limited, in seconds.
+    #[schema(value_type = f64, minimum = 0)]
+    pub throttled_for_seconds: NonNegativeFiniteF64,
+    /// The HTTP status of the latest rate limit, 429 or 503.
+    #[schema(minimum = 100, maximum = 599)]
+    pub http_status: u16,
+    /// The pause before the next attempt of the latest rate limited read, in seconds. 0 if it
+    /// is retried at once.
+    #[schema(value_type = f64, minimum = 0)]
+    pub retry_in_seconds: NonNegativeFiniteF64,
+}
+
+impl From<crate::queries::read_status::ProcessingGraphReadStatus> for ProcessingGraphReadStatus {
+    fn from(status: crate::queries::read_status::ProcessingGraphReadStatus) -> Self {
+        Self {
+            processing_graph_id: status.processing_graph.into(),
+            throttled_reads: status.throttled_reads.try_into().unwrap_or(NonZeroU64::MAX),
+            throttled_for_seconds: seconds(status.throttled_for),
+            http_status: status.last_event.http_status,
+            retry_in_seconds: seconds(status.last_event.retry_in),
+        }
+    }
+}
+
+/// The seconds of `duration`, which are always finite and non-negative.
+fn seconds(duration: std::time::Duration) -> NonNegativeFiniteF64 {
+    NonNegativeFiniteF64::new_unchecked(duration.as_secs_f64())
+}
+
+/// Lists the processing graphs whose queries in the current session wait for reads that their
+/// data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+///
+/// Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+#[utoipa::path(
+    tag = "Session",
+    get,
+    path = "/session/readStatus",
+    responses(
+        (status = 200, description = "The rate limited processing graphs of the session", body = [ProcessingGraphReadStatus],
+            example = json!([{
+                "processingGraphId": "c2b4f5a6-3e1d-5b8a-9f0e-7d6c5b4a3f21",
+                "throttledReads": 3,
+                "throttledForSeconds": 12.4,
+                "httpStatus": 429,
+                "retryInSeconds": 2.0
+            }])
+        )
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+pub(crate) async fn read_status_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> web::Json<Vec<ProcessingGraphReadStatus>> {
+    web::Json(
+        app_ctx
+            .session_context(session)
+            .read_status()
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    )
 }
 
 /// Creates session for anonymous user. The session's id serves as a Bearer token for requests.
@@ -1273,6 +1356,90 @@ mod tests {
             "Authorization error: The session id is invalid.",
         )
         .await;
+    }
+
+    async fn read_status_test_helper(
+        app_ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+    ) -> Vec<ProcessingGraphReadStatus> {
+        let req = test::TestRequest::get()
+            .uri("/session/readStatus")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+        test::read_body_json(res).await
+    }
+
+    #[ge_context::test]
+    async fn it_reports_the_rate_limited_reads_of_the_queries_of_a_session(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        use crate::util::Identifier;
+        use geoengine_operators::source::gdal_worker_process::{
+            GdalProcessPoolAccess, ThrottleEvent,
+        };
+
+        let session = create_session_helper(&app_ctx).await;
+        // another session of a user without email, which must also work
+        let other_session = app_ctx.create_anonymous_session().await.unwrap();
+        assert_eq!(read_status_test_helper(&app_ctx, &session).await, []);
+
+        let processing_graph = crate::processing_graphs::processing_graph::ProcessingGraphId::new();
+        let query_ctx = app_ctx
+            .session_context(session.clone())
+            .query_context(processing_graph, ComputationId::new())
+            .unwrap();
+        let listener = query_ctx.read_status_listener();
+        listener.read_throttled(
+            ThrottleEvent {
+                http_status: 429,
+                retry_in: Duration::from_millis(1500),
+            },
+            true,
+        );
+
+        let status = read_status_test_helper(&app_ctx, &session).await;
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].processing_graph_id, processing_graph.into());
+        assert_eq!(status[0].throttled_reads, NonZeroU64::MIN);
+        assert_eq!(status[0].http_status, 429);
+        assert_eq!(
+            status[0].retry_in_seconds,
+            NonNegativeFiniteF64::new_unchecked(1.5)
+        );
+        assert_eq!(read_status_test_helper(&app_ctx, &other_session).await, []);
+
+        listener.throttled_read_ended();
+        assert_eq!(read_status_test_helper(&app_ctx, &session).await, []);
+    }
+
+    #[ge_context::test]
+    async fn it_reports_rate_limited_reads_as_the_processing_graph_the_user_knows(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        use crate::util::Identifier;
+        use geoengine_operators::source::gdal_worker_process::{
+            GdalProcessPoolAccess, ThrottleEvent,
+        };
+
+        let session = create_session_helper(&app_ctx).await;
+        let queried = crate::processing_graphs::processing_graph::ProcessingGraphId::new();
+        let reported = crate::processing_graphs::processing_graph::ProcessingGraphId::new();
+        let query_ctx = app_ctx
+            .session_context(session.clone())
+            .query_context_reported_as(queried, ComputationId::new(), reported)
+            .unwrap();
+        query_ctx.read_status_listener().read_throttled(
+            ThrottleEvent {
+                http_status: 429,
+                retry_in: Duration::from_secs(1),
+            },
+            true,
+        );
+
+        let status = read_status_test_helper(&app_ctx, &session).await;
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].processing_graph_id, reported.into());
     }
 
     #[ge_context::test]

@@ -11,6 +11,7 @@ use tokio::runtime::Handle;
 pub mod ogc_tile;
 pub mod plot;
 pub mod raster_grid;
+pub mod read_status;
 pub mod stream;
 pub mod vector;
 
