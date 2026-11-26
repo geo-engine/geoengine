@@ -20,7 +20,7 @@ import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import type {EventsKey} from 'ol/events';
 import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
-import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
+import {Layer as OlLayer, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
 import {equivalent, get as olGetProj, type Projection} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
@@ -101,6 +101,20 @@ export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends 
      */
     get mapLayer(): OL {
         return this._mapLayer;
+    }
+
+    /** Shares the zoom gate between WMS and OGC imagery without occupying tile-queue loading slots. */
+    protected watchZoomPause(mapService: MapService, loader: () => TileLoader | undefined): void {
+        const layer = this._mapLayer;
+        if (!(layer instanceof AbortableTileLayer)) return;
+        mapService
+            .getZoomPauseStream()
+            .pipe(takeUntilDestroyed())
+            .subscribe((paused) => {
+                layer.requestsPaused = paused;
+                if (paused) loader()?.cancelPending('zoom resolution changed');
+                layer.changed();
+            });
     }
 
     /**
@@ -271,11 +285,12 @@ export class OlVectorLayerComponent
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OlRasterLayerComponent
-    extends MapLayerComponent<OlLayerTile<OlTileWmsSource>, OlTileWmsSource, RasterSymbology>
+    extends MapLayerComponent<AbortableTileLayer<OlTileWmsSource>, OlTileWmsSource, RasterSymbology>
     implements OnInit, OnDestroy, OnChanges
 {
     protected backend = inject(BackendService);
     protected notificationService = inject(NotificationService);
+    private readonly mapService = inject(MapService);
 
     override readonly symbology = input<RasterSymbology>();
 
@@ -303,6 +318,7 @@ export class OlRasterLayerComponent
                     opacity: 1,
                 }),
         );
+        this.watchZoomPause(this.mapService, () => this.loader);
     }
 
     ngOnInit(): void {
@@ -438,6 +454,10 @@ export class OlRasterLayerComponent
         const tileGrid = source.getTileGridForProjection(sourceProjection);
 
         const loader: TileLoader = new TileLoader({
+            canLoad: (): boolean => {
+                const view = this.mapService.view();
+                return !this._mapLayer.requestsPaused && view.isDef() && this._mapLayer.isVisible(view);
+            },
             authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
             abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
             onTileError: (tile): void => this.invalidateTileReprojection(tile),
@@ -676,14 +696,7 @@ export class OlOgcApiMapTileLayerComponent
             },
         );
 
-        this.mapService
-            .getZoomPauseStream()
-            .pipe(takeUntilDestroyed())
-            .subscribe((paused) => {
-                this._mapLayer.requestsPaused = paused;
-                if (paused) this.loader?.cancelPending('zoom resolution changed');
-                this._mapLayer.changed();
-            });
+        this.watchZoomPause(this.mapService, () => this.loader);
 
         effect(() => {
             const source = this.tileSource.value();

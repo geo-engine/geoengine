@@ -7,6 +7,8 @@ interface Delays extends CommonDelays {
     };
     readonly TOOLTIP: number;
     readonly DEBOUNCE: number;
+    /** Quiet time after the last zoom resolution change before map data requests resume. Zero disables the zoom gate. */
+    readonly ZOOM_DEBOUNCE: number;
     readonly STORAGE_DEBOUNCE: number;
     readonly GUEST_LOGIN_HINT: number;
 }
@@ -124,6 +126,7 @@ export const DEFAULT_CORE_CONFIG: CoreConfigStructure = {
         },
         TOOLTIP: 400,
         DEBOUNCE: 400,
+        ZOOM_DEBOUNCE: 400,
         STORAGE_DEBOUNCE: 1500,
         GUEST_LOGIN_HINT: 5000,
     },

@@ -65,7 +65,6 @@ describe('EOdyssey debug reprojection', () => {
                         zoomTo: vi.fn(),
                         view: activeView,
                         setView: (next: View): void => activeView.set(next),
-                        zoomDebounceMs: signal(0),
                     },
                 },
                 {
@@ -147,13 +146,6 @@ describe('EOdyssey debug reprojection', () => {
     function tms(): unknown {
         return fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties['tmsId'];
     }
-
-    it('configures one map-wide zoom delay and clears it when leaving the map', () => {
-        fixture.detectChanges();
-        expect(TestBed.inject(MapService).zoomDebounceMs()).toBe(400);
-        fixture.destroy();
-        expect(TestBed.inject(MapService).zoomDebounceMs()).toBe(0);
-    });
 
     function selectFrontend(): void {
         const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('mat-button-toggle:last-child button');

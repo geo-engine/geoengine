@@ -220,9 +220,6 @@ export class MainComponent {
     readonly mapImageLoading = signal(false);
 
     constructor() {
-        this.mapService.zoomDebounceMs.set(400);
-        this.destroyRef.onDestroy(() => this.mapService.zoomDebounceMs.set(0));
-
         // The selected preset, so availability is shown before the visualization is applied. None while the presets of a
         // newly selected source or variant load: the layer on the map is still the previous one, whose dates must not stand
         // for the new one.

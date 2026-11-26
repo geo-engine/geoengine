@@ -6,6 +6,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {RasterFootprints, RasterFootprintsPrecision, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, ProcessingGraphsService, RasterLayerMetadata, Time} from '@geoengine/common';
 import {FootprintsService} from './footprints.service';
+import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
 import type {MapContainerComponent} from '../map/map-container/map-container.component';
 import {MapService} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
@@ -49,6 +50,7 @@ describe('FootprintsService overlay', () => {
 
         TestBed.configureTestingModule({
             providers: [
+                {provide: CoreConfig, useValue: DEFAULT_CORE_CONFIG},
                 {
                     provide: LayersService,
                     useValue: {
@@ -167,6 +169,29 @@ describe('FootprintsService overlay', () => {
             expect.objectContaining({precision: RasterFootprintsPrecision.Coverage, spatialBounds: '9.5,9.5,12.5,12.5'}),
             expect.anything(),
         );
+    });
+
+    it('does not request footprints between a paused fractional pinch and its snap animation', async () => {
+        const {map, view} = createZoomService();
+        view.setConstrainResolution(true);
+        await flushRequests();
+        getFootprints.mockClear();
+        view.beginInteraction();
+        view.setZoom(5.4);
+        await flushRequests();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(map.zoomPaused()).toBe(true);
+        view.endInteraction(400, -1);
+        expect(view.getAnimating()).toBe(true);
+        await flushRequests();
+        expect(getFootprints).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(799);
+        await flushRequests();
+        expect(getFootprints).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(50);
+        await flushRequests();
+        expect(map.zoomPaused()).toBe(false);
+        expect(getFootprints).toHaveBeenCalled();
     });
 
     it('holds both queries through a paused pinch and resumes them when the gesture ends', async () => {

@@ -142,7 +142,7 @@ describe('OGC map tile minimum matrix index', () => {
             imports: [OlOgcApiMapTileLayerComponent],
             providers: [
                 MapService,
-                {provide: CoreConfig, useValue: {MAP: {DEBUG_TILES: false}}},
+                {provide: CoreConfig, useValue: {...DEFAULT_CORE_CONFIG, DELAYS: {...DEFAULT_CORE_CONFIG.DELAYS, ZOOM_DEBOUNCE: 0}}},
                 {provide: BackendService, useValue: {ogcApiBaseUrl: 'https://tiles.test/ogc'}},
                 {provide: ProjectService, useValue: {createQueryAbortStream: (): typeof NEVER => NEVER}},
             ],
@@ -238,6 +238,7 @@ describe('OGC map tile minimum matrix index', () => {
         await vi.advanceTimersByTimeAsync(1000);
         expect(tileRequests).toHaveLength(0);
         view.endInteraction(0);
+        await vi.advanceTimersByTimeAsync(0);
         enqueueTiles(4).queue.loadMoreTiles(16, 16);
         expect(tileRequests).toHaveLength(1);
     });
@@ -718,7 +719,7 @@ describe('OGC map tile projection switching', () => {
             providers: [
                 MapService,
                 {provide: BackendService, useValue: {ogcApiBaseUrl: 'https://example.com/ogc'}},
-                {provide: CoreConfig, useValue: DEFAULT_CORE_CONFIG},
+                {provide: CoreConfig, useValue: {...DEFAULT_CORE_CONFIG, DELAYS: {...DEFAULT_CORE_CONFIG.DELAYS, ZOOM_DEBOUNCE: 0}}},
                 {provide: ProjectService, useValue: {createQueryAbortStream: vi.fn().mockReturnValue(NEVER)}},
             ],
         });

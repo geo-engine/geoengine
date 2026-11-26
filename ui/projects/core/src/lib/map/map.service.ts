@@ -1,4 +1,4 @@
-import {effect, Injectable, signal, Signal} from '@angular/core';
+import {effect, inject, Injectable, signal, Signal} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {containsExtent as olExtentContainsExtent, getIntersection as olExtentGetIntersection} from 'ol/extent';
 import OlFeature from 'ol/Feature';
@@ -8,11 +8,12 @@ import {createBox, GeometryFunction} from 'ol/interaction/Draw';
 import OlLayerVector from 'ol/layer/Vector';
 import {Vector as OlSourceVector} from 'ol/source';
 import OlView from 'ol/View';
-import {BehaviorSubject, Observable} from 'rxjs';
-import {distinctUntilChanged} from 'rxjs/operators';
+import {BehaviorSubject, combineLatest, Observable} from 'rxjs';
+import {distinctUntilChanged, map} from 'rxjs/operators';
 import {olExtentToTuple} from '@geoengine/common';
 import {MapContainerComponent} from './map-container/map-container.component';
 import {TileZoomDebounce} from './tile-zoom-debounce';
+import {CoreConfig} from '../config.service';
 
 /**
  * The viewport combines…
@@ -68,8 +69,8 @@ export class MapService {
     /** The current map view, including replacements after a projection change. */
     readonly view = this.viewSignal.asReadonly();
 
-    /** Delay shared by imagery, temporal availability and footprint polygons; zero loads immediately. */
-    readonly zoomDebounceMs = signal(0);
+    /** Delay shared by map data requests in all apps; zero loads immediately. */
+    readonly zoomDebounceMs = signal(inject(CoreConfig).DELAYS.ZOOM_DEBOUNCE);
     private readonly zoomPause = new BehaviorSubject(false);
     private zoomAbortController = new AbortController();
     readonly zoomPaused = toSignal(this.zoomPause, {requireSync: true});
@@ -213,6 +214,17 @@ export class MapService {
      */
     getViewportSizeStream(): Observable<ViewportSize> {
         return this.viewportSize$.pipe(distinctUntilChanged(viewPortsSizesAreSame));
+    }
+
+    /**
+     * The viewport for data queries, or undefined while zooming to cancel the current query.
+     * Resumes with the final viewport on the shared deadline; initial loading and panning are immediate.
+     */
+    getRequestViewportStream(): Observable<ViewportSize | undefined> {
+        return combineLatest([this.getViewportSizeStream(), this.zoomPause]).pipe(
+            map(([viewport, paused]) => (paused ? undefined : viewport)),
+            distinctUntilChanged(),
+        );
     }
 
     /**

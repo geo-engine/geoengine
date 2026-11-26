@@ -45,7 +45,34 @@ describe('TileZoomDebounce', () => {
         expect(onPause.mock.calls).toEqual([[true]]);
         expect(vi.getTimerCount()).toBe(0);
         view.endInteraction(0);
+        await vi.advanceTimersByTimeAsync(0);
         expect(onPause).toHaveBeenLastCalledWith(false);
+    });
+
+    it.each([0, 400])('keeps a paused fractional pinch gated through a %s ms snap', async (duration: number) => {
+        view.setConstrainResolution(true);
+        view.beginInteraction();
+        view.setZoom(5.4);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(onPause.mock.calls).toEqual([[true]]);
+
+        view.endInteraction(duration, -1);
+        expect(onPause).not.toHaveBeenCalledWith(false);
+        await vi.advanceTimersByTimeAsync(duration + 399);
+        expect(onPause).not.toHaveBeenCalledWith(false);
+        await vi.advanceTimersByTimeAsync(50);
+        expect(view.getZoom()).toBe(6);
+        expect(onPause).toHaveBeenLastCalledWith(false);
+    });
+
+    it('does not resume from an interaction-end microtask after disposal', async () => {
+        view.beginInteraction();
+        view.setZoom(6);
+        await vi.advanceTimersByTimeAsync(1000);
+        view.endInteraction(0);
+        debounce.dispose();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(onPause.mock.calls).toEqual([[true]]);
     });
 
     it('waits for the delay when the zoom gesture finishes early', async () => {

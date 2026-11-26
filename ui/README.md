@@ -72,6 +72,13 @@ rm -r .angular/cache
 Under `assets/config.json` can be an (optional) configuration file.
 You can override any of these default settings by specifying them.
 
+`DELAYS.ZOOM_DEBOUNCE` defaults to 400 ms across the apps. WMS and OGC imagery,
+vector data, project plots, calendar availability, and footprint polygons wait
+until the last zoom resolution change has been quiet for this delay and the
+zoom gesture and snap animation have finished. Initial loading and ordinary
+panning do not wait for this delay. Basemaps load independently. Set the value
+to `0` to disable zoom debounce.
+
 ```
     API_URL: '/api',
     WMS: {
@@ -92,6 +99,7 @@ You can override any of these default settings by specifying them.
         },
         TOOLTIP: 400,
         DEBOUNCE: 400,
+        ZOOM_DEBOUNCE: 400,
         STORAGE_DEBOUNCE: 1500,
         GUEST_LOGIN_HINT: 5000,
     },
