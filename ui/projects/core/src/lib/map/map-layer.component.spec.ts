@@ -156,8 +156,81 @@ describe('OGC map tile minimum matrix index', () => {
 
     afterEach(() => {
         fixture.destroy();
+        vi.useRealTimers();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
+    });
+
+    async function enableZoomDebounce(): Promise<void> {
+        await setResolution(999);
+        fixture.componentRef.setInput('zoomDebounceMs', 400);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
+        vi.useFakeTimers();
+    }
+
+    it('debounces imagery from the real OpenLayers queue until the final zoom settles', async () => {
+        await enableZoomDebounce();
+        view.setResolution(800);
+        const intermediate = enqueueTiles(4);
+        intermediate.queue.loadMoreTiles(16, 16);
+        await vi.advanceTimersByTimeAsync(300);
+        expect(tileRequests).toHaveLength(0);
+
+        view.setResolution(500);
+        await vi.advanceTimersByTimeAsync(0);
+        for (const tile of intermediate.tilesByZ[4]) expect(tile.getState()).toBe(TileState.IDLE);
+        const final = enqueueTiles(5);
+        final.queue.loadMoreTiles(16, 16);
+        await vi.advanceTimersByTimeAsync(399);
+        expect(tileRequests).toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(tileRequests.length).toBeGreaterThan(0);
+        const urls = vi
+            .mocked(fetch)
+            .mock.calls.map(([url]) => url)
+            .filter((url): url is string => typeof url === 'string' && url.endsWith('.png'));
+        expect(urls.every((url) => url.startsWith('https://tiles.test/5/'))).toBe(true);
+    });
+
+    it('still loads queued imagery while panning with the mouse held', async () => {
+        await enableZoomDebounce();
+        view.beginInteraction();
+        view.setCenter([2000, -2000]);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('does not start queued imagery after the layer is destroyed during zoom debounce', async () => {
+        await enableZoomDebounce();
+        view.setResolution(800);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        fixture.destroy();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(tileRequests).toHaveLength(0);
+    });
+
+    it('debounces a replacement view and removes the previous view listener', async () => {
+        await enableZoomDebounce();
+        vi.useRealTimers();
+        const previousView = view;
+        view = new View({center: [1000, -1000], resolution: 999});
+        mapService.setView(view);
+        publishViewport(view);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        vi.useFakeTimers();
+
+        view.setResolution(800);
+        enqueueTiles(4).queue.loadMoreTiles(16, 16);
+        await vi.advanceTimersByTimeAsync(399);
+        expect(tileRequests).toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(tileRequests).toHaveLength(1);
+        previousView.setResolution(500);
+        expect(tileRequests[0].aborted).toBe(false);
     });
 
     it.each([

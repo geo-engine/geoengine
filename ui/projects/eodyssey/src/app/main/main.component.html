@@ -116,6 +116,7 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="tileMatrixSet()"
+                        [zoomDebounceMs]="400"
                         [maxResolution]="maxResolution()"
                         [isVisible]="activeLayer.isVisible"
                         (loading)="onTileLoading($event)"
