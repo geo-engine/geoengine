@@ -368,6 +368,10 @@ lock_wait_seconds = 10
 # asks for them again, with one small request. A file replaced in between can be read as a mix of
 # old and new bytes for that long. Raise it for archives whose files never change.
 version_check_seconds = 60
+# The least a worker downloads when chunks are missing, in multiples of 64: it also fetches the
+# missing chunks around them up to this size. A larger value costs bytes and saves requests, which
+# pays off when a request takes longer than downloading that many bytes.
+fetch_kb = 64
 
 [data]
 volumes = { test_data = "test_data/" }

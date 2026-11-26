@@ -120,6 +120,9 @@ pub struct ByteCacheConfig {
     /// the remote file system reports no modification time, only after a read of it failed
     /// ([`ByteCache::forget`]).
     pub version_check: Duration,
+    /// The least a worker downloads for missing chunks: it widens a missing run to multiples of
+    /// this size, as far as the chunks around it are missing too. More bytes, fewer requests.
+    pub fetch_bytes: u64,
 }
 
 /// Chunk counters of a process since the last [`ByteCache::take_counts`].
@@ -155,6 +158,8 @@ pub struct ByteCache {
     max_file_bytes: u64,
     lock_wait: Duration,
     version_trust: Duration,
+    /// [`ByteCacheConfig::fetch_bytes`] in chunks, at least 1
+    fetch_chunks: u64,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
@@ -287,6 +292,7 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         max_file_bytes: config.max_file_bytes,
         lock_wait: config.lock_wait,
         version_trust: config.version_check,
+        fetch_chunks: (config.fetch_bytes / CHUNK_SIZE).max(1),
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
@@ -581,6 +587,8 @@ struct Handle {
     eof: bool,
     /// when this handle last marked its file as used
     touched: Instant,
+    /// the cache's `fetch_chunks`
+    fetch_chunks: u64,
 }
 
 impl Handle {
@@ -613,7 +621,7 @@ impl Handle {
         // caller's buffer.
         let mut downloaded = vec![false; present.len()];
         for (a, b) in runs(present.len(), |i| present[i] != 1) {
-            let (a, b) = (first + a, first + b);
+            let (a, b) = self.widen(file, first + a, first + b);
             let _lock = file.lock(a, b - a + 1, self.cache.lock_wait);
             let now = file.present(a, b);
             let missing = runs(now.len(), |i| now[i] != 1);
@@ -638,9 +646,12 @@ impl Handle {
                     self.cache.failed_write();
                 }
                 let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
-                buffer[(from - offset) as usize..(to - offset) as usize]
-                    .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
-                for chunk in c..=d {
+                if from < to {
+                    buffer[(from - offset) as usize..(to - offset) as usize]
+                        .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
+                }
+                // a widened run reaches beyond the read
+                for chunk in c.max(first)..=d.min(last) {
                     downloaded[(chunk - first) as usize] = true;
                 }
             }
@@ -659,6 +670,33 @@ impl Handle {
             }
         }
         len
+    }
+
+    /// The run of missing chunks `a..=b`, widened to multiples of the fetch size as far as the
+    /// chunks before and after it are missing, too: one request then also brings what the next
+    /// reads would ask for one by one.
+    fn widen(&self, file: &CacheFile, a: u64, b: u64) -> (u64, u64) {
+        let n = self.fetch_chunks;
+        if n <= 1 {
+            return (a, b);
+        }
+        let low = a / n * n;
+        let high = ((b / n + 1) * n - 1).min((self.size - 1) / CHUNK_SIZE);
+        let before = if low < a {
+            file.present(low, a - 1)
+        } else {
+            Vec::new()
+        };
+        let after = if b < high {
+            file.present(b + 1, high)
+        } else {
+            Vec::new()
+        };
+        let missing = |byte: &&u8| **byte != 1;
+        (
+            a - before.iter().rev().take_while(missing).count() as u64,
+            b + after.iter().take_while(missing).count() as u64,
+        )
     }
 
     fn chunk_len(&self, index: u64) -> u64 {
@@ -942,6 +980,7 @@ unsafe extern "C" fn open(
         position: 0,
         eof: false,
         touched: Instant::now(),
+        fetch_chunks: cache.fetch_chunks,
     }))
     .cast()
 }
@@ -1160,6 +1199,7 @@ mod tests {
                 max_file_bytes: TEST_FILE_CAP,
                 lock_wait: TEST_LOCK_WAIT,
                 version_check: Duration::from_secs(60),
+                fetch_bytes: CHUNK_SIZE,
             })
             .unwrap();
             (dir, cache)
@@ -1236,6 +1276,7 @@ mod tests {
             position: 0,
             eof: false,
             touched: Instant::now(),
+            fetch_chunks: 1,
         }
     }
 
@@ -1891,6 +1932,33 @@ mod tests {
         let (_dir, path, _) = file(10);
         let mut handle = handle_on(&path, 20, 10);
         assert_eq!(handle.read_at(u64::MAX, &mut [0_u8; 8]), 0);
+        close(&handle);
+    }
+
+    #[test]
+    fn it_downloads_whole_fetch_sizes_around_a_missing_chunk() {
+        let len = 40 * CHUNK_SIZE as usize + 5;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 21, len as u64);
+        let read = |handle: &mut Handle, chunk: u64| {
+            let mut buffer = [0_u8; 100];
+            let offset = chunk * CHUNK_SIZE + 7;
+            assert_eq!(handle.read_at(offset, &mut buffer), 100);
+            assert_eq!(buffer[..], bytes[offset as usize..offset as usize + 100]);
+        };
+        let cached = |handle: &Handle| -> Vec<u64> {
+            let map = handle.file.as_ref().unwrap().present(0, 40);
+            (0..=40).filter(|&i| map[i as usize] == 1).collect()
+        };
+
+        read(&mut handle, 19); // one chunk, as the fetch size is one
+        assert_eq!(cached(&handle), [19]);
+
+        handle.fetch_chunks = 16;
+        read(&mut handle, 21); // its multiple is 16..=31, of which 19 is cached
+        assert_eq!(cached(&handle), (19..=31).collect::<Vec<_>>());
+        read(&mut handle, 39); // the last multiple ends with the file
+        assert_eq!(cached(&handle), (19..=40).collect::<Vec<_>>());
         close(&handle);
     }
 

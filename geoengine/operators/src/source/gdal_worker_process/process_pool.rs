@@ -2049,6 +2049,7 @@ mod tests {
                     max_file_bytes: 1 << 18,
                     lock_wait: std::time::Duration::from_secs(10),
                     version_check: std::time::Duration::from_secs(60),
+                    fetch_bytes: 64 * 1024,
                 }),
                 ..WorkerConfig::default()
             },
@@ -2079,6 +2080,7 @@ mod tests {
                     max_file_bytes: 1 << 18,
                     lock_wait: std::time::Duration::from_secs(10),
                     version_check: std::time::Duration::from_secs(60),
+                    fetch_bytes: 64 * 1024,
                 }),
                 ..WorkerConfig::default()
             },
