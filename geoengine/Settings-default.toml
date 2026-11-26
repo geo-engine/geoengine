@@ -71,9 +71,17 @@ library_idle_ttl_seconds = 900
 library_sweep_interval_seconds = 30
 # cache size for compiled expressions in MB, each takes about 4.4 MB in the workspace directory
 library_cache_size_in_mb = 1_024
-# directory for the build of the dependencies and the compiled expressions, about 90 MB + cache size;
+# directory for the compiled expressions, about the cache size;
 # avoid the system's temp directory: its cleanup can delete files of a running server
 workspace_path = "expression_workspace"
+# directory with the dependencies of the expressions (about 50 MB), which the build of this binary
+# produced; they are linked into the server, so only its owner may write to this directory.
+# Empty uses the directory in the build directory (`target/…/build/geoengine-expression-*/out`),
+# which suffices for `cargo run` and tests. A deployment copies it next to the binary and sets it, e.g.:
+#   just backend export-expression-deps /usr/lib/geoengine/expression-deps --release
+#   dependencies_path = "/usr/lib/geoengine/expression-deps"
+# The server refuses a directory of another build or one built with another `rustc`.
+dependencies_path = ""
 # max. expressions to compile at the same time, further requests wait; each runs one `rustc` process
 max_concurrent_compilations = 8
 
@@ -321,6 +329,18 @@ filename_prefix = "geo_engine_worker"
 [gdal_process_pool.worker.open_telemetry]
 enabled = false
 endpoint = "http://127.0.0.1:4317"
+
+[gdal_process_pool.worker.retry]
+# Limits for retrying a failed open or read of a file in a GDAL worker. A dataset sets how often
+# its files are retried (STAC: 99 times); pauses start at 1 s and double. A missing file or a
+# denied access is never retried. A worker that retries holds one of `max_active_processes`, also
+# after the request was cancelled, so retries are capped in time.
+# Longest pause between two attempts.
+max_backoff_seconds = 8
+# No retry starts after this time from the first attempt. A tile waiting for its files longer
+# than a reverse proxy's timeout (e.g. nginx's `proxy_read_timeout`) fails anyway, so keep it
+# at most that timeout.
+max_duration_seconds = 180
 
 [gdal_process_pool.worker.byte_cache]
 # A cache of remote file bytes that all GDAL workers share: per remote file one sparse file with

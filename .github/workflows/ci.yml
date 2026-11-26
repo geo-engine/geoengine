@@ -12,20 +12,110 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs of the same pull request. Every other run gets its own group, since GitHub would otherwise
+# drop pending runs of the same group, e.g., on `main`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   # retry transient network failures when downloading dependencies
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
+  # `PIP_RETRIES` only retries failed connections, `PIP_RESUME_RETRIES` also resumes downloads that break off
   PIP_RETRIES: 10
+  PIP_RESUME_RETRIES: 10
   UV_HTTP_RETRIES: 10
   npm_config_fetch_retries: 5
   npm_config_fetch_retry_mintimeout: 20000
   npm_config_fetch_retry_maxtimeout: 120000
+  # all supported versions from https://devguide.python.org/versions/, the first one is the minimum version
+  PYTHON_VERSIONS: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
 
 jobs:
+  # Decides which projects a pull request touches. Everything else (merge queue, `main`, manual runs,
+  # changes to the CI itself) runs all jobs.
+  changes:
+    name: "ci / changes"
+    runs-on: ubuntu-26.04
+
+    permissions:
+      contents: read
+      pull-requests: read # required by paths-filter to list the changed files of a pull request
+
+    outputs:
+      backend: ${{ steps.result.outputs.backend }}
+      python: ${{ steps.result.outputs.python }}
+      api-clients: ${{ steps.result.outputs.api-clients }}
+      ui: ${{ steps.result.outputs.ui }}
+      www: ${{ steps.result.outputs.www }}
+      # passed on as an output, since `strategy.matrix` cannot access `env`
+      python-versions: ${{ env.PYTHON_VERSIONS }}
+
+    steps:
+      - name: Detect changed paths
+        id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            ci:
+              - ".github/**"
+              - "justfile"
+              - "*.justfile"
+            backend:
+              - "geoengine/**"
+            python:
+              # the Python tests run against the backend
+              - "geoengine/**"
+              - "python/**"
+              - "api-clients/python/**"
+              - "openapi.json"
+            api-clients:
+              - "api-clients/**"
+              - "openapi.json"
+            ui:
+              - "ui/**"
+              - "api-clients/typescript/**"
+              - "openapi.json"
+            www:
+              - "www/**"
+              - "python/**"
+              - "openapi.json"
+      - name: Decide which jobs to run
+        id: result
+        env:
+          FULL: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ci == 'true' }}
+          BACKEND: ${{ steps.filter.outputs.backend == 'true' }}
+          PYTHON: ${{ steps.filter.outputs.python == 'true' }}
+          API_CLIENTS: ${{ steps.filter.outputs.api-clients == 'true' }}
+          UI: ${{ steps.filter.outputs.ui == 'true' }}
+          WWW: ${{ steps.filter.outputs.www == 'true' }}
+        run: |
+          any() { for v in "$@"; do if [ "$v" = true ]; then echo true; return; fi; done; echo false; }
+          {
+            echo "backend=$(any "$FULL" "$BACKEND")"
+            echo "python=$(any "$FULL" "$PYTHON")"
+            echo "api-clients=$(any "$FULL" "$API_CLIENTS")"
+            echo "ui=$(any "$FULL" "$UI")"
+            echo "www=$(any "$FULL" "$WWW")"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # GitHub has no job priorities, but hands out runners roughly in queue order. Short jobs wait for this
+  # job, so that they are queued after the long-running backend jobs, which then get runners first.
+  light-gate:
+    name: "ci / light-gate"
+    needs: changes
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - run: "true"
+
   geoengine-test:
     name: "geoengine / test"
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-26.04
 
     outputs:
@@ -47,20 +137,18 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "test"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Testsuite
-        uses: ./.github/actions/test
+        # GDAL reads remote NetCDF files through userfaultfd, which the default seccomp profile blocks
+        run: >
+          podman run --rm --security-opt seccomp=unconfined
+          -v "$GITHUB_WORKSPACE:/github/workspace" -w /github/workspace
+          -e CI -e GITHUB_ACTIONS -e CARGO_TERM_COLOR -e CARGO_NET_RETRY -e RUSTUP_MAX_RETRIES
+          -e CARGO_INCREMENTAL -e CACHE_ON_FAILURE
+          quay.io/geoengine/devcontainer:latest ./.github/scripts/backend-test.sh
       - id: upload-coverage-artifact
         uses: actions/upload-artifact@v7
         with:
@@ -72,6 +160,8 @@ jobs:
 
   geoengine-lint:
     name: "geoengine / lint"
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
@@ -82,18 +172,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
           shared-key: "lint"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Prefetch build downloads
         uses: ./.github/actions/prefetch-build-downloads
       - name: Rustfmt
@@ -105,8 +187,83 @@ jobs:
       - name: SQLFluff
         run: just backend lint-sql
 
+  # Builds the debug binaries once and shares them with the jobs that only run them (OGC validation, Python,
+  # generated code). Always runs, since the generated code is checked on every pull request.
   geoengine-build:
     name: "geoengine / build"
+    needs: changes
+
+    runs-on: ubuntu-26.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      binaries-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          shared-key: "build"
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
+      - name: Build
+        run: just backend build
+      - name: Package binaries
+        # strip the debug info to keep the artifact small, and tar it, since artifacts lose the executable bit
+        run: |
+          mkdir -p "$RUNNER_TEMP/geoengine-binaries"
+          for bin in geoengine-server geoengine-cli gdalsource-process; do
+            strip --strip-debug -o "$RUNNER_TEMP/geoengine-binaries/$bin" "geoengine/target/debug/$bin"
+          done
+          tar -cf "$RUNNER_TEMP/geoengine-binaries.tar" -C "$RUNNER_TEMP/geoengine-binaries" .
+          # the server reads the dependencies of the expressions from the build directory it was built in,
+          # so add them at their path below `target/debug/`, where the other jobs unpack the binaries
+          DEPS_DIR=$(just backend expression-deps-dir)
+          tar -rf "$RUNNER_TEMP/geoengine-binaries.tar" -C geoengine/target/debug \
+            "$(realpath --relative-to=geoengine/target/debug "$DEPS_DIR")"
+      - name: Upload binaries
+        id: upload-binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: geoengine-binaries-debug-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/geoengine-binaries.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  geoengine-build-release:
+    name: "geoengine / build (--release)"
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+
+    runs-on: ubuntu-26.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          shared-key: "build--release"
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
+      - name: Build
+        run: just backend build --release
+
+  geoengine-ogc-validation:
+    name: "geoengine / ogc validation"
+    needs:
+      - changes
+      - geoengine-build
+    if: ${{ needs.changes.outputs.backend == 'true' }}
 
     runs-on: ubuntu-26.04
     container:
@@ -119,31 +276,20 @@ jobs:
     permissions:
       contents: read
 
-    strategy:
-      matrix:
-        build: ["", "--release"]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
         with:
-          prefix-key: "cache-rust"
-          shared-key: "build${{ matrix.build }}"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Prefetch build downloads
-        uses: ./.github/actions/prefetch-build-downloads
-      - name: Build
-        run: just backend build "${{ matrix.build }}"
+          # only the tools of `just backend install`, since the binaries come from the `geoengine / build` job
+          shared-key: "tools"
+          cache-targets: false
+      - name: Download binaries
+        uses: ./.github/actions/download-geoengine-binaries
+        with:
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Install dependencies for OGC validation
-        if: ${{ matrix.build == '' }}
         run: |
           apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 -y install podman # required for ogc-validator
           just backend install # install the request-logging-proxy binary
@@ -157,14 +303,13 @@ jobs:
           default_ulimits = []
           EOF
       - name: Start Geo Engine
-        if: ${{ matrix.build == '' }}
         id: ge-instance
-        run: just backend run
+        working-directory: geoengine
+        run: ./target/debug/geoengine-server
         background: true
         env:
           GEOENGINE__WEB__EXTERNAL_ADDRESS: "http://127.0.0.1:8123/api"
       - name: Prepare service for validation
-        if: ${{ matrix.build == '' }}
         id: prepare-service
         env:
           SERVER_PORT: 3030
@@ -189,7 +334,6 @@ jobs:
           echo "LAYER_ID=$LAYER_ID" >> $GITHUB_OUTPUT
           echo "SESSION_TOKEN=$SESSION_TOKEN" >> $GITHUB_OUTPUT
       - name: Start request-logging-proxy
-        if: ${{ matrix.build == '' }}
         id: proxy-instance
         run: |
           request-logging-proxy \
@@ -204,11 +348,9 @@ jobs:
           PROXY_PORT: 8123
           SESSION_TOKEN: ${{ steps.prepare-service.outputs.SESSION_TOKEN }}
       - run: just common wait-for-port $PROXY_PORT
-        if: ${{ matrix.build == '' }}
         env:
           PROXY_PORT: 8123
-      - name: Validate service (map tiles)
-        if: ${{ matrix.build == '' }}
+      - name: Validate service (map + coverage tiles)
         uses: geo-engine/ogc-validator@v3
         with:
           teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
@@ -217,26 +359,9 @@ jobs:
           ogc-api-tiles: true
           service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
           ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
-          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
-          ogc-api-tiles-tilematrix: "1"
-          ogc-api-tiles-mintilerow: "0"
-          ogc-api-tiles-maxtilerow: "1"
-          ogc-api-tiles-mintilecol: "0"
-          ogc-api-tiles-maxtilecol: "1"
-          ogc-api-tiles-ignore: ""
-        env:
-          PROXY_URL: "http://127.0.0.1:8123"
-      - name: Validate service (coverage tiles)
-        if: ${{ matrix.build == '' }}
-        uses: geo-engine/ogc-validator@v3
-        with:
-          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
-          ogc-api-processes: false
-          ogc-api-features: false
-          ogc-api-tiles: true
-          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
-          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
-          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-urltemplatefortiles: |
+            ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z
+            ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z
           ogc-api-tiles-tilematrix: "1"
           ogc-api-tiles-mintilerow: "0"
           ogc-api-tiles-maxtilerow: "1"
@@ -249,6 +374,11 @@ jobs:
       - cancel: ge-instance
 
   python:
+    needs:
+      - changes
+      - geoengine-build
+    if: ${{ needs.changes.outputs.python == 'true' }}
+
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -261,39 +391,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # use all supported versions from https://devguide.python.org/versions/
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ fromJSON(needs.changes.outputs.python-versions) }}
         uv: [false]
         module-resolution: [""]
         coverage: [false]
         include:
-          - python-version: "3.10" # always test the minimum version
+          - python-version: ${{ fromJSON(needs.changes.outputs.python-versions)[0] }} # always test the minimum version
             uv: true
             module-resolution: "--resolution=lowest-direct"
             coverage: true
 
     env:
       USE_UV: ${{ matrix.uv }}
+      # use the binaries of the `geoengine / build` job instead of compiling them in every job
+      GEOENGINE_TEST_SKIP_BUILD: true
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Init rustup toolchain
-        # initialize based on the toolchain file
-        run: rustup toolchain install
-      - name: Setup Rust Build Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Download Geo Engine binaries
+        uses: ./.github/actions/download-geoengine-binaries
         with:
-          prefix-key: "cache-rust"
-          # re-use cache of build job, since it both calls `cargo build` in debug mode
-          shared-key: "build"
-          add-job-id-key: false
-          env-vars: ""
-          workspaces: "geoengine"
-          # build job already saves the cache, so we can skip saving here
-          save-if: false
-      - name: Prefetch build downloads
-        uses: ./.github/actions/prefetch-build-downloads
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
         with:
@@ -340,6 +459,11 @@ jobs:
           if-no-files-found: error
 
   www:
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.www == 'true' }}
+
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -362,15 +486,16 @@ jobs:
       - name: Idempotency check
         run: just common check-no-changes-in-git-repo
 
+  # tests all supported Python versions one after another in a single job, since the setup dominates the runtime
   api-client-python:
     name: "api-client / python"
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.api-clients == 'true' }}
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
-
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     permissions:
       contents: read
@@ -378,37 +503,77 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: List Python versions
+        id: python-versions
+        # `setup-python` expects one version per line
+        run: |
+          {
+            echo "list<<EOF"
+            jq -r '.[]' <<< "$PYTHON_VERSIONS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
+      - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Generate OpenAPI spec
-        run: just api-clients test-python
+          python-version: ${{ steps.python-versions.outputs.list }}
+      - name: Test with all Python versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for version in $(jq -r '.[]' <<< "$PYTHON_VERSIONS"); do
+            echo "::group::Python $version"
+            just api-clients test-python --fresh "python$version"
+            echo "::endgroup::"
+          done
 
+  # tests all supported Node.js versions one after another in a single job, since the setup dominates the runtime
   api-client-typescript:
     name: "api-client / typescript"
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.api-clients == 'true' }}
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
-    strategy:
-      matrix:
-        node-version: [22.12.x, 24.x, 26.x]
-
     permissions:
       contents: read
 
+    env:
+      # tests the latest release of each version, i.e., 22.12.x, 24.x and 26.x
+      NODE_VERSIONS: "22.12 24 26"
+
     steps:
       - uses: actions/checkout@v7
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Install and build
-        run: just api-clients test-typescript
+      - name: Test with all Node.js versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # the Node.js version manager `n` installs the versions here
+          export N_PREFIX="$RUNNER_TEMP/n"
+          export PATH="$N_PREFIX/bin:$PATH"
+
+          for version in $NODE_VERSIONS; do
+            echo "::group::Node.js $version"
+
+            npx --yes n install "$version"
+            echo "Using Node.js $(node --version)"
+
+            rm -rf api-clients/typescript/node_modules
+            just api-clients test-typescript
+
+            echo "::endgroup::"
+          done
 
   api-client-rust:
     name: "api-client / rust"
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.api-clients == 'true' }}
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
@@ -424,8 +589,13 @@ jobs:
       - name: Build and test
         run: just api-clients test-rust
 
-  api-client-idempotency:
-    name: "api-client / idempotency"
+  # Lints and builds in one job, since installing the dependencies takes longer than building an app.
+  ui-lint-build:
+    name: "ui / lint & build"
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.ui == 'true' }}
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
@@ -433,60 +603,50 @@ jobs:
     permissions:
       contents: read
 
-    steps:
-      - uses: actions/checkout@v7
-      - name: Configure git
-        run: |
-          # Add the workspace to safe.directory to bypass the ownership check
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Install Java (OpenAPI Generator requires Java to run)
-        run: |
-          # deleted in devcontainer image, but required by java installer
-          mkdir -p /usr/share/man/man1
-          apt-get -o Acquire::Retries=5 update
-          apt-get -o Acquire::Retries=5 install -y openjdk-21-jre-headless
-      - name: Prefetch OpenAPI Generator
-        uses: ./.github/actions/prefetch-openapi-generator
-      - name: Lint OpenAPI specification
-        run: just api-clients lint-openapi-spec
-      - name: Check OpenAPI Generator version of generated clients
-        run: just api-clients lint-generator-version
-      - name: Generate API clients
-        run: just api-clients build
-      - name: Check for changes in git repo
-        run: just common check-no-changes-in-git-repo
-
-  ui-build:
-    name: "ui / build"
-    runs-on: ubuntu-26.04
-    container: quay.io/geoengine/devcontainer:latest
-
-    permissions:
-      contents: read
-
-    strategy:
-      matrix:
-        app:
-          - gis
-          - manager
-          - dashboards/gfbio
-          - dashboards/data-atlas
-          - dashboards/nfdi-portal-demo
-          - dashboards/ebv-analyzer
-          - dashboards/ecometrics
-          - dashboards/esg-indicator-service
+    env:
+      CI: true
+      UI_APPS: >-
+        gis
+        eodyssey
+        manager
+        dashboards/gfbio
+        dashboards/data-atlas
+        dashboards/nfdi-portal-demo
+        dashboards/ebv-analyzer
+        dashboards/ecometrics
+        dashboards/esg-indicator-service
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
       - name: Install Dependencies
         run: just ui install
-      - name: Build app ${{ matrix.app }}
-        run: just ui build ${{ matrix.app }}
-        env:
-          CI: true
+      - name: Code Format Check with Prettier
+        run: just ui format
+      # the apps are built before `common` and `core`, since they would use the built libraries from `dist` instead of the sources
+      - name: Build apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in $UI_APPS; do
+            echo "::group::Build $app"
+            just ui build "$app"
+            echo "::endgroup::"
+          done
+      - name: Build common & core
+        run: |
+          just ui build common
+          just ui build core
+      - name: Check with Linter
+        run: just ui lint
 
   ui-test:
     name: "ui / test"
+    needs:
+      - changes
+      - light-gate
+    if: ${{ needs.changes.outputs.ui == 'true' }}
+
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -502,37 +662,23 @@ jobs:
           CI: true
       # TODO: coverage for UI tests
 
-  ui-lint:
-    name: "ui / lint"
-
-    runs-on: ubuntu-26.04
-    container: quay.io/geoengine/devcontainer:latest
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Install Dependencies
-        run: just ui install
-      - name: Code Format Check with Prettier
-        run: just ui format
-      - name: Build common & core
-        run: |
-          just ui build common
-          just ui build core
-      - name: Check with Linter
-        run: just ui lint
-
+  # Lints repository-wide formats & versions and checks that the generated code (OpenAPI spec, API clients, www) is up
+  # to date. Always runs, since every project can change the generated code.
   repository-lint:
-    name: "repository / lint"
+    name: "repository / lint & generated code"
+    needs:
+      - changes
+      - geoengine-build
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
+
+    env:
+      # generate the OpenAPI spec with the binary of the `geoengine / build` job instead of compiling it again
+      GEOENGINE_CLI: target/debug/geoengine-cli
 
     steps:
       - uses: actions/checkout@v7
@@ -540,11 +686,29 @@ jobs:
         run: |
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Prefetch build downloads
-        uses: ./.github/actions/prefetch-build-downloads
+      - name: Install Java (OpenAPI Generator requires Java to run)
+        run: |
+          # deleted in devcontainer image, but required by java installer
+          mkdir -p /usr/share/man/man1
+          apt-get -o Acquire::Retries=5 update
+          apt-get -o Acquire::Retries=5 install -y openjdk-21-jre-headless
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          # only the tools of `just backend install`, since the binaries come from the `geoengine / build` job
+          shared-key: "tools"
+          cache-targets: false
+      - name: Download Geo Engine binaries
+        uses: ./.github/actions/download-geoengine-binaries
+        with:
+          artifact-id: ${{ needs.geoengine-build.outputs.binaries-artifact-id }}
       - name: Prefetch OpenAPI Generator
         uses: ./.github/actions/prefetch-openapi-generator
-      - name: Lint repository-wide formats & versions
+      - name: Lint OpenAPI specification
+        run: just api-clients lint-openapi-spec
+      - name: Check OpenAPI Generator version of generated clients
+        run: just api-clients lint-generator-version
+      - name: Lint repository-wide formats & versions, check generated code
         run: just ci repo
 
   repository-coverage:
@@ -553,6 +717,9 @@ jobs:
     needs:
       - geoengine-test
       - python
+
+    # the coverage is only complete if both test jobs ran
+    if: ${{ always() && needs.geoengine-test.result == 'success' && needs.python.result == 'success' }}
 
     runs-on: ubuntu-26.04
 
@@ -586,22 +753,28 @@ jobs:
     # run even if a dependency failed, otherwise this job is skipped and counts as passed
     if: always()
     needs:
+      # If one of these two fails, all jobs that depend on it are skipped, and skipped jobs count as passed.
+      # Listing them here makes such a failure fail this job.
+      - changes
+      - light-gate
       - geoengine-test
       - geoengine-lint
       - geoengine-build
+      - geoengine-build-release
+      - geoengine-ogc-validation
       - python
       - www
       - api-client-python
       - api-client-typescript
       - api-client-rust
-      - api-client-idempotency
-      - ui-build
+      - ui-lint-build
       - ui-test
-      - ui-lint
       - repository-lint
     runs-on: ubuntu-26.04
     permissions: {}
     steps:
+      # jobs are skipped on purpose if a pull request does not touch their project (see the `changes` job);
+      # a job that is skipped because a dependency failed shows up as that dependency's failure
       - name: Fail if any required job did not succeed
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1

@@ -9,7 +9,7 @@ use geoengine_operators::source::gdal_worker_process::{
         GdalIpcBytePayload, GdalReadAdvise, GdalRequest, IpcChannelMessagePayload,
         IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
-    process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
+    process_impl::{GdalDatasetHolder, GdalHandling, WorkerRetryConfig, setup_client},
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
@@ -250,7 +250,7 @@ fn main() {
             })
             .ok()
     });
-    run(token, byte_cache);
+    run(token, worker_config.retry, byte_cache);
 
     drop(runtime_guard);
     if let Some(provider) = provider
@@ -326,14 +326,16 @@ fn raster_type_dispatch(
     }
 }
 
-fn run(token: Token, byte_cache: Option<&'static byte_cache::ByteCache>) {
+fn run(token: Token, retry: WorkerRetryConfig, byte_cache: Option<&'static byte_cache::ByteCache>) {
     let (sender, receiver) = match setup_client::<WorkerRequest, WorkerResponse>(token) {
         Ok(pair) => pair,
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache =
-        byte_cache.map_or_else(GdalDatasetHolder::new, GdalDatasetHolder::with_byte_cache);
+    let mut dataset_cache = byte_cache.map_or_else(
+        || GdalDatasetHolder::new(retry),
+        |byte_cache| GdalDatasetHolder::with_byte_cache(retry, byte_cache),
+    );
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
@@ -407,7 +409,7 @@ impl ReadStats {
             band: payload.dataset_params.rasterband_channel,
             level_factor,
             footprint: payload
-                .full_resolution_footprint()
+                .full_resolution_read_bounds()
                 .map(|b| {
                     let (min, max) = (b.min_index(), b.max_index());
                     format!("{},{},{},{}", min.x(), min.y(), max.x(), max.y())

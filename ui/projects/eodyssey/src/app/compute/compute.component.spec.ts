@@ -230,6 +230,33 @@ describe('ComputeComponent', () => {
         expect(component.plotData()).toBeUndefined();
     });
 
+    it('shows a hint instead of the chart when the histogram has no valid pixels', async () => {
+        const plotOutput: WrappedPlotOutput = {
+            outputFormat: PlotOutputFormat.JsonVega,
+            plotType: 'histogram',
+            data: {vegaSpec: {mark: 'bar', data: {values: [{binStart: 0, binEnd: 0, Frequency: 0}]}}},
+        };
+
+        component.plotData.set(plotOutput);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        const element = fixture.nativeElement as HTMLElement;
+        expect(component.isEmptyHistogram(plotOutput)).toBe(true);
+        expect(element.querySelector('geoengine-vega-viewer')).toBeNull();
+        expect(element.textContent).toContain('There are no valid pixels in the selected box.');
+    });
+
+    it('treats a histogram with counts as non-empty', () => {
+        const plotOutput: WrappedPlotOutput = {
+            outputFormat: PlotOutputFormat.JsonVega,
+            plotType: 'histogram',
+            data: {vegaSpec: {mark: 'bar', data: {values: [{binStart: 0, binEnd: 1, Frequency: 3}]}}},
+        };
+
+        expect(component.isEmptyHistogram(plotOutput)).toBe(false);
+    });
+
     it('opens a fullscreen histogram dialog when plot data exists', async () => {
         const openSpy = vi.spyOn(MatDialog.prototype, 'open').mockImplementation(
             (): ReturnType<MatDialog['open']> =>

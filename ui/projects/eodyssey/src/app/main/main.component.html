@@ -18,11 +18,11 @@
         </mat-button-toggle-group>
     }
 
-    <a matIconButton aria-label="Help" href="https://knowledgebase.code-de.org/">
+    <a matIconButton aria-label="Help" href="https://knowledgebase.code-de.org/" target="_blank" rel="noopener noreferrer">
         <mat-icon>help</mat-icon>
     </a>
 
-    <a matIconButton aria-label="Contact" href="https://code-de.org/contact">
+    <a matIconButton aria-label="Contact" href="https://code-de.org/contact" target="_blank" rel="noopener noreferrer">
         <mat-icon>chat_bubble</mat-icon>
     </a>
 
@@ -47,7 +47,8 @@
 </mat-toolbar>
 
 <mat-drawer-container [style.height.px]="middleContainerHeight()">
-    <mat-drawer position="start" mode="side" opened="true">
+    <!-- The app has no control to reopen the drawer, so Escape (e.g., from an open select inside) must not close it. -->
+    <mat-drawer position="start" mode="side" opened="true" disableClose>
         <div class="drawer-container">
             <mat-nav-list>
                 <mat-list-item
@@ -164,6 +165,7 @@
                 type="button"
                 matMiniFab
                 aria-label="Box"
+                matTooltip="Click two opposite corners to draw a box"
                 [disabled]="measureButton.isActive()"
                 [color]="boxButton.isActive() ? 'primary' : null"
                 [geoengineMeasure]="map"

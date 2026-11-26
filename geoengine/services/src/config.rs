@@ -5,6 +5,7 @@ use config::{Config, ConfigError, Environment, File, Map, Source, Value, ValueKi
 use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_expression::ExpressionDependencies;
 use geoengine_operators::cache::new_raster_cache::{
     BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
 };
@@ -289,8 +290,11 @@ pub struct Expression {
     pub library_sweep_interval_seconds: NonZeroU64,
     /// Cache size for libraries in MB
     pub library_cache_size_in_mb: u64,
-    /// Directory for the build of the dependencies and the libraries
+    /// Directory for the libraries
     pub workspace_path: PathBuf,
+    /// Directory with the dependencies built with this binary, empty or missing for the build directory
+    #[serde(default)]
+    pub dependencies_path: Option<PathBuf>,
     /// Max. number of compilers running at the same time
     pub max_concurrent_compilations: NonZeroUsize,
 }
@@ -307,6 +311,12 @@ impl From<Expression> for ExpressionCacheConfig {
             max_cache_size_in_bytes: config.library_cache_size_in_mb.saturating_mul(1024 * 1024),
             max_concurrent_compilations: config.max_concurrent_compilations,
             workspace_path: config.workspace_path,
+            dependencies_path: config
+                .dependencies_path
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or_else(|| {
+                    ExpressionDependencies::default_dependencies_dir().to_path_buf()
+                }),
         }
     }
 }
@@ -630,6 +640,8 @@ pub struct GdalProcessPoolWorkerConfig {
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
     #[serde(default)]
+    pub retry: geoengine_operators::source::gdal_worker_process::WorkerRetryConfig,
+    #[serde(default)]
     pub byte_cache: ByteCacheSettings,
 }
 
@@ -734,6 +746,7 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
+            retry: config.retry,
             byte_cache: (config.byte_cache.size_in_mb > 0).then(|| {
                 let size_bytes = config.byte_cache.size_in_mb * 1024 * 1024;
                 geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
@@ -1043,6 +1056,10 @@ mod tests {
 
         assert_eq!(config.max_cache_size_in_bytes, 1024 * 1024 * 1024);
         assert_eq!(config.workspace_path, PathBuf::from("expression_workspace"));
+        assert_eq!(
+            config.dependencies_path,
+            ExpressionDependencies::default_dependencies_dir()
+        );
     }
 
     #[test]
@@ -1166,6 +1183,40 @@ mod tests {
             .into_iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
             .collect()
+    }
+
+    #[test]
+    fn it_reads_the_worker_retry_limits() {
+        use geoengine_operators::source::gdal_worker_process::WorkerRetryConfig;
+
+        let retry = |local: Option<&str>, env: Option<&str>| {
+            worker_config(local, "RETRY__MAX_DURATION_SECONDS", env).retry
+        };
+
+        assert_eq!(retry(None, None), WorkerRetryConfig::default());
+        assert_eq!(
+            retry(None, None),
+            WorkerRetryConfig {
+                max_backoff_seconds: 8,
+                max_duration_seconds: 180,
+            }
+        );
+        // a local file may set one limit and keeps the other; the environment wins
+        let local = "[gdal_process_pool.worker.retry]\nmax_backoff_seconds = 2\n";
+        assert_eq!(
+            retry(Some(local), None),
+            WorkerRetryConfig {
+                max_backoff_seconds: 2,
+                max_duration_seconds: 180,
+            }
+        );
+        assert_eq!(
+            retry(Some(local), Some("20")),
+            WorkerRetryConfig {
+                max_backoff_seconds: 2,
+                max_duration_seconds: 20,
+            }
+        );
     }
 
     #[test]
