@@ -225,16 +225,29 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Creates the directory, readable only by this user, as it holds the bytes of datasets. An
-/// existing directory keeps its permissions.
+/// existing directory keeps its permissions, but must be this user's and writable by nobody else:
+/// who can write there can redirect the cache's writes and feed the workers bytes.
 ///
 /// # Errors
-/// Fails if the directory cannot be created or its permissions set.
+/// Fails if the directory cannot be created, its permissions cannot be set, or it is another
+/// user's or writable by others.
 pub fn create_directory(directory: &Path) -> std::io::Result<()> {
-    if directory.is_dir() {
-        return Ok(());
+    if !directory.is_dir() {
+        std::fs::create_dir_all(directory)?;
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
     }
-    std::fs::create_dir_all(directory)?;
-    std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))
+    let meta = std::fs::metadata(directory)?;
+    // SAFETY: no arguments, cannot fail
+    if meta.uid() != unsafe { libc::geteuid() } || meta.mode() & 0o022 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} must belong to the server's user and be writable by no one else",
+                directory.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Whether `stem` is a file name the cache writes: a SHA-256 in lower-case hex digits. The sweep
@@ -410,8 +423,13 @@ impl CacheFile {
             .create(true)
             .truncate(false)
             .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
             .open(directory.join(format!("{stem}.{EXTENSION}")))?;
-        let len = size + size.div_ceil(CHUNK_SIZE);
+        // a size no file can have, e.g. from a remote server that lies
+        let len = size
+            .checked_add(size.div_ceil(CHUNK_SIZE))
+            .filter(|len| i64::try_from(*len).is_ok())
+            .ok_or_else(|| std::io::Error::other("file too large for the cache"))?;
         if file.metadata()?.len() != len {
             file.set_len(len)?; // sparse; all workers set the same length
         }
@@ -538,7 +556,7 @@ struct Handle {
 impl Handle {
     /// Reads `buffer.len()` bytes at `offset`, or fewer at the end of the file.
     fn read_at(&mut self, offset: u64, buffer: &mut [u8]) -> usize {
-        let end = (offset + buffer.len() as u64).min(self.size);
+        let end = offset.saturating_add(buffer.len() as u64).min(self.size);
         if offset >= end {
             return 0;
         }
@@ -822,6 +840,7 @@ unsafe extern "C" fn open(
                 let mut stat: libc::stat64 = std::mem::zeroed();
                 if gdal_sys::VSIStatExL(inner.as_ptr(), (&raw mut stat).cast(), 0) != 0
                     || stat.st_mode & libc::S_IFMT != libc::S_IFREG
+                    || stat.st_size < 0
                 {
                     gdal_sys::VSIFCloseL(handle);
                     return None;
@@ -915,7 +934,10 @@ unsafe extern "C" fn stat(
         unsafe { gdal_sys::VSIStatExL(inner.as_ptr(), stat_buf, flags) }
     };
     // SAFETY: filled, as the stat succeeded
-    if result == 0 && unsafe { (*buffer).st_mode } & libc::S_IFMT == libc::S_IFREG {
+    if result == 0
+        && unsafe { (*buffer).st_mode } & libc::S_IFMT == libc::S_IFREG
+        && unsafe { (*buffer).st_size } >= 0
+    {
         remember(cache, key, &inner, unsafe { &*buffer });
     }
     result
@@ -1696,6 +1718,40 @@ mod tests {
         assert!(folder.join("0").exists());
         let mode = std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o755);
+    }
+
+    #[test]
+    fn it_refuses_a_directory_others_can_write() {
+        let dir = tempfile::tempdir().unwrap();
+        create_directory(&dir.path().join("new")).unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o775)).unwrap();
+        assert_eq!(
+            create_directory(dir.path()).unwrap_err().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+    }
+
+    #[test]
+    fn it_follows_no_link_in_place_of_a_cache_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("other");
+        std::fs::write(&target, b"keep").unwrap();
+        let name = dir.path().join(format!("{}.{EXTENSION}", key(1)));
+        std::os::unix::fs::symlink(&target, name).unwrap();
+        assert!(CacheFile::open(dir.path(), &key(1), CHUNK_SIZE).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn it_caches_no_file_of_an_impossible_size() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(CacheFile::open(dir.path(), &key(1), u64::MAX).is_err());
+        assert!(CacheFile::open(dir.path(), &key(2), 1 << 63).is_err());
+        // a read at the end of the offsets reads nothing
+        let (_dir, path, _) = file(10);
+        let mut handle = handle_on(&path, 20, 10);
+        assert_eq!(handle.read_at(u64::MAX, &mut [0_u8; 8]), 0);
+        close(&handle);
     }
 
     #[test]
