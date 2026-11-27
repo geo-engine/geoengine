@@ -14373,16 +14373,20 @@
         ],
         "properties": {
           "buildDate": {
-            "type": "string"
+            "type": "string",
+            "description": "The date when the server binary was built."
           },
           "commitHash": {
-            "type": "string"
+            "type": "string",
+            "description": "The git commit hash of the server build."
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "description": "The version of the server."
           },
           "features": {
-            "type": "string"
+            "type": "string",
+            "description": "The cargo features the server was built with."
           }
         }
       },

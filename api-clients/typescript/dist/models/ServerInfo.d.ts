@@ -15,19 +15,19 @@
  */
 export interface ServerInfo {
     /**
-     *
+     * The date when the server binary was built.
      */
     buildDate: string;
     /**
-     *
+     * The git commit hash of the server build.
      */
     commitHash: string;
     /**
-     *
+     * The version of the server.
      */
     version: string;
     /**
-     *
+     * The cargo features the server was built with.
      */
     features: string;
 }

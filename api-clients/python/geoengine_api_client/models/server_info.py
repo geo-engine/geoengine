@@ -27,10 +27,10 @@ class ServerInfo(BaseModel):
     """
     ServerInfo
     """ # noqa: E501
-    build_date: StrictStr = Field(alias="buildDate")
-    commit_hash: StrictStr = Field(alias="commitHash")
-    version: StrictStr
-    features: StrictStr
+    build_date: StrictStr = Field(description="The date when the server binary was built.", alias="buildDate")
+    commit_hash: StrictStr = Field(description="The git commit hash of the server build.", alias="commitHash")
+    version: StrictStr = Field(description="The version of the server.")
+    features: StrictStr = Field(description="The cargo features the server was built with.")
     __properties: ClassVar[List[str]] = ["buildDate", "commitHash", "version", "features"]
 
     model_config = ConfigDict(

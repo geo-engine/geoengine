@@ -168,9 +168,13 @@ pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> act
 #[derive(Debug, Clone, Copy, serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
+    /// The date when the server binary was built.
     pub build_date: &'static str,
+    /// The git commit hash of the server build.
     pub commit_hash: &'static str,
+    /// The version of the server.
     pub version: &'static str,
+    /// The cargo features the server was built with.
     pub features: &'static str,
 }
 

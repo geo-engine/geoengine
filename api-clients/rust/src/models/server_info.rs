@@ -12,12 +12,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ServerInfo {
+    /// The date when the server binary was built.
     #[serde(rename = "buildDate")]
     pub build_date: String,
+    /// The git commit hash of the server build.
     #[serde(rename = "commitHash")]
     pub commit_hash: String,
+    /// The version of the server.
     #[serde(rename = "version")]
     pub version: String,
+    /// The cargo features the server was built with.
     #[serde(rename = "features")]
     pub features: String,
 }
