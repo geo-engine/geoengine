@@ -6,7 +6,7 @@ import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, 
 import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
-import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
+import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, MapExtent, VisualizationPreset} from './data-sources';
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -99,14 +99,9 @@ export class EOdysseyLayerService {
     private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
     readonly dataSourceOfTime = this.timeSource.asReadonly();
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
-    readonly appliedMinTileMatrixIndex = computed(() => {
-        const applied = this.appliedVisualization();
-        return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
-    });
-    /** The zoom limit of the selected visualization, also while it is not on the map. */
-    readonly selectedMinTileMatrixIndex = computed(
-        () => this.selectedPreset()?.minTileMatrixIndex ?? this.selectedDataSource()?.minTileMatrixIndex ?? 0,
-    );
+    readonly appliedMaxMapExtent = computed(() => this.appliedDataSource()?.maxMapExtent);
+    /** The selected source's limit, including when imagery is hidden and only availability is shown. */
+    readonly selectedMaxMapExtent = computed(() => this.selectedDataSource()?.maxMapExtent);
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -328,7 +323,7 @@ export class EOdysseyLayerService {
             // no `edv:defaultTime`: selecting a data source keeps the date the user chose
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
+            maxMapExtent: parseMapExtent(metadata.get('edv:maxMapExtent')),
         };
     }
 
@@ -352,7 +347,6 @@ export class EOdysseyLayerService {
             connectorId: item.id.providerId,
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
-            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
         };
     }
 
@@ -556,11 +550,26 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function parseMinTileMatrixIndex(value: string | undefined): number | undefined {
+function parseMapExtent(value: string | undefined): MapExtent | undefined {
     if (value === undefined) return undefined;
-    const parsed = Number(value);
-    if (!value.trim() || !Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-        throw new Error('Invalid edv:minTileMatrixIndex: ' + value);
+    try {
+        const parsed: unknown = JSON.parse(value);
+        if (
+            typeof parsed === 'object' &&
+            parsed !== null &&
+            'width' in parsed &&
+            typeof parsed.width === 'number' &&
+            Number.isFinite(parsed.width) &&
+            parsed.width > 0 &&
+            'height' in parsed &&
+            typeof parsed.height === 'number' &&
+            Number.isFinite(parsed.height) &&
+            parsed.height > 0
+        ) {
+            return {width: parsed.width, height: parsed.height};
+        }
+    } catch {
+        // Report malformed JSON using the same catalogue error as invalid dimensions.
     }
-    return parsed;
+    throw new Error('Invalid edv:maxMapExtent: ' + value);
 }

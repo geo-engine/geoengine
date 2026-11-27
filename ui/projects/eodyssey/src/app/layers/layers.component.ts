@@ -741,7 +741,7 @@ export class LayersComponent {
         if (footprints.overlayBlocked() || footprints.overlayTooLarge())
             return {kind: 'unknown', text: 'Zoom in to see where the scenes of this date are.'};
         if (footprints.hasError()) return {kind: 'unknown', text: 'Could not load the data availability.'};
-        // the boxes load some levels before the tiles, so the imagery may not show yet
+        // Footprints and imagery share the same zoom cutoff.
         const zoomIn = this.shownPreset() && this.eodysseyLayerService.zoomRequired() ? '. Zoom in to load the imagery.' : '';
         switch (footprints.viewCoverage()) {
             case 'full':

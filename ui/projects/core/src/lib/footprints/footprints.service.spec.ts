@@ -17,6 +17,7 @@ describe('FootprintsService overlay', () => {
             (
                 id: string,
                 query: {precision?: RasterFootprintsPrecision; limit?: number; spatialBounds?: string; timeInterval?: string},
+                signal?: AbortSignal,
             ) => Promise<RasterFootprints>
         >();
 
@@ -127,6 +128,75 @@ describe('FootprintsService overlay', () => {
         service.overlayBlocked.set(false);
         await settle();
         expect(boxesRequests()).toBe(1);
+    });
+
+    it('keeps temporal availability while zoom-blocked, clears cached polygons and resumes coverage when allowed', async () => {
+        const box = {upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}};
+        const step = {time: {start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 3, 2)}, status: TimeStepFootprintStatus.Data, bounds: [box]};
+        getFootprints.mockImplementation((_id, query) => {
+            if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve({...FOOTPRINTS, steps: [step]});
+            const [start, end] = query.timeInterval!.split('/').map(Date.parse);
+            return Promise.resolve({...FOOTPRINTS, steps: start <= step.time.start && step.time.start < end ? [step] : []});
+        });
+        const service = createService();
+        service.datesNeeded.set(true);
+        openCalendar(service);
+        service.overlayVisible.set(true);
+        await settle();
+        expect(boxesRequests()).toBe(1);
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(1);
+        expect(service.steps()).toHaveLength(1);
+
+        service.overlayBlocked.set(true);
+        TestBed.tick();
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(0);
+        expect(service.steps()).toHaveLength(1);
+        const availabilityBefore = getFootprints.mock.calls.filter(
+            ([, query]) => query.precision === RasterFootprintsPrecision.Availability,
+        ).length;
+        viewport.next({extent: [-10, -10, 10, 10], resolution: 2});
+        await settle();
+        expect(boxesRequests()).toBe(1);
+        expect(
+            getFootprints.mock.calls.filter(([, query]) => query.precision === RasterFootprintsPrecision.Availability).length,
+        ).toBeGreaterThan(availabilityBefore);
+        expect(service.steps()).toHaveLength(1);
+        expect(service.viewCoverage()).toBeUndefined();
+
+        service.overlayBlocked.set(false);
+        await settle();
+        expect(boxesRequests()).toBe(2);
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(1);
+        service.overlayVisible.set(false);
+        TestBed.tick();
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(0);
+    });
+
+    it('aborts polygon searches when zoom becomes blocked without aborting temporal availability', async () => {
+        const coverageSignals: AbortSignal[] = [];
+        getFootprints.mockImplementation((_id, query, signal) => {
+            if (query.precision === RasterFootprintsPrecision.Coverage) {
+                coverageSignals.push(signal!);
+                return new Promise(() => undefined);
+            }
+            return Promise.resolve(FOOTPRINTS);
+        });
+        const service = createService();
+        service.datesNeeded.set(true);
+        service.overlayVisible.set(true);
+        await settle();
+        expect(coverageSignals).toHaveLength(1);
+        expect(coverageSignals[0].aborted).toBe(false);
+        service.overlayBlocked.set(true);
+        await settle();
+        expect(coverageSignals[0].aborted).toBe(true);
+        expect(service.overlayLoading()).toBe(false);
+        expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(0);
+        expect(
+            getFootprints.mock.calls.some(
+                ([, query, signal]) => query.precision === RasterFootprintsPrecision.Availability && !signal?.aborted,
+            ),
+        ).toBe(true);
     });
 
     it('asks the calendar for availability only', async () => {
