@@ -154,9 +154,11 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             gdal_config_options: None,
-            // as `Settings-default.toml`: GDAL links Armadillo, which links BLAS, and a threaded
+            // as `Settings-default.toml`: no speculative tile search in a patched OpenJPEG, which
+            // a crafted file can fool; GDAL links Armadillo, which links BLAS, and a threaded
             // OpenBLAS starts one idle thread per core in every worker as soon as it is loaded
             environment: vec![
+                ("OPJ_TILE_SEARCH".to_string(), "NO".to_string()),
                 ("OPENBLAS_NUM_THREADS".to_string(), "1".to_string()),
                 ("OMP_NUM_THREADS".to_string(), "1".to_string()),
             ],
@@ -1143,14 +1145,15 @@ mod tests {
         let mut config = WorkerConfig::default();
         config
             .environment
-            .push(("OPJ_PLT_MIN_GAP".to_string(), "131072".to_string()));
+            .push(("OPJ_TILE_INDEX_CACHE".to_string(), "NO".to_string()));
         let (child_guard, _sender, _receiver) =
             spawn_ipc_server_process::<WorkerRequest, WorkerResponse>(&config).unwrap();
 
         let environment =
             std::fs::read(format!("/proc/{}/environ", child_guard.child.id())).unwrap();
         let environment: Vec<&[u8]> = environment.split(|&byte| byte == 0).collect();
-        assert!(environment.contains(&b"OPJ_PLT_MIN_GAP=131072".as_slice()));
+        assert!(environment.contains(&b"OPJ_TILE_INDEX_CACHE=NO".as_slice()));
+        assert!(environment.contains(&b"OPJ_TILE_SEARCH=NO".as_slice()));
         assert!(environment.contains(&b"OPENBLAS_NUM_THREADS=1".as_slice()));
         assert!(environment.contains(&b"OMP_NUM_THREADS=1".as_slice()));
     }

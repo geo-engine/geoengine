@@ -281,6 +281,17 @@ endpoint = "http://127.0.0.1:4317"
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
 CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
+# With the patched OpenJPEG (see `environment` below), use 64 KB: it then fetches only the packets
+# a resolution needs, which 1 MB chunks would round up to whole tile-parts again. 256 KB was not
+# faster and downloaded about 45% more (Sentinel-2 bench). Stock OpenJPEG reads whole tile-parts,
+# so keep 1 MB with it.
+# Read 1 MB at once when a file is opened, so that 64 KB chunks do not slow down COGs: they keep
+# their header and smallest overviews at the start, which 1 MB chunks fetch in one request and
+# 64 KB chunks in several. With both, COG overviews were as fast as with 1 MB chunks and zooming
+# about 15% faster; JPEG 2000 files only download about 1 MB more per open (local bench, 100 ms per
+# request). Both options can also be set per dataset in its GDAL config options instead.
+# CPL_VSIL_CURL_CHUNK_SIZE = "65536"
+# GDAL_INGESTED_BYTES_AT_OPEN = "1048576"
 VSI_CACHE = "TRUE"
 VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open
 # block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process. With
@@ -308,8 +319,21 @@ GDAL_NUM_THREADS = "4"
 # server. For what GDAL reads as a config option, use `gdal_config_options` above instead; this is
 # for the dynamic loader and for libraries that read variables themselves, e.g. a different
 # OpenJPEG and its options:
-# LD_LIBRARY_PATH = "/opt/openjpeg/lib"
-# OPJ_PLT_MIN_GAP = "131072"
+# LD_LIBRARY_PATH = "/opt/openjpeg-plt/lib"
+#
+# No speculative tile search in the patched OpenJPEG of geoengine-container: for files without a
+# TLM index it would guess where a tile starts and scan for its marker, which a crafted file can
+# fool into decoding other data. Stock OpenJPEG ignores it.
+OPJ_TILE_SEARCH = "NO"
+# Set "YES" only if every file this deployment will ever read is trusted (e.g. only Sentinel-2
+# from CODE-DE or CREODIAS): OpenJPEG reads the variable from the worker's environment, so it
+# applies to all reads and cannot be set per dataset. For files without a TLM index it then finds
+# a tile without reading every tile header before it. Use it with the 64 KB chunks above.
+# OPJ_TILE_SEARCH = "YES"
+# Searches in the same part of a file wait for each other (default). "NO" lets them read in
+# parallel: faster on files with many nearly empty tiles (sea, no-data), but about 20% more
+# downloads, so keep the default.
+# OPJ_TILE_SEARCH_WAIT = "NO"
 #
 # One thread for the OpenBLAS and OpenMP pools: GDAL links them via Armadillo, and a threaded
 # OpenBLAS starts one idle thread per core in every worker as soon as it is loaded, before any GDAL

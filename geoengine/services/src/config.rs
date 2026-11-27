@@ -1183,22 +1183,22 @@ mod tests {
 
     #[test]
     fn it_lets_the_order_of_the_settings_decide_a_worker_environment_variable() {
-        let gaps = |local: Option<&str>, env: Option<&str>| {
-            worker_config(local, "ENVIRONMENT__OPJ_PLT_MIN_GAP", env)
+        let searches = |local: Option<&str>, env: Option<&str>| {
+            worker_config(local, "ENVIRONMENT__OPJ_TILE_SEARCH", env)
                 .environment
                 .into_iter()
-                .filter(|(name, _)| name.eq_ignore_ascii_case("OPJ_PLT_MIN_GAP"))
+                .filter(|(name, _)| name.eq_ignore_ascii_case("OPJ_TILE_SEARCH"))
                 .collect::<Vec<_>>()
         };
-        let gap = |size: &str| vec![("OPJ_PLT_MIN_GAP".to_string(), size.to_string())];
+        let search = |value: &str| vec![("OPJ_TILE_SEARCH".to_string(), value.to_string())];
         let local =
-            |name: &str| format!("[gdal_process_pool.worker.environment]\n{name} = \"131072\"\n");
+            |name: &str| format!("[gdal_process_pool.worker.environment]\n{name} = \"YES\"\n");
 
-        // the default sets no such variable, but one BLAS thread; a local table keeps those
-        assert_eq!(gaps(None, None), vec![]);
-        for local in [None, Some(local("OPJ_PLT_MIN_GAP"))] {
+        // the default turns the search off and sets one BLAS thread; a local table keeps those
+        assert_eq!(searches(None, None), search("NO"));
+        for local in [None, Some(local("OPJ_TILE_SEARCH"))] {
             let mut environment =
-                worker_config(local.as_deref(), "ENVIRONMENT__OPJ_PLT_MIN_GAP", None).environment;
+                worker_config(local.as_deref(), "ENVIRONMENT__OPJ_TILE_SEARCH", None).environment;
             environment.retain(|(name, _)| name.ends_with("_NUM_THREADS"));
             environment.sort();
             assert_eq!(
@@ -1207,13 +1207,13 @@ mod tests {
                     .map(|(name, value)| (name.to_string(), value.to_string()))
             );
         }
-        assert_eq!(gaps(None, Some("65536")), gap("65536"));
+        assert_eq!(searches(None, Some("YES")), search("YES"));
         // a local file sets it in any spelling, as one upper-case name; the environment wins
-        for name in ["OPJ_PLT_MIN_GAP", "opj_plt_min_gap", "Opj_Plt_Min_Gap"] {
-            assert_eq!(gaps(Some(&local(name)), None), gap("131072"), "{name}");
+        for name in ["OPJ_TILE_SEARCH", "opj_tile_search", "Opj_Tile_Search"] {
+            assert_eq!(searches(Some(&local(name)), None), search("YES"), "{name}");
             assert_eq!(
-                gaps(Some(&local(name)), Some("65536")),
-                gap("65536"),
+                searches(Some(&local(name)), Some("NO")),
+                search("NO"),
                 "{name}"
             );
         }
