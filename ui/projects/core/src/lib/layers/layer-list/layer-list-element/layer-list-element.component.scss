@@ -80,3 +80,20 @@ mat-progress-bar {
         padding: 0.25rem 0.5rem 0.5rem;
     }
 }
+
+// shown while the tiles of the layer wait for reads that their data source rate limits
+.rate-limit-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    color: var(--geoengine-foreground-text-color);
+
+    mat-icon {
+        flex-shrink: 0;
+        width: 1rem;
+        height: 1rem;
+        font-size: 1rem;
+    }
+}

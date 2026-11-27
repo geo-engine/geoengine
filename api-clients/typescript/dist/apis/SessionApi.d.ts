@@ -11,6 +11,7 @@
 import * as runtime from '../runtime';
 import { type AuthCodeRequestURL } from '../models/AuthCodeRequestURL';
 import { type AuthCodeResponse } from '../models/AuthCodeResponse';
+import { type ProcessingGraphReadStatus } from '../models/ProcessingGraphReadStatus';
 import { type STRectangle } from '../models/STRectangle';
 import { type UserCredentials } from '../models/UserCredentials';
 import { type UserRegistration } from '../models/UserRegistration';
@@ -123,6 +124,20 @@ export declare class SessionApi extends runtime.BaseAPI {
      * Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call.
      */
     oidcLogin(requestParameters: OidcLoginRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<UserSession>;
+    /**
+     * Creates request options for readStatusHandler without sending the request
+     */
+    readStatusHandlerRequestOpts(): Promise<runtime.RequestOpts>;
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    readStatusHandlerRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProcessingGraphReadStatus>>>;
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    readStatusHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProcessingGraphReadStatus>>;
     /**
      * Creates request options for registerUserHandler without sending the request
      */

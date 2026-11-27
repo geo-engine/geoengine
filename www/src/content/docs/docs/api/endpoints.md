@@ -154,17 +154,18 @@ The request and response bodies are described in the OpenAPI specification and t
 
 ## Session
 
-| Method | Path                         | Session | Description                                                                                                                                            |
-| ------ | ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST` | `/anonymous`                 | no      | Creates session for anonymous user. The session's id serves as a Bearer token for requests.                                                            |
-| `POST` | `/login`                     | no      | Creates a session by providing user credentials. The session's id serves as a Bearer token for requests.                                               |
-| `POST` | `/logout`                    | yes     | Ends a session.                                                                                                                                        |
-| `POST` | `/oidcInit`                  | no      | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.                                        |
-| `POST` | `/oidcLogin`                 | no      | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call. |
-| `GET`  | `/session`                   | yes     | Retrieves details about the current session.                                                                                                           |
-| `POST` | `/session/project/{project}` | yes     | Sets the active project of the session.                                                                                                                |
-| `POST` | `/session/view`              | yes     | Sets the view (spatial and temporal extent) of the current session.                                                                                    |
-| `POST` | `/user`                      | no      | Registers a user.                                                                                                                                      |
+| Method | Path                         | Session | Description                                                                                                                                                                  |
+| ------ | ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/anonymous`                 | no      | Creates session for anonymous user. The session's id serves as a Bearer token for requests.                                                                                  |
+| `POST` | `/login`                     | no      | Creates a session by providing user credentials. The session's id serves as a Bearer token for requests.                                                                     |
+| `POST` | `/logout`                    | yes     | Ends a session.                                                                                                                                                              |
+| `POST` | `/oidcInit`                  | no      | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.                                                              |
+| `POST` | `/oidcLogin`                 | no      | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call.                       |
+| `GET`  | `/session`                   | yes     | Retrieves details about the current session.                                                                                                                                 |
+| `POST` | `/session/project/{project}` | yes     | Sets the active project of the session.                                                                                                                                      |
+| `GET`  | `/session/readStatus`        | yes     | Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited. |
+| `POST` | `/session/view`              | yes     | Sets the view (spatial and temporal extent) of the current session.                                                                                                          |
+| `POST` | `/user`                      | no      | Registers a user.                                                                                                                                                            |
 
 ## Spatial References
 

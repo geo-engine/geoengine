@@ -27,11 +27,10 @@ mat-toolbar {
     z-index: 10;
 }
 
-.zoom-prompt {
+/* A hint on top of the map that never takes the pointer from it. */
+.map-prompt {
     position: absolute;
-    top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -46,6 +45,17 @@ mat-toolbar {
     mat-icon {
         flex-shrink: 0;
     }
+}
+
+.zoom-prompt {
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Next to the loading indicator, so the map stays visible while the tiles arrive. */
+.rate-limit-prompt {
+    bottom: 1.5rem;
+    transform: translateX(-50%);
 }
 
 mat-drawer {

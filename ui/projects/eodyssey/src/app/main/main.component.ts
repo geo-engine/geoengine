@@ -8,6 +8,7 @@ import {
     computed,
     inject,
     input,
+    resource,
     signal,
     viewChild,
 } from '@angular/core';
@@ -20,8 +21,17 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
-import {Layer, Time, UserService} from '@geoengine/common';
-import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, TMSId, WGS_84} from '@geoengine/core';
+import {Layer, LayersService, Time, UserService} from '@geoengine/common';
+import {
+    ProjectService,
+    MapService,
+    MapContainerComponent,
+    CoreModule,
+    ReadStatusService,
+    SpatialReferenceService,
+    TMSId,
+    WGS_84,
+} from '@geoengine/core';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -86,6 +96,23 @@ export class MainComponent {
     readonly zoomRequired = signal(false);
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
+
+    private readonly layersService = inject(LayersService);
+    private readonly readStatusService = inject(ReadStatusService);
+
+    /** The processing graph of the shown layer, which the tile requests register as well. */
+    private readonly mapTileProcessingGraphId = resource({
+        params: () => this.mapTileLayer(),
+        loader: ({params}): Promise<string> =>
+            this.layersService.registerAndGetLayerProcessingGraphId(params.dataConnectorId, params.layerId),
+    });
+
+    /** Whether the tiles of the shown layer wait for reads that their data source rate limits. */
+    readonly tilesRateLimited = this.readStatusService.throttled(
+        computed(() => this.tileLoading() && !this.zoomRequired()),
+        // without the id, e.g. if registering failed, there is just no hint
+        computed(() => (this.mapTileProcessingGraphId.hasValue() ? this.mapTileProcessingGraphId.value() : undefined)),
+    );
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);

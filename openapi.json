@@ -4840,6 +4840,45 @@
         ]
       }
     },
+    "/session/readStatus": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Lists the processing graphs whose queries in the current session wait for reads that their\ndata source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.",
+        "description": "Clients can poll this while a layer loads for long, to tell users why its tiles are late.",
+        "operationId": "read_status_handler",
+        "responses": {
+          "200": {
+            "description": "The rate limited processing graphs of the session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProcessingGraphReadStatus"
+                  }
+                },
+                "example": [
+                  {
+                    "processingGraphId": "c2b4f5a6-3e1d-5b8a-9f0e-7d6c5b4a3f21",
+                    "throttledReads": 3,
+                    "throttledForSeconds": 12.4,
+                    "httpStatus": 429,
+                    "retryInSeconds": 2.0
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/session/view": {
       "post": {
         "tags": [
@@ -12806,6 +12845,47 @@
       "ProcessingGraphId": {
         "type": "string",
         "format": "uuid"
+      },
+      "ProcessingGraphReadStatus": {
+        "type": "object",
+        "description": "A processing graph whose queries in the current session wait for reads that their data source\nrate limits. The reads are retried until they succeed, so its tiles arrive late, not never.",
+        "required": [
+          "processingGraphId",
+          "throttledReads",
+          "throttledForSeconds",
+          "httpStatus",
+          "retryInSeconds"
+        ],
+        "properties": {
+          "processingGraphId": {
+            "$ref": "#/components/schemas/ProcessingGraphId"
+          },
+          "throttledReads": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The number of reads that are currently rate limited.",
+            "minimum": 1
+          },
+          "throttledForSeconds": {
+            "type": "number",
+            "format": "double",
+            "description": "How long the first of these reads has been rate limited, in seconds.",
+            "minimum": 0
+          },
+          "httpStatus": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The HTTP status of the latest rate limit, 429 or 503.",
+            "maximum": 599,
+            "minimum": 100
+          },
+          "retryInSeconds": {
+            "type": "number",
+            "format": "double",
+            "description": "The pause before the next attempt of the latest rate limited read, in seconds. 0 if it\nis retried at once.",
+            "minimum": 0
+          }
+        }
       },
       "Project": {
         "type": "object",

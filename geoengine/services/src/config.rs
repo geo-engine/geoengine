@@ -605,6 +605,18 @@ pub struct GdalProcessPool {
     pub header_cache_entries: NonZeroUsize,
     #[serde(default)]
     pub worker: GdalProcessPoolWorkerConfig,
+    pub throttling: GdalProcessPoolThrottling,
+}
+
+/// How rate limits of data sources that GDAL workers read from are handled.
+#[serde_with::serde_as]
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct GdalProcessPoolThrottling {
+    /// Without a new rate limit for this long, a processing graph is not reported as waiting for
+    /// rate limited reads anymore. Whole seconds in the settings.
+    #[serde(rename = "status_expiry_seconds")]
+    #[serde_as(as = "serde_with::DurationSeconds<u64>")]
+    pub status_expiry: Duration,
 }
 
 impl GdalProcessPool {
@@ -1083,6 +1095,9 @@ mod tests {
             header_cache_entries:
                 geoengine_operators::source::gdal_worker_process::DEFAULT_HEADER_CACHE_ENTRIES,
             worker: GdalProcessPoolWorkerConfig::default(),
+            throttling: GdalProcessPoolThrottling {
+                status_expiry: Duration::from_secs(30),
+            },
         }
     }
 
@@ -1179,6 +1194,36 @@ mod tests {
                 max_duration_seconds: 20,
             }
         );
+    }
+
+    #[test]
+    fn it_reads_the_status_expiry_of_rate_limits_in_seconds() {
+        let expiry = |env: Option<&str>| {
+            let config = Config::builder()
+                .add_source(default_settings())
+                .add_source(
+                    Environment::with_prefix("geoengine")
+                        .separator("__")
+                        .source(Some(
+                            env.map(|env| {
+                                (
+                                "GEOENGINE__GDAL_PROCESS_POOL__THROTTLING__STATUS_EXPIRY_SECONDS"
+                                    .to_string(),
+                                env.to_string(),
+                            )
+                            })
+                            .into_iter()
+                            .collect(),
+                        )),
+                )
+                .build()
+                .unwrap();
+            let pool: GdalProcessPool = config.get(GdalProcessPool::KEY).unwrap();
+            pool.throttling.status_expiry
+        };
+
+        assert_eq!(expiry(None), Duration::from_secs(30));
+        assert_eq!(expiry(Some("5")), Duration::from_secs(5));
     }
 
     #[test]

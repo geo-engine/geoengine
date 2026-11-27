@@ -1,5 +1,5 @@
 import {ESCAPE} from '@angular/cdk/keycodes';
-import {NO_ERRORS_SCHEMA} from '@angular/core';
+import {NO_ERRORS_SCHEMA, WritableSignal, signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconRegistry} from '@angular/material/icon';
@@ -11,8 +11,16 @@ import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
 import {of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {SpatialReference, Time, UserService} from '@geoengine/common';
-import {CoreModule, DEFAULT_CORE_CONFIG, MapContainerComponent, MapService, ProjectService, SpatialReferenceService} from '@geoengine/core';
+import {LayersService, SpatialReference, Time, UserService} from '@geoengine/common';
+import {
+    CoreModule,
+    DEFAULT_CORE_CONFIG,
+    MapContainerComponent,
+    MapService,
+    ProjectService,
+    ReadStatusService,
+    SpatialReferenceService,
+} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 import {MainComponent} from './main.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
@@ -20,8 +28,10 @@ import {EOdysseyLayerService} from '../layers/layers.service';
 // Keep the real toolbar and bindings; the map and its HTTP requests are tested in core.
 describe('EOdyssey debug reprojection', () => {
     let fixture: ComponentFixture<MainComponent>;
+    let rateLimited: WritableSignal<boolean>;
 
     beforeEach(async () => {
+        rateLimited = signal(false);
         vi.stubGlobal(
             'ResizeObserver',
             class {
@@ -55,6 +65,8 @@ describe('EOdyssey debug reprojection', () => {
                     },
                 },
                 {provide: SpatialReferenceService, useValue: {reprojectExtent: vi.fn()}},
+                {provide: LayersService, useValue: {registerAndGetLayerProcessingGraphId: vi.fn().mockResolvedValue('graph')}},
+                {provide: ReadStatusService, useValue: {throttled: vi.fn(() => rateLimited)}},
                 {
                     provide: EOdysseyLayerService,
                     useValue: {
@@ -94,6 +106,21 @@ describe('EOdyssey debug reprojection', () => {
         button!.click();
         fixture.detectChanges();
     }
+
+    it('tells the user while the data source rate limits the tiles', () => {
+        const hint = (): Element | null => (fixture.nativeElement as HTMLElement).querySelector('.rate-limit-prompt');
+        fixture.detectChanges();
+        expect(hint()).toBeNull();
+
+        rateLimited.set(true);
+        fixture.detectChanges();
+        expect(hint()?.getAttribute('role')).toBe('status');
+        expect(hint()?.textContent).toContain('limiting requests');
+
+        rateLimited.set(false);
+        fixture.detectChanges();
+        expect(hint()).toBeNull();
+    });
 
     it('keeps backend reprojection and hides the controls without debug', () => {
         fixture.detectChanges();

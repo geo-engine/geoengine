@@ -23,6 +23,11 @@ import {
     AuthCodeResponseToJSON,
 } from '../models/AuthCodeResponse';
 import {
+    type ProcessingGraphReadStatus,
+    ProcessingGraphReadStatusFromJSON,
+    ProcessingGraphReadStatusToJSON,
+} from '../models/ProcessingGraphReadStatus';
+import {
     type STRectangle,
     STRectangleFromJSON,
     STRectangleToJSON,
@@ -329,6 +334,53 @@ export class SessionApi extends runtime.BaseAPI {
      */
     async oidcLogin(requestParameters: OidcLoginRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<UserSession> {
         const response = await this.oidcLoginRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for readStatusHandler without sending the request
+     */
+    async readStatusHandlerRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/session/readStatus`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    async readStatusHandlerRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProcessingGraphReadStatus>>> {
+        const requestOptions = await this.readStatusHandlerRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProcessingGraphReadStatusFromJSON));
+    }
+
+    /**
+     * Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+     * Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+     */
+    async readStatusHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProcessingGraphReadStatus>> {
+        const response = await this.readStatusHandlerRaw(initOverrides);
         return await response.value();
     }
 

@@ -13,6 +13,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use super::throttle::{ThrottleEvent, throttling_status_of_error_message};
 use super::{GdalDatasetGeoTransform, GdalDatasetParameters, GridAndProperties};
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
@@ -217,6 +218,9 @@ pub enum WorkerRequest {
 pub enum WorkerResponse {
     ReadResult(IpcProcessRasterResult),
     CachesCleared,
+    /// A request of the running read was rate limited and is retried. A worker sends any number
+    /// of these before the `ReadResult` of the read, see [`super::throttle`].
+    Throttled(ThrottleEvent),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -529,6 +533,9 @@ pub enum IpcProcessGdalErrorKind {
     AccessDenied,
     InvalidDataset,
     ConnectionTimeout,
+    /// The data source rate limits requests (HTTP 429, or 503 like S3's `SlowDown`). Retrying
+    /// later can help.
+    RateLimited,
     /// The netCDF driver needs `userfaultfd` to read files on remote `/vsi` file systems, and the
     /// kernel or a seccomp profile does not allow the syscall.
     UserfaultfdUnavailable,
@@ -602,6 +609,7 @@ impl std::fmt::Display for IpcProcessGdalErrorKind {
             Self::AccessDenied => "access denied",
             Self::InvalidDataset => "invalid dataset",
             Self::ConnectionTimeout => "connection timeout",
+            Self::RateLimited => "the data source is rate limiting requests",
             Self::UserfaultfdUnavailable => "remote NetCDF files cannot be read on this server",
             Self::Unknown => "unknown",
         })
@@ -615,6 +623,10 @@ impl std::fmt::Debug for IpcProcessGdalErrorKind {
             Self::AccessDenied => "AccessDenied",
             Self::InvalidDataset => "InvalidDataset",
             Self::ConnectionTimeout => "ConnectionTimeout",
+            Self::RateLimited => {
+                "RateLimited: the data source answered with HTTP 429 or 503. Lower \
+                 `max_active_processes` or `GDAL_NUM_THREADS`, or raise the limit of the data source"
+            }
             Self::UserfaultfdUnavailable => {
                 "UserfaultfdUnavailable: GDAL reads remote NetCDF files through the Linux \
                  `userfaultfd` syscall. In a container, allow it with a seccomp profile that \
@@ -716,6 +728,9 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
         let kind = match &err {
             _ if err_string.contains("userfaultfd") => {
                 IpcProcessGdalErrorKind::UserfaultfdUnavailable
+            }
+            _ if throttling_status_of_error_message(&err_string).is_some() => {
+                IpcProcessGdalErrorKind::RateLimited
             }
             gdal::errors::GdalError::NullPointer { method_name, msg }
                 if *method_name == "GDALOpenEx" && is_open_file_not_found_message(msg) =>

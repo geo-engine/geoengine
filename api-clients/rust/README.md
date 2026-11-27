@@ -107,6 +107,7 @@ Class | Method | HTTP request | Description
 *SessionApi* | [**logout_handler**](docs/SessionApi.md#logout_handler) | **POST** /logout | Ends a session.
 *SessionApi* | [**oidc_init**](docs/SessionApi.md#oidc_init) | **POST** /oidcInit | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 *SessionApi* | [**oidc_login**](docs/SessionApi.md#oidc_login) | **POST** /oidcLogin | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call.
+*SessionApi* | [**read_status_handler**](docs/SessionApi.md#read_status_handler) | **GET** /session/readStatus | Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
 *SessionApi* | [**register_user_handler**](docs/SessionApi.md#register_user_handler) | **POST** /user | Registers a user.
 *SessionApi* | [**session_handler**](docs/SessionApi.md#session_handler) | **GET** /session | Retrieves details about the current session.
 *SessionApi* | [**session_project_handler**](docs/SessionApi.md#session_project_handler) | **POST** /session/project/{project} | Sets the active project of the session.
@@ -387,6 +388,7 @@ Class | Method | HTTP request | Description
  - [PolygonRasterizationValueCount](docs/PolygonRasterizationValueCount.md)
  - [PolygonSymbology](docs/PolygonSymbology.md)
  - [ProcessingGraph](docs/ProcessingGraph.md)
+ - [ProcessingGraphReadStatus](docs/ProcessingGraphReadStatus.md)
  - [Project](docs/Project.md)
  - [ProjectLayer](docs/ProjectLayer.md)
  - [ProjectListing](docs/ProjectListing.md)

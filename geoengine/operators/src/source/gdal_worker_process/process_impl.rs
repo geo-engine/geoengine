@@ -2,8 +2,9 @@ use super::{
     GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
-        RasterInfo, level_of_factor,
+        IpcProcessGdalErrorKind, RasterInfo, level_of_factor,
     },
+    throttle::{ThrottleEvent, report_throttled, throttling_status_of_error_message},
 };
 use crate::util::{
     GdalConfigOptions,
@@ -493,8 +494,29 @@ impl GdalHandling {
                 })
             },
             IpcProcessError::is_permanent,
-            |error, decision| Self::log_retry_decision(dp, &limits, error, decision),
+            |error, decision| {
+                Self::log_retry_decision(dp, &limits, error, decision);
+                Self::report_rate_limited_retry(error, decision);
+            },
         )
+    }
+
+    /// Reports a retry of a read that the data source rate limited, see [`report_throttled`].
+    fn report_rate_limited_retry(error: &IpcProcessError, decision: RetryDecision) {
+        let RetryDecision::RetryAfter { delay, .. } = decision else {
+            return;
+        };
+        let IpcProcessError::GdalError {
+            kind: IpcProcessGdalErrorKind::RateLimited,
+            details,
+        } = error
+        else {
+            return;
+        };
+        report_throttled(ThrottleEvent {
+            http_status: throttling_status_of_error_message(details).unwrap_or(429),
+            retry_in: delay,
+        });
     }
 
     ///

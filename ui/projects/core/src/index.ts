@@ -48,6 +48,7 @@ export * from './lib/logo.component';
 export * from './lib/map/map-container/map-container.component';
 export * from './lib/map/map-info/map-resolution-extent-overlay.component';
 export * from './lib/map/map-layer.component';
+export * from './lib/map/read-status.service';
 export * from './lib/map/zoom-handles/zoom-handles.component';
 export * from './lib/operators/dialogs/band-neighborhood-aggregate/band-neighborhood-aggregate.component';
 export * from './lib/operators/dialogs/bandwise-expression-operator/bandwise-expression-operator.component';

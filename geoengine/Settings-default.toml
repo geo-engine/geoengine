@@ -342,6 +342,15 @@ max_backoff_seconds = 8
 # at most that timeout.
 max_duration_seconds = 180
 
+[gdal_process_pool.throttling]
+# How the server tells users that a data source rate limits the reads of their queries (HTTP 429,
+# or 503 like S3's `SlowDown`). Rate limited reads are retried and never aborted, see
+# `GDAL_HTTP_MAX_RETRY` and `[gdal_process_pool.worker.retry]`; the UI polls
+# `GET /session/readStatus` and shows a hint while a layer waits for them.
+# After this many seconds without a new rate limit, a layer is not reported anymore, even if its
+# reads still run.
+status_expiry_seconds = 30
+
 [data]
 volumes = { test_data = "test_data/" }
 

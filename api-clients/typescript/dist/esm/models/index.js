@@ -252,6 +252,7 @@ export * from './PolygonRasterizationValueConstant';
 export * from './PolygonRasterizationValueCount';
 export * from './PolygonSymbology';
 export * from './ProcessingGraph';
+export * from './ProcessingGraphReadStatus';
 export * from './Project';
 export * from './ProjectLayer';
 export * from './ProjectListing';

@@ -213,6 +213,12 @@
                 [mode]="(projectService.getLayerStatusStream(layer()) | async) === LoadingState.LOADING ? 'query' : 'determinate'"
                 [value]="100"
             ></mat-progress-bar>
+            @if (rateLimited()) {
+                <div class="rate-limit-hint" role="status">
+                    <mat-icon aria-hidden="true">hourglass_empty</mat-icon>
+                    <span>The data source is limiting requests. Tiles load with a delay.</span>
+                </div>
+            }
             <!--                    <mat-progress-bar-->
             <!--                        [mode]="(projectService.getLayerDataStatusStream(layer) | async) === LoadingState.LOADING ? 'query' : 'determinate'"-->
             <!--                        [value]="100"-->

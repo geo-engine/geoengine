@@ -9,6 +9,7 @@ Method | HTTP request | Description
 [**logout_handler**](SessionApi.md#logout_handler) | **POST** /logout | Ends a session.
 [**oidc_init**](SessionApi.md#oidc_init) | **POST** /oidcInit | Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 [**oidc_login**](SessionApi.md#oidc_login) | **POST** /oidcLogin | Creates a session for a user via a login with Open Id Connect. This call must be preceded by a call to oidcInit and match the parameters of that call.
+[**read_status_handler**](SessionApi.md#read_status_handler) | **GET** /session/readStatus | Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
 [**register_user_handler**](SessionApi.md#register_user_handler) | **POST** /user | Registers a user.
 [**session_handler**](SessionApi.md#session_handler) | **GET** /session | Retrieves details about the current session.
 [**session_project_handler**](SessionApi.md#session_project_handler) | **POST** /session/project/{project} | Sets the active project of the session.
@@ -150,6 +151,33 @@ No authorization required
 ### HTTP request headers
 
 - **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## read_status_handler
+
+> Vec<models::ProcessingGraphReadStatus> read_status_handler()
+Lists the processing graphs whose queries in the current session wait for reads that their data source rate limits, e.g. with HTTP 429. Empty while nothing is rate limited.
+
+Clients can poll this while a layer loads for long, to tell users why its tiles are late.
+
+### Parameters
+
+This endpoint does not need any parameter.
+
+### Return type
+
+[**Vec<models::ProcessingGraphReadStatus>**](ProcessingGraphReadStatus.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

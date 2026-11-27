@@ -502,6 +502,8 @@ pub mod polygon_symbology;
 pub use self::polygon_symbology::PolygonSymbology;
 pub mod processing_graph;
 pub use self::processing_graph::ProcessingGraph;
+pub mod processing_graph_read_status;
+pub use self::processing_graph_read_status::ProcessingGraphReadStatus;
 pub mod project;
 pub use self::project::Project;
 pub mod project_layer;
