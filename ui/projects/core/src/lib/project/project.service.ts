@@ -22,9 +22,11 @@ import {
     CollectionItem,
     GeoJson,
     OGCWFSApi,
-    Plot as PlotDict,
+    ProjectsApi,
+    SessionApi,
     PlotOperator,
-    ProjectLayer as ProjectLayerDict,
+    Project as ProjectDict,
+    ProjectLayerUpdate as ProjectLayerUpdateDict,
     ProviderLayerId,
     ProcessingGraph,
     ProvenanceEntry,
@@ -75,6 +77,7 @@ import {
     VectorLayerMetadata,
     ProcessingGraphsService,
     PlotsService,
+    PROJECTS_PROVIDER_ID,
 } from '@geoengine/common';
 import {Project} from './project.model';
 import {CoreConfig} from '../config.service';
@@ -82,6 +85,7 @@ import {LoadingState} from './loading-state.model';
 import {BBoxDict, ToDict, UUID} from '../backend/backend.model';
 import {BackendService} from '../backend/backend.service';
 import {MapService, ViewportSize} from '../map/map.service';
+import type {TileLoadState} from '../map/tile-loader';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 import {Session} from '../users/session.model';
 import {getProjectionTarget} from '../util/spatial_reference';
@@ -110,23 +114,23 @@ export class ProjectService implements OnDestroy {
 
     private project$ = new ReplaySubject<Project | undefined>(1);
 
-    private readonly layers = new Map<number, ReplaySubject<Layer>>();
-    private readonly layerState$ = new Map<number, Observable<LoadingState>>();
+    private readonly layers = new Map<string, ReplaySubject<Layer>>();
+    private readonly layerState$ = new Map<string, Observable<LoadingState>>();
 
-    private readonly layerMetadata$ = new Map<number, ReplaySubject<LayerMetadata>>();
-    private readonly layerMetadataState$ = new Map<number, ReplaySubject<LoadingState>>();
+    private readonly layerMetadata$ = new Map<string, ReplaySubject<LayerMetadata>>();
+    private readonly layerMetadataState$ = new Map<string, ReplaySubject<LoadingState>>();
 
-    private readonly layerData$ = new Map<number, ReplaySubject<LayerData | undefined>>();
-    private readonly layerDataState$ = new Map<number, ReplaySubject<LoadingState>>();
-    private readonly layerDataSubscriptions = new Map<number, Subscription>();
+    private readonly layerData$ = new Map<string, ReplaySubject<LayerData | undefined>>();
+    private readonly layerDataState$ = new Map<string, ReplaySubject<LoadingState>>();
+    private readonly layerDataSubscriptions = new Map<string, Subscription>();
 
     private readonly newLayer$ = new Subject<void>();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private readonly plotData$ = new Map<number, ReplaySubject<any>>();
-    private readonly plotError$ = new Map<number, ReplaySubject<GeoEngineError | undefined>>();
-    private readonly plotDataState$ = new Map<number, ReplaySubject<LoadingState>>();
-    private readonly plotDataSubscriptions = new Map<number, Subscription>();
+    private readonly plotData$ = new Map<string, ReplaySubject<any>>();
+    private readonly plotError$ = new Map<string, ReplaySubject<GeoEngineError | undefined>>();
+    private readonly plotDataState$ = new Map<string, ReplaySubject<LoadingState>>();
+    private readonly plotDataSubscriptions = new Map<string, Subscription>();
     private readonly newPlot$ = new Subject<void>();
 
     private readonly selectedFeature$ = new BehaviorSubject<FeatureSelection>({feature: undefined});
@@ -138,6 +142,15 @@ export class ProjectService implements OnDestroy {
         if (!sessionToken) return new ProcessingGraphsApi();
         return new ProcessingGraphsApi(apiConfigurationWithAccessKey(sessionToken));
     });
+
+    /** The data connector that provides the layers and plots of projects. */
+    readonly projectsDataConnectorId = PROJECTS_PROVIDER_ID;
+
+    /** The time of the current project, e.g. for rendering its layers. */
+    readonly projectTime = toSignal(this.getTimeStream());
+
+    /** The spatial reference of the current project, e.g. for rendering its layers. */
+    readonly projectSpatialReference = toSignal(this.getSpatialReferenceStream());
 
     constructor() {
         const config = this.config;
@@ -233,8 +246,8 @@ export class ProjectService implements OnDestroy {
     }): Observable<Project> {
         return this.userService.getSessionTokenForRequest().pipe(
             mergeMap((sessionToken) =>
-                this.backend.createProject(
-                    {
+                this.projectsApi(sessionToken).createProjectHandler({
+                    createProject: {
                         name: config.name,
                         description: config.description,
                         bounds: {
@@ -244,8 +257,7 @@ export class ProjectService implements OnDestroy {
                         },
                         timeStep: timeStepDurationToTimeStepDict(config.timeStepDuration),
                     },
-                    sessionToken,
-                ),
+                }),
             ),
             map(
                 ({id}) =>
@@ -296,19 +308,17 @@ export class ProjectService implements OnDestroy {
                 ]),
             ),
             mergeMap(([project, sessionToken]) =>
-                combineLatest([
-                    of(project),
-                    this.backend.updateProject(
-                        {
-                            id: project.id,
-                            layers: project.layers.map((layer) => layer.toDict()),
-                            // TODO: plots
-                        },
-                        sessionToken,
-                    ),
-                ]),
+                this.projectsApi(sessionToken).updateProjectHandler({
+                    project: project.id,
+                    updateProject: {
+                        id: project.id,
+                        // the layers and plots are new layers of the new project, so they get new ids
+                        layers: project.layers.map((layer) => ({...layer.toDict(), id: undefined})),
+                        plots: project.plots.map((plot) => ({...plot.toDict(), id: undefined})),
+                    },
+                }),
             ),
-            map(([project, _]) => project),
+            map((dict) => Project.fromDict(dict)),
         );
     }
 
@@ -332,7 +342,7 @@ export class ProjectService implements OnDestroy {
      */
     setProject(project: Project): void {
         // clear all subjects
-        for (const subjectMap of [this.layers, this.layerData$, this.layerDataState$] as Array<Map<number, ReplaySubject<unknown>>>) {
+        for (const subjectMap of [this.layers, this.layerData$, this.layerDataState$] as Array<Map<string, ReplaySubject<unknown>>>) {
             subjectMap.forEach((subject) => subject.complete());
             subjectMap.clear();
         }
@@ -360,7 +370,11 @@ export class ProjectService implements OnDestroy {
         this.project$.next(project);
 
         // store current project in session
-        this.userService.getSessionTokenForRequest().subscribe((sessionToken) => this.backend.setSessionProject(project.id, sessionToken));
+        this.userService.getSessionTokenForRequest().subscribe((sessionToken) => {
+            new SessionApi(apiConfigurationWithAccessKey(sessionToken))
+                .sessionProjectHandler({project: project.id})
+                .catch((error: unknown) => console.error('Could not store the project in the session', error));
+        });
     }
 
     /**
@@ -525,27 +539,41 @@ export class ProjectService implements OnDestroy {
     /**
      * Add a new layer to the project.
      */
-    addLayer(layer: Layer, notify = true): Observable<void> {
-        return this.addLayers([layer], notify);
+    addLayer<L extends Layer>(layer: L, notify = true): Observable<L> {
+        // the stored layer is an updated copy of `layer`, so it has the same type
+        return this.addLayers([layer], notify).pipe(map(([savedLayer]) => savedLayer as L));
     }
 
     /**
      * Add a set of new layers to the project.
+     *
+     * The layers are stored in the project first, which gives them their ids.
+     * Returns the stored layers, in the same order as `layers`.
      */
-    addLayers(layers: Array<Layer>, notify = true): Observable<void> {
-        layers.forEach((layer) => {
-            this.createLayerChangesStream(layer);
-            this.createLayerMetadataStreams(layer);
-            this.createLayerDataStreams(layer);
-            this.createCombinedLoadingState(layer);
-        });
+    addLayers(layers: Array<Layer>, notify = true): Observable<Array<Layer>> {
+        let savedLayers: Array<Layer> = [];
 
         const result = this.getProjectOnce().pipe(
             mergeMap((project) =>
-                this.changeProjectConfig({
-                    layers: [...layers].reverse().concat(project.layers),
-                }),
+                this.changeProjectConfigAndGet(
+                    {
+                        layers: [...layers].reverse().concat(project.layers),
+                    },
+                    (savedProject) => {
+                        // the new layers are at the front, in reverse order
+                        savedLayers = savedProject.layers.slice(0, layers.length).reverse();
+
+                        // create the streams before the layers appear in the project
+                        savedLayers.forEach((layer) => {
+                            this.createLayerChangesStream(layer);
+                            this.createLayerMetadataStreams(layer);
+                            this.createLayerDataStreams(layer);
+                            this.createCombinedLoadingState(layer);
+                        });
+                    },
+                ),
             ),
+            map(() => savedLayers),
             tap(() => {
                 if (notify) {
                     this.newLayer$.next();
@@ -559,15 +587,23 @@ export class ProjectService implements OnDestroy {
     /**
      * Add a plot to the project.
      */
-    addPlot(plot: Plot, notify = true): Promise<void> {
-        this.createPlotDataStreams(plot);
+    addPlot(plot: Plot, notify = true): Promise<Plot> {
+        let savedPlot: Plot | undefined;
 
         const result = this.getProjectOnce().pipe(
             mergeMap((project) =>
-                this.changeProjectConfig({
-                    plots: [plot, ...project.plots],
-                }),
+                this.changeProjectConfigAndGet(
+                    {
+                        plots: [plot, ...project.plots],
+                    },
+                    (savedProject) => {
+                        savedPlot = savedProject.plots[0];
+                        // create the streams before the plot appears in the project
+                        this.createPlotDataStreams(savedPlot);
+                    },
+                ),
             ),
+            map(() => savedPlot!),
             tap(() => {
                 if (notify) {
                     this.newPlot$.next();
@@ -810,6 +846,14 @@ export class ProjectService implements OnDestroy {
     /**
      * Change the loading state of a raster layer
      */
+    /**
+     * Reports the load state of the tiles of a raster layer, e.g. from its map layer.
+     */
+    reportRasterLayerLoadState(layerId: string, state: TileLoadState): void {
+        const loadingState = {idle: LoadingState.OK, loading: LoadingState.LOADING, error: LoadingState.ERROR};
+        this.changeRasterLayerDataStatus({id: layerId, layerType: 'raster'}, loadingState[state]);
+    }
+
     changeRasterLayerDataStatus(layer: HasLayerId & HasLayerType, state: LoadingState): void {
         if (layer.layerType === 'raster') {
             this.layerDataState$.get(layer.id)?.next(state);
@@ -962,7 +1006,7 @@ export class ProjectService implements OnDestroy {
 
     loadAndSetProject(projectId: UUID): Observable<Project> {
         const result = this.userService.getSessionTokenForRequest().pipe(
-            mergeMap((sessionToken) => this.backend.loadProject(projectId, sessionToken)),
+            mergeMap((sessionToken) => this.projectsApi(sessionToken).loadProjectLatestHandler({project: projectId})),
             map(Project.fromDict),
             tap((project) => this.setProject(project)),
         );
@@ -998,7 +1042,7 @@ export class ProjectService implements OnDestroy {
      *
      * Emits the condition that made the request obsolete, e.g. `'time changed'`, for diagnostics.
      */
-    createQueryAbortStream(layerId: number): Observable<string> {
+    createQueryAbortStream(layerId: string): Observable<string> {
         // create an observable that emits when the layer is removed
         const layerStream = this.layers.get(layerId);
         const layerRemovedSubject = new BehaviorSubject<boolean>(false);
@@ -1081,7 +1125,7 @@ export class ProjectService implements OnDestroy {
 
         if (oldProject) {
             try {
-                await firstValueFrom(this.backend.deleteProject(oldProject.id, sessionToken));
+                await this.projectsApi(sessionToken).deleteProjectHandler({project: oldProject.id});
             } catch (_error) {
                 // could not delete the old project, maybe because the user changed
                 // TODO: remove temporary projects and do not use the project servive for dashboards
@@ -1097,32 +1141,29 @@ export class ProjectService implements OnDestroy {
             projectIdLookup = of(session.lastProjectId);
         } else {
             // try to find the least recently used project id
-            projectIdLookup = this.backend
-                .listProjects(
-                    {
-                        permissions: ['Owner'],
-                        filter: 'None',
-                        order: 'DateDesc',
-                        offset: 0,
-                        limit: 1,
-                    },
-                    session.sessionToken,
-                )
-                .pipe(
-                    map((listings) => {
-                        if (listings.length > 0) {
-                            return listings[0].id;
-                        } else {
-                            return undefined;
-                        }
-                    }),
-                );
+            projectIdLookup = from(
+                this.projectsApi(session.sessionToken).listProjectsHandler({
+                    order: 'DateDesc',
+                    offset: 0,
+                    limit: 1,
+                }),
+            ).pipe(
+                map((listings) => {
+                    if (listings.length > 0) {
+                        return listings[0].id;
+                    } else {
+                        return undefined;
+                    }
+                }),
+            );
         }
 
         return projectIdLookup.pipe(
             mergeMap((projectId) => {
                 if (projectId) {
-                    return this.backend.loadProject(projectId, session.sessionToken).pipe(map(Project.fromDict));
+                    return from(this.projectsApi(session.sessionToken).loadProjectLatestHandler({project: projectId})).pipe(
+                        map(Project.fromDict),
+                    );
                 } else {
                     return this.createDefaultProject();
                 }
@@ -1175,6 +1216,26 @@ export class ProjectService implements OnDestroy {
         // TODO: optimize deletions, etc.
     }
 
+    /**
+     * Takes the ids that the server assigned to new layers or plots.
+     * The stored list has the same order as the local one, and layers that were stored before keep
+     * their objects, so that they stay equal to the local ones.
+     */
+    protected static withStoredIds<Content extends {readonly isSaved: boolean; updateFields(changes: {id?: string}): Content}>(
+        local: Array<Content>,
+        stored: Array<{id: string}>,
+    ): Array<Content> {
+        if (local.length !== stored.length) {
+            throw new Error('The stored project does not match the local one.');
+        }
+
+        return local.map((content, i) => (content.isSaved ? content : content.updateFields({id: stored[i].id})));
+    }
+
+    protected projectsApi(sessionToken: UUID): ProjectsApi {
+        return new ProjectsApi(apiConfigurationWithAccessKey(sessionToken));
+    }
+
     protected changeProjectConfig(changes: {
         id?: UUID;
         name?: string;
@@ -1190,33 +1251,63 @@ export class ProjectService implements OnDestroy {
             return subscribeAndProvide(of(undefined));
         }
 
+        return subscribeAndProvide(this.changeProjectConfigAndGet(changes).pipe(map(() => undefined)));
+    }
+
+    /**
+     * Stores the changes and returns the stored project, whose new layers and plots have ids.
+     * `beforePropagation` is called with the stored project before it is propagated.
+     */
+    protected changeProjectConfigAndGet(
+        changes: {
+            id?: UUID;
+            name?: string;
+            spatialReference?: SpatialReference;
+            bbox?: BBoxDict;
+            time?: Time;
+            plots?: Array<Plot>;
+            layers?: Array<Layer>;
+            timeStepDuration?: TimeStepDuration;
+        },
+        beforePropagation?: (project: Project) => void,
+    ): Observable<Project> {
         const result = combineLatest([this.getProjectOnce(), this.userService.getSessionTokenForRequest()]).pipe(
             mergeMap(([oldProject, sessionToken]) => {
                 const project: Project = oldProject.updateFields(changes);
 
-                return this.backend
-                    .updateProject(
-                        {
+                return from(
+                    this.projectsApi(sessionToken).updateProjectHandler({
+                        project: project.id,
+                        updateProject: {
                             id: project.id,
                             name: changes.name,
                             layers: changes.layers
-                                ? ProjectService.optimizeVecUpdates<Layer, ProjectLayerDict>(oldProject.layers, project.layers)
+                                ? ProjectService.optimizeVecUpdates<Layer, ProjectLayerUpdateDict>(oldProject.layers, project.layers)
                                 : undefined,
                             plots: changes.plots
-                                ? ProjectService.optimizeVecUpdates<Plot, PlotDict>(oldProject.plots, project.plots)
+                                ? ProjectService.optimizeVecUpdates<Plot, ProjectLayerUpdateDict>(oldProject.plots, project.plots)
                                 : undefined,
                             bounds: changes.time || changes.spatialReference || changes.bbox ? project.toBoundsDict() : undefined,
                             // TODO: description: changes.description,
                             timeStep: changes.timeStepDuration ? timeStepDurationToTimeStepDict(changes.timeStepDuration) : undefined,
                         },
-                        sessionToken,
-                    )
-                    .pipe(map(() => project));
+                    }),
+                ).pipe(
+                    map((stored: ProjectDict) =>
+                        project.updateFields({
+                            layers: ProjectService.withStoredIds(project.layers, stored.layers),
+                            plots: ProjectService.withStoredIds(project.plots, stored.plots),
+                            version: stored.version,
+                        }),
+                    ),
+                );
             }),
             map((project) => {
+                beforePropagation?.(project);
+
                 this.project$.next(project);
 
-                return undefined;
+                return project;
             }),
         );
 
@@ -1382,7 +1473,7 @@ export class ProjectService implements OnDestroy {
                 debounceTime(this.config.DELAYS.DEBOUNCE),
                 tap(() => loadingState$.next(LoadingState.LOADING)),
                 switchMap(async ({time, spatialReference, viewport, isClusteredOrSimplified, workflowMetadata, originalWorkflow}) => {
-                    let workflowId: UUID;
+                    let workflowId: UUID | undefined;
                     const cacheEntry = workflowIdCache.get([spatialReference, viewport.resolution]);
                     if (cacheEntry) {
                         workflowId = cacheEntry;
@@ -1416,8 +1507,8 @@ export class ProjectService implements OnDestroy {
 
                         workflowIdCache.set([spatialReference, viewport.resolution], workflowId);
                     } else {
-                        // no need to change the workflow
-                        workflowId = layer.workflowId;
+                        // no need to change the workflow, so query the project layer itself
+                        workflowId = undefined;
                     }
 
                     const ogcWfsApi = await firstValueFrom(this.ogcWfsApi);
@@ -1426,8 +1517,8 @@ export class ProjectService implements OnDestroy {
                         service: 'WFS',
                         version: '2.0.0',
                         request: 'GetFeature',
-                        processingGraph: workflowId,
-                        typeNames: workflowId,
+                        processingGraph: workflowId ?? layer.id,
+                        typeNames: workflowId ?? `layer:${PROJECTS_PROVIDER_ID}:${layer.id}`,
                         bbox: bboxDictToExtent(extentToBboxDict(viewport.extent)).join(','),
                         time: `${unixTimestampToIsoString(time.toDict().start)}/${unixTimestampToIsoString(time.toDict().end)}`,
                         srsName: spatialReference.srsString,
@@ -1521,7 +1612,14 @@ export class ProjectService implements OnDestroy {
 
                             // no resolution, so that the plot is computed on the native resolution of the data
                             this.plotsService
-                                .getPlot(plot.workflowId, extentToBboxDict(viewport.extent), time, undefined, sref, abortController.signal)
+                                .getLayerPlot(
+                                    PROJECTS_PROVIDER_ID,
+                                    plot.id,
+                                    extentToBboxDict(viewport.extent),
+                                    time,
+                                    sref,
+                                    abortController.signal,
+                                )
                                 .then((data) => {
                                     loadingState$.next(LoadingState.OK);
                                     subscriber.next(data);
@@ -1556,7 +1654,12 @@ export class ProjectService implements OnDestroy {
             .map((layer) => this.layersService.resolveLayer(layer.id));
 
         // TODO: lookup in parallel
-        return subscribeAndProvide(zip(layersObservable).pipe(mergeMap((layers) => this.addLayers(layers))));
+        return subscribeAndProvide(
+            zip(layersObservable).pipe(
+                mergeMap((layers) => this.addLayers(layers)),
+                map(() => undefined),
+            ),
+        );
     }
 
     /**

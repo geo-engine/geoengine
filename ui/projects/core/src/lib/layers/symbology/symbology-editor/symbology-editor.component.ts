@@ -1,7 +1,8 @@
 import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, viewChild} from '@angular/core';
 import {MatButton} from '@angular/material/button';
-import {BehaviorSubject, Subscription, combineLatest} from 'rxjs';
+import {BehaviorSubject, Subject, Subscription, combineLatest} from 'rxjs';
+import {debounceTime} from 'rxjs/operators';
 import {
     Layer,
     RasterLayer,
@@ -15,6 +16,7 @@ import {
     CommonModule,
     AsyncValueDefault,
 } from '@geoengine/common';
+import {CoreConfig} from '../../../config.service';
 import {DialogHelpComponent} from '../../../dialogs/dialog-help/dialog-help.component';
 import {MapService} from '../../../map/map.service';
 import {ProjectService} from '../../../project/project.service';
@@ -30,6 +32,7 @@ import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-he
 export class SymbologyEditorComponent implements OnInit, OnDestroy {
     private readonly projectService = inject(ProjectService);
     private readonly mapService = inject(MapService);
+    private readonly config = inject(CoreConfig);
 
     readonly layer = input.required<Layer>();
 
@@ -46,6 +49,15 @@ export class SymbologyEditorComponent implements OnInit, OnDestroy {
 
     rasterSymbology?: RasterSymbology = undefined;
 
+    /**
+     * Vector symbology changes are applied while editing. Every change stores the project and
+     * reloads the layer, so they are debounced.
+     */
+    private readonly vectorSymbologyChanges$ = new Subject<VectorSymbology>();
+    private readonly vectorSymbologySubscription = this.vectorSymbologyChanges$
+        .pipe(debounceTime(this.config.DELAYS.DEBOUNCE))
+        .subscribe((vectorSymbology) => this.projectService.changeLayer(this.layer(), {symbology: vectorSymbology}));
+
     ngOnInit(): void {
         this.setUp();
         this.createHistogramParamsSubscription();
@@ -55,6 +67,7 @@ export class SymbologyEditorComponent implements OnInit, OnDestroy {
         if (this.queryParamsSubscription) {
             this.queryParamsSubscription.unsubscribe();
         }
+        this.vectorSymbologySubscription.unsubscribe();
     }
 
     applyRasterChanges(): void {
@@ -81,7 +94,7 @@ export class SymbologyEditorComponent implements OnInit, OnDestroy {
     }
 
     changeVectorSymbology(vectorSymbology: VectorSymbology): void {
-        this.projectService.changeLayer(this.layer(), {symbology: vectorSymbology});
+        this.vectorSymbologyChanges$.next(vectorSymbology);
     }
 
     private createHistogramParamsSubscription(): void {

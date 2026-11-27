@@ -35,21 +35,30 @@ class TestLayerUpdate(unittest.TestCase):
         model = LayerUpdate()
         if include_optional:
             return LayerUpdate(
-                processing_graph = '',
+                id = '',
                 name = '',
+                description = '',
+                processing_graph = '',
+                symbology = None,
+                properties = [
+                    [
+                        ''
+                        ]
+                    ],
+                metadata = {
+                    'key' : ''
+                    },
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
                     legend = True, ),
-                symbology = None
+                source = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
+                    provider_id = '', 
+                    layer_id = '', )
             )
         else:
             return LayerUpdate(
-                processing_graph = '',
                 name = '',
-                visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
-                    data = True, 
-                    legend = True, ),
-                symbology = None,
+                processing_graph = '',
         )
         """
 

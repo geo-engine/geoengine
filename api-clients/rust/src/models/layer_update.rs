@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum LayerUpdate {
     ProjectUpdateToken(models::ProjectUpdateToken),
-    ProjectLayer(Box<models::ProjectLayer>),
+    ProjectLayerUpdate(Box<models::ProjectLayerUpdate>),
 }
 
 impl Default for LayerUpdate {

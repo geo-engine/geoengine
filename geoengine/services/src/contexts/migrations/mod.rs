@@ -27,6 +27,7 @@ pub use crate::contexts::migrations::{
     migration_0040_stac_coarser_assets::Migration0040StacCoarserAssets,
     migration_0041_non_zero_max_overview_level::Migration0041NonZeroMaxOverviewLevel,
     migration_0042_stac_netcdf_assets::Migration0042StacNetcdfAssets,
+    migration_0043_project_layer_ids::Migration0043ProjectLayerIds,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -61,6 +62,7 @@ mod migration_0039_max_overview_level;
 mod migration_0040_stac_coarser_assets;
 mod migration_0041_non_zero_max_overview_level;
 mod migration_0042_stac_netcdf_assets;
+mod migration_0043_project_layer_ids;
 
 #[cfg(test)]
 mod schema_info;
@@ -109,6 +111,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0040StacCoarserAssets),
         Box::new(Migration0041NonZeroMaxOverviewLevel),
         Box::new(Migration0042StacNetcdfAssets),
+        Box::new(Migration0043ProjectLayerIds),
     ]
 }
 

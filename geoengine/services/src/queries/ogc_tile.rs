@@ -11,7 +11,10 @@ use crate::{
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
-    processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
+    processing_graphs::{
+        processing_graph::{ProcessingGraph, ProcessingGraphId},
+        registry::ProcessingGraphRegistry,
+    },
     projects::Symbology,
     queries::raster_grid::{RasterEncoding, encode},
     quota::ComputationId,
@@ -34,6 +37,7 @@ use geoengine_operators::{
     },
 };
 use ogcapi_types::tiles::TileMatrixSetId;
+use serde::Serialize;
 use std::collections::HashSet;
 use tracing::{Instrument, debug_span};
 
@@ -164,16 +168,69 @@ impl FieldSelection {
     }
 }
 
-/// Renders the map tile of `query` as PNG
+/// Loads the layer of `query`.
+///
+/// This is cheap and checks the permissions, so it can be done before rendering, e.g. to compute
+/// an `ETag` with [`tile_etag`].
+pub async fn load_tile_layer<C: ApplicationContext>(
+    ctx: &C::SessionContext,
+    query: &TileQuery,
+) -> OgcApiResult<Layer> {
+    load_layer::<C>(ctx, query.data_connector_id, query.layer_id.clone())
+        .instrument(debug_span!("load_processing_graph"))
+        .await
+}
+
+/// The entity tag of the tile of `query` for `layer`.
+///
+/// It is a weak entity tag, because it is derived from the inputs of the rendering and not from
+/// the bytes of the PNG: the same inputs give an equivalent tile, but not necessarily the same bytes.
+///
+/// It identifies everything that determines the rendered tile except for the data itself:
+/// the processing graph, the symbology, the tile and the time.
+/// Changes of the data are covered by the cache duration of the tile.
+///
+/// # Panics
+///
+/// Never, because the fingerprint of a tile consists of serializable values.
+pub fn tile_etag(layer: &Layer, query: &TileQuery) -> String {
+    /// Everything that determines a rendered tile except for the data.
+    /// Its serialization is deterministic, because it contains no hash maps.
+    #[derive(Serialize)]
+    struct TileFingerprint<'a> {
+        processing_graph: ProcessingGraphId,
+        symbology: &'a Option<Symbology>,
+        tile_matrix_set: String,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+        time: TimeInterval,
+    }
+
+    let fingerprint = TileFingerprint {
+        processing_graph: ProcessingGraphId::from_hash(&layer.processing_graph),
+        symbology: &layer.symbology,
+        tile_matrix_set: format!("{:?}", query.tile_matrix_set_id),
+        tile_matrix: query.tile_matrix,
+        tile_row: query.tile_row,
+        tile_col: query.tile_col,
+        time: query.time_interval,
+    };
+
+    let fingerprint = serde_json::to_vec(&fingerprint)
+        .expect("the tile fingerprint consists of serializable values");
+    let hash = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, &fingerprint);
+
+    format!("W/\"{}\"", hash.simple())
+}
+
+/// Renders the map tile of `query` as PNG for `layer`, which is the layer of [`load_tile_layer`]
 pub async fn render_tile<C: ApplicationContext>(
     ctx: C::SessionContext,
     query: TileQuery,
+    layer: Layer,
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
-
-    let layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
-        .instrument(debug_span!("load_processing_graph"))
-        .await?;
 
     // the colorizer of the layer's symbology, or else one for the layer's data; it also chooses the
     // resampling methods (see `WarpMethods::for_symbology`), unless `[ogc] map_resampling` is
@@ -342,9 +399,7 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
 
-    let layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
-        .instrument(debug_span!("load_processing_graph"))
-        .await?;
+    let layer = load_tile_layer::<C>(&ctx, &query).await?;
 
     // nearest neighbour, so that the values are values of the data
     let tile = tile_on_grid(layer.processing_graph, &execution_context, &query, |_| {

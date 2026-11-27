@@ -2,8 +2,11 @@ use crate::config::ProjectService;
 use crate::config::get_config_element;
 use crate::error::Result;
 use crate::identifier;
-use crate::processing_graphs::processing_graph::ProcessingGraphId;
+use crate::layers::layer::{Layer, Property, ProviderLayerId};
+use crate::layers::storage::PROJECTS_PROVIDER_ID;
+use crate::processing_graphs::processing_graph::{ProcessingGraph, ProcessingGraphId};
 use crate::projects::error::ProjectDbError;
+use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
@@ -20,6 +23,7 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::{convert::TryInto, fmt::Debug};
 use utoipa::PartialSchema;
 use utoipa::{IntoParams, ToSchema};
@@ -35,7 +39,7 @@ pub struct Project {
     pub name: String,
     pub description: String,
     pub layers: Vec<ProjectLayer>,
-    pub plots: Vec<Plot>,
+    pub plots: Vec<ProjectLayer>,
     pub bounds: STRectangle,
     pub time_step: TimeStep,
 }
@@ -63,29 +67,67 @@ impl Project {
     /// If the updates layer list is longer than the current list,
     /// it just inserts new layers to the end.
     ///
-    pub fn update_project(&self, update: UpdateProject) -> Result<Project, ProjectDbError> {
-        fn update_layer_or_plots<Content>(
+    /// New layers and plots get a new id.
+    /// Updated layers and plots keep their id, which must belong to a layer or plot of this project.
+    /// `processing_graphs` must contain the processing graphs of all updated layers and plots.
+    ///
+    pub fn update_project(
+        &self,
+        update: UpdateProject,
+        processing_graphs: &HashMap<ProcessingGraphId, ProcessingGraph>,
+    ) -> Result<Project, ProjectDbError> {
+        fn update_layer_or_plots(
             project: ProjectId,
-            state: Vec<Content>,
-            updates: Vec<VecUpdate<Content>>,
-        ) -> Result<Vec<Content>, ProjectDbError> {
+            state: &[ProjectLayer],
+            updates: Vec<VecUpdate<ProjectLayerUpdate>>,
+            processing_graphs: &HashMap<ProcessingGraphId, ProcessingGraph>,
+        ) -> Result<Vec<ProjectLayer>, ProjectDbError> {
+            let existing_ids: HashSet<LayerId> = state
+                .iter()
+                .map(|layer| layer.layer.id.layer_id.clone())
+                .collect();
+
+            let into_layer = |update: ProjectLayerUpdate| {
+                if let Some(id) = &update.id
+                    && !existing_ids.contains(id)
+                {
+                    return Err(ProjectDbError::UnknownLayer {
+                        project,
+                        layer: id.clone(),
+                    });
+                }
+                update.into_project_layer(processing_graphs)
+            };
+
             let mut result = Vec::new();
 
             let mut updates = updates.into_iter();
 
-            for (layer, layer_update) in state.into_iter().zip(&mut updates) {
+            for (layer, layer_update) in state.iter().zip(&mut updates) {
                 match layer_update {
-                    VecUpdate::None(..) => result.push(layer),
-                    VecUpdate::UpdateOrInsert(updated_content) => result.push(updated_content),
+                    VecUpdate::None(..) => result.push(layer.clone()),
+                    VecUpdate::UpdateOrInsert(updated_content) => {
+                        result.push(into_layer(updated_content)?);
+                    }
                     VecUpdate::Delete(..) => {}
                 }
             }
 
             for update in updates {
                 if let VecUpdate::UpdateOrInsert(new_content) = update {
-                    result.push(new_content);
+                    result.push(into_layer(new_content)?);
                 } else {
                     return Err(ProjectDbError::ProjectUpdateFailed { project });
+                }
+            }
+
+            let mut ids = HashSet::new();
+            for layer in &result {
+                if !ids.insert(&layer.layer.id.layer_id) {
+                    return Err(ProjectDbError::DuplicateLayer {
+                        project,
+                        layer: layer.layer.id.layer_id.clone(),
+                    });
                 }
             }
 
@@ -104,11 +146,17 @@ impl Project {
         }
 
         if let Some(layer_updates) = update.layers {
-            project.layers = update_layer_or_plots(update.id, project.layers, layer_updates)?;
+            project.layers = update_layer_or_plots(
+                update.id,
+                &project.layers,
+                layer_updates,
+                processing_graphs,
+            )?;
         }
 
         if let Some(plot_updates) = update.plots {
-            project.plots = update_layer_or_plots(update.id, project.plots, plot_updates)?;
+            project.plots =
+                update_layer_or_plots(update.id, &project.plots, plot_updates, processing_graphs)?;
         }
 
         if let Some(bounds) = update.bounds {
@@ -220,23 +268,91 @@ impl TemporalBounded for STRectangle {
     }
 }
 
-// TODO: split into Raster and VectorLayer like in frontend?
-#[derive(Debug, PartialEq, Eq, Clone)]
+/// A layer or plot of a project.
+///
+/// It is a normal [`Layer`] that the projects data connector ([`PROJECTS_PROVIDER_ID`]) lists.
+/// Only the visibility is specific to the project, and the order is the position in the project.
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProjectLayer {
-    // TODO: check that processing graph/operator output type fits to the type of LayerInfo
-    // TODO: LayerId?
-    pub processing_graph: ProcessingGraphId,
-    pub name: String,
+    /// The layer, with `id = (PROJECTS_PROVIDER_ID, <uuid>)`.
+    /// Plots are layers without symbology.
+    pub layer: Layer,
     pub visibility: LayerVisibility,
-    pub symbology: Symbology,
+    /// The catalog layer this layer was copied from, if any.
+    /// It is only a reference: the layer itself is always the stored copy.
+    pub source: Option<ProviderLayerId>,
 }
 
 impl ProjectLayer {
-    pub fn layer_type(&self) -> LayerType {
-        match self.symbology {
-            Symbology::Raster(_) => LayerType::Raster,
-            _ => LayerType::Vector,
+    /// The id of a project layer as a layer of the projects data connector.
+    pub fn provider_layer_id(id: Uuid) -> ProviderLayerId {
+        ProviderLayerId {
+            provider_id: PROJECTS_PROVIDER_ID,
+            layer_id: LayerId(id.to_string()),
         }
+    }
+
+    /// The UUID of this layer, as stored in the database.
+    pub fn layer_uuid(&self) -> Result<Uuid, ProjectDbError> {
+        parse_layer_uuid(&self.layer.id.layer_id)
+    }
+}
+
+/// Parses the id of a project layer, which is always a UUID.
+pub fn parse_layer_uuid(id: &LayerId) -> Result<Uuid, ProjectDbError> {
+    Uuid::parse_str(&id.0).map_err(|_| ProjectDbError::InvalidLayerId { layer: id.clone() })
+}
+
+/// A layer or plot as it is sent to update a project.
+///
+/// Without `id`, it is a new layer and gets a new id.
+/// With `id`, it replaces the layer of the project with this id.
+#[derive(Debug, PartialEq, Clone)]
+pub struct ProjectLayerUpdate {
+    pub id: Option<LayerId>,
+    pub name: String,
+    pub description: String,
+    pub processing_graph: ProcessingGraphId,
+    pub symbology: Option<Symbology>,
+    pub properties: Vec<Property>,
+    pub metadata: HashMap<String, String>,
+    pub visibility: LayerVisibility,
+    pub source: Option<ProviderLayerId>,
+}
+
+impl ProjectLayerUpdate {
+    fn into_project_layer(
+        self,
+        processing_graphs: &HashMap<ProcessingGraphId, ProcessingGraph>,
+    ) -> Result<ProjectLayer, ProjectDbError> {
+        let processing_graph = processing_graphs
+            .get(&self.processing_graph)
+            .ok_or(ProjectDbError::ProcessingGraphNotFound {
+                processing_graph: self.processing_graph,
+            })?
+            .clone();
+
+        let id = match self.id {
+            Some(id) => ProviderLayerId {
+                provider_id: PROJECTS_PROVIDER_ID,
+                layer_id: id,
+            },
+            None => ProjectLayer::provider_layer_id(Uuid::new_v4()),
+        };
+
+        Ok(ProjectLayer {
+            layer: Layer {
+                id,
+                name: self.name,
+                description: self.description,
+                processing_graph,
+                symbology: self.symbology,
+                properties: self.properties,
+                metadata: self.metadata,
+            },
+            visibility: self.visibility,
+            source: self.source,
+        })
     }
 }
 
@@ -431,13 +547,9 @@ impl Default for LayerVisibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Plot {
-    pub processing_graph: ProcessingGraphId,
-    pub name: String,
-}
-
+/// The order of a project listing.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
+#[schema(as = ProjectOrderBy)]
 pub enum OrderBy {
     DateAsc,
     DateDesc,
@@ -473,8 +585,12 @@ impl From<&Project> for ProjectListing {
             id: project.id,
             name: project.name.clone(),
             description: project.description.clone(),
-            layer_names: project.layers.iter().map(|l| l.name.clone()).collect(),
-            plot_names: project.layers.iter().map(|p| p.name.clone()).collect(),
+            layer_names: project
+                .layers
+                .iter()
+                .map(|l| l.layer.name.clone())
+                .collect(),
+            plot_names: project.plots.iter().map(|p| p.layer.name.clone()).collect(),
             changed: project.version.changed,
         }
     }
@@ -530,8 +646,8 @@ pub enum VecUpdate<Content> {
     UpdateOrInsert(Content),
 }
 
-pub type LayerUpdate = VecUpdate<ProjectLayer>;
-pub type PlotUpdate = VecUpdate<Plot>;
+pub type LayerUpdate = VecUpdate<ProjectLayerUpdate>;
+pub type PlotUpdate = VecUpdate<ProjectLayerUpdate>;
 
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
@@ -556,6 +672,7 @@ impl PartialSchema for Delete {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
 pub struct ProjectListOptions {
     #[param(example = "NameAsc")]
     pub order: OrderBy,

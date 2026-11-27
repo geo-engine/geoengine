@@ -14,6 +14,13 @@ use crate::{apis::ResponseContent, models};
 use super::{Error, configuration, ContentType};
 
 
+/// struct for typed errors of method [`get_layer_plot_handler`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GetLayerPlotHandlerError {
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`get_plot_handler`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -21,6 +28,58 @@ pub enum GetPlotHandlerError {
     UnknownValue(serde_json::Value),
 }
 
+
+pub async fn get_layer_plot_handler(configuration: &configuration::Configuration, bbox: &str, time: &str, provider: &str, layer: &str, crs: Option<&str>, spatial_resolution: Option<&str>) -> Result<models::WrappedPlotOutput, Error<GetLayerPlotHandlerError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_query_bbox = bbox;
+    let p_query_time = time;
+    let p_path_provider = provider;
+    let p_path_layer = layer;
+    let p_query_crs = crs;
+    let p_query_spatial_resolution = spatial_resolution;
+
+    let uri_str = format!("{}/plot/{provider}/{layer}", configuration.base_path, provider=crate::apis::urlencode(p_path_provider), layer=crate::apis::urlencode(p_path_layer));
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    req_builder = req_builder.query(&[("bbox", &p_query_bbox.to_string())]);
+    if let Some(ref param_value) = p_query_crs {
+        req_builder = req_builder.query(&[("crs", &param_value.to_string())]);
+    }
+    req_builder = req_builder.query(&[("time", &p_query_time.to_string())]);
+    if let Some(ref param_value) = p_query_spatial_resolution {
+        req_builder = req_builder.query(&[("spatialResolution", &param_value.to_string())]);
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::WrappedPlotOutput`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::WrappedPlotOutput`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<GetLayerPlotHandlerError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
 
 /// # Example  1. Upload the file `plain_data.csv` with the following content:  ```csv a 1 2 ``` 2. Create a dataset from it using the \"Plain Data\" example at `/dataset`. 3. Create a statistics processing graph using the \"Statistics Plot\" example at `/processingGraphs`. 4. Generate the plot with this handler.
 pub async fn get_plot_handler(configuration: &configuration::Configuration, bbox: &str, time: &str, id: &str, crs: Option<&str>, spatial_resolution: Option<&str>) -> Result<models::WrappedPlotOutput, Error<GetPlotHandlerError>> {

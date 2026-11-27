@@ -16,7 +16,6 @@ HALF_INDENT = "  "
 def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     """Return a generator of file paths and their corresponding modification functions."""
 
-    yield Path("src/apis/projects_api.rs"), projects_api_rs
     yield Path("src/apis/tasks_api.rs"), tasks_api_rs
     yield Path("src/models/default.rs"), default_rs
     yield Path("src/models/geospatial_data_data_type.rs"), data_type_rs
@@ -126,28 +125,6 @@ def tasks_api_rs(file_contents: list[str]) -> Generator[str, None, None]:
                     "{}/tasks/list?filter={}&offset={}&limit={}",
                     configuration.base_path,
                     p_path_filter.unwrap().to_string(),
-                    p_path_offset,
-                    p_path_limit
-                );
-            """,
-                INDENT,
-            )
-
-        yield line
-
-
-def projects_api_rs(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the projects_api.rs file."""
-    for line in file_contents:
-        dedented_line = dedent(line)
-
-        if dedented_line.startswith('let uri_str = format!("{}/projects"'):
-            line = indent(
-                """\
-                let uri_str = format!(
-                    "{}/projects?order={}&offset={}&limit={}",
-                    configuration.base_path,
-                    p_path_order.to_string(),
                     p_path_offset,
                     p_path_limit
                 );

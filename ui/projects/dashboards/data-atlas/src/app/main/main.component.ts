@@ -210,7 +210,7 @@ export class MainComponent implements OnInit, AfterViewInit {
         }
     }
 
-    idFromLayer(index: number, layer: Layer): number {
+    idFromLayer(index: number, layer: Layer): string {
         return layer.id;
     }
 

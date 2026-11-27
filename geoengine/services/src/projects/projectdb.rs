@@ -1,6 +1,8 @@
 use crate::projects::project::{
-    CreateProject, Project, ProjectId, ProjectListOptions, ProjectListing, UpdateProject,
+    CreateProject, Project, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
+    UpdateProject,
 };
+use geoengine_datatypes::dataset::LayerId;
 
 use async_trait::async_trait;
 
@@ -21,8 +23,8 @@ pub trait ProjectDb: Send + Sync {
     /// Create a new `project` for the `user`
     async fn create_project(&self, project: CreateProject) -> Result<ProjectId, ProjectDbError>;
 
-    /// Update a `project` for the `user`. A new version is created
-    async fn update_project(&self, project: UpdateProject) -> Result<(), ProjectDbError>;
+    /// Update a `project` for the `user`. A new version is created and returned.
+    async fn update_project(&self, project: UpdateProject) -> Result<Project, ProjectDbError>;
 
     /// Delete the `project` if `user` is an owner
     async fn delete_project(&self, project: ProjectId) -> Result<(), ProjectDbError>;
@@ -33,6 +35,10 @@ pub trait ProjectDb: Send + Sync {
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project, ProjectDbError>;
+
+    /// Load a layer or plot from the latest version of its project.
+    /// The `user` needs at least read permission on the project.
+    async fn load_project_layer(&self, layer: &LayerId) -> Result<ProjectLayer, ProjectDbError>;
 
     /// List all versions of the `project` if given `user` has at least read permission
     async fn list_project_versions(

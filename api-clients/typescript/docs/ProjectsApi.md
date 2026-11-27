@@ -176,7 +176,7 @@ async function example() {
   const api = new ProjectsApi(config);
 
   const body = {
-    // OrderBy
+    // ProjectOrderBy
     order: NameAsc,
     // number
     offset: 0,
@@ -201,7 +201,7 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **order** | `OrderBy` |  | [Defaults to `undefined`] [Enum: NameAsc, NameDesc] |
+| **order** | `ProjectOrderBy` |  | [Defaults to `undefined`] [Enum: DateAsc, DateDesc, NameAsc, NameDesc] |
 | **offset** | `number` |  | [Defaults to `undefined`] |
 | **limit** | `number` |  | [Defaults to `undefined`] |
 
@@ -439,7 +439,7 @@ example().catch(console.error);
 
 ## updateProjectHandler
 
-> updateProjectHandler(project, updateProject)
+> Project updateProjectHandler(project, updateProject)
 
 Updates a project. This will create a new version.
 
@@ -489,7 +489,7 @@ example().catch(console.error);
 
 ### Return type
 
-`void` (Empty response body)
+[**Project**](Project.md)
 
 ### Authorization
 
@@ -498,13 +498,13 @@ example().catch(console.error);
 ### HTTP request headers
 
 - **Content-Type**: `application/json`
-- **Accept**: Not defined
+- **Accept**: `application/json`
 
 
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** | OK |  -  |
+| **200** | The updated project |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

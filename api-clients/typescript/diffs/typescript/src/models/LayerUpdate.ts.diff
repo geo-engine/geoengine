@@ -4,8 +4,8 @@
      if (typeof value !== 'object') {
          return value;
      }
--    if (instanceOfProjectLayer(value)) {
-+    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
-         return ProjectLayerToJSON(value as ProjectLayer);
+-    if (instanceOfProjectLayerUpdate(value)) {
++    if (typeof value === 'object' && instanceOfProjectLayerUpdate(value)) {
+         return ProjectLayerUpdateToJSON(value as ProjectLayerUpdate);
      }
      if (instanceOfProjectUpdateToken(value)) {
