@@ -774,6 +774,32 @@ describe('FootprintsService overlay', () => {
             expect(service.selectedOutsideData()).toMatchObject({direction: 1, step: {time: {start: Date.UTC(2026, 1, 15)}}});
         });
 
+        it('tells nothing by the time of the data while the open calendar shows a month with dates but without the time', async () => {
+            // daily data until 15 February 2026, the selected date 1 April lies after it
+            dataTime = new Time(Date.UTC(2020, 0, 1), Date.UTC(2026, 1, 15));
+            // a step with data on every day that is asked for
+            getFootprints.mockImplementation((_id, query) => {
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                const days = Array.from({length: Math.round((end - start) / 86_400_000)}, (_, i) => ({
+                    time: {start: start + i * 86_400_000, end: start + (i + 1) * 86_400_000},
+                    status: TimeStepFootprintStatus.Data,
+                    bounds: [],
+                }));
+                return Promise.resolve({...FOOTPRINTS, steps: days});
+            });
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.selectedOutsideData()?.direction).toBe(1);
+
+            // the calendar shows January, whose dates are loaded but do not hold the selected date
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2026, 0, 1), 'month');
+            await settle();
+            expect(service.steps().length).toBeGreaterThan(0);
+            expect(service.selectedOutsideData()).toBeUndefined();
+        });
+
         it('points after the data to its last date where no date of the view has scenes', async () => {
             answerDates([day(-3, TimeStepFootprintStatus.Empty), day(-2, TimeStepFootprintStatus.Empty)]);
             const service = createService();
