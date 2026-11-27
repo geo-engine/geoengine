@@ -210,12 +210,15 @@ mark-generated-files-viewed pr: common::_clear
     batch_size=50
 
     pr_id=$(gh pr view "{{ pr }}" --json id --jq .id)
-    mapfile -t changed < <(gh api --paginate "repos/{owner}/{repo}/pulls/{{ pr }}/files" --jq '.[].filename')
-    mapfile -t generated < <(
-        printf '%s\n' "${changed[@]}" \
+    # assign before splitting into arrays: `set -e` ignores failures inside `< <(...)`
+    changed_files=$(gh api --paginate "repos/{owner}/{repo}/pulls/{{ pr }}/files" --jq '.[].filename')
+    generated_files=$(
+        printf '%s\n' "$changed_files" \
         | git check-attr --stdin linguist-generated \
         | awk -F': ' '$3 == "true" { print $1 }'
     )
+    mapfile -t changed < <(printf '%s' "$changed_files")
+    mapfile -t generated < <(printf '%s' "$generated_files")
 
     # one GraphQL request per batch, with one aliased mutation per file
     for ((i = 0; i < ${#generated[@]}; i += batch_size)); do
