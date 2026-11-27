@@ -3823,6 +3823,105 @@
         ]
       }
     },
+    "/processingGraphs/{id}/footprints": {
+      "get": {
+        "tags": [
+          "Processing Graphs"
+        ],
+        "summary": "Gets when and where the data of a raster processing graph may exist.",
+        "operationId": "get_processing_graph_footprints_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Processing graph id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProcessingGraphId"
+            }
+          },
+          {
+            "name": "spatialBounds",
+            "in": "query",
+            "description": "`minX,minY,maxX,maxY` in the spatial reference of the processing graph.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeInterval",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The number of time steps to answer. At most, and by default, 100.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "precision",
+            "in": "query",
+            "description": "How exact the boxes have to be. By default `coverage`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/RasterFootprintsPrecision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The footprints per time step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RasterFootprints"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Needs too many catalog searches, query a smaller area or time range": {
+                    "value": {
+                      "error": "FootprintQueryTooLarge",
+                      "message": "Footprint query needs 120 catalog searches, the limit is 50. Query a smaller area or time range."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/processingGraphs/{id}/metadata": {
       "get": {
         "tags": [
@@ -13235,6 +13334,45 @@
           }
         }
       },
+      "RasterFootprints": {
+        "type": "object",
+        "description": "When and where the data of a raster processing graph may exist.",
+        "required": [
+          "spatialReference",
+          "steps"
+        ],
+        "properties": {
+          "spatialReference": {
+            "type": "string",
+            "description": "The spatial reference of the `bounds`, which is the one of the processing graph. It is part\nof the answer so that a client can project the boxes onto its map without asking for the\nmetadata of the graph first."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimeStepFootprint"
+            }
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeInterval",
+                "description": "The rest of the requested time interval, if it has more time steps than were answered.\nSend it as `timeInterval` to get the next steps."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RasterFootprintsPrecision": {
+        "type": "string",
+        "description": "How exact the boxes of the footprints of a time step have to be.",
+        "enum": [
+          "availability",
+          "coverage"
+        ]
+      },
       "RasterOperator": {
         "oneOf": [
           {
@@ -14957,6 +15095,24 @@
             "format": "int32",
             "description": "STAC searches one loading info request runs in parallel; omitted values use 8."
           },
+          "datetimeFrequencyAggregation": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket\nsize it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the\nCopernicus Data Space cannot).\n\nIf set, the availability of a calendar comes from one aggregation over the view per chunk\nof time steps, at any zoom, instead of one search per grid cell and page, which is much\nfaster. Days without items are stored as empty for the grid cells inside the view, so\ntheir map tiles need no search. Map tiles and the boxes of a date on the map still search.\nOmitted values do not use it."
+          },
+          "timeBounds": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeInterval",
+                "description": "The time of the datasets. Omitted values come from the temporal extent of the collection,\nso this is only needed where that is missing or wrong. Apps use it to ask no dates before\nthe data starts."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "itemTime": {
             "oneOf": [
               {
@@ -16631,6 +16787,38 @@
             "minimum": 0
           }
         }
+      },
+      "TimeStepFootprint": {
+        "type": "object",
+        "description": "Where the data of one time step may exist.",
+        "required": [
+          "time",
+          "status",
+          "bounds"
+        ],
+        "properties": {
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TimeStepFootprintStatus"
+          },
+          "bounds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpatialPartition2D"
+            }
+          }
+        }
+      },
+      "TimeStepFootprintStatus": {
+        "type": "string",
+        "description": "Whether a time step has data in the queried area.",
+        "enum": [
+          "data",
+          "empty",
+          "unknown"
+        ]
       },
       "TypeNames": {
         "type": "string"

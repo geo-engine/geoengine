@@ -252,6 +252,8 @@ pub struct QueryContext {
     pub gdal_source_read_ahead: NonZeroUsize,
     /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+    /// The most boxes a footprint keeps for one time step. Footprints with more boxes are merged.
+    pub footprint_boxes_per_step_limit: usize,
     /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
     /// output tile
     pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
@@ -337,6 +339,7 @@ impl ConfigElement for ProcessingRuntime {
 pub struct DatasetService {
     pub list_limit: u32,
     pub json_size_limit: usize,
+    pub loading_info_part_steps: usize,
 }
 
 impl ConfigElement for DatasetService {
@@ -949,6 +952,19 @@ pub struct StacCache {
     pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+    /// Number of time steps of one part (chunk) of an answer, and of one footprint search per grid
+    /// cell. The result is stored per step. Chunks start at the origin of the time axis, not at months.
+    pub search_chunk_steps: std::num::NonZeroU32,
+    /// Footprint queries needing more searches than this, for one chunk of time steps or for the
+    /// cells of one time step that are not cached, are rejected as too large, see
+    /// `Settings-default.toml`.
+    pub max_footprint_searches: usize,
+    /// Number of aggregations of a calendar kept, one per view box and chunk.
+    pub max_aggregations: u64,
+    /// TTL in seconds of the temporal extent of a collection, kept also without a query cache.
+    pub collection_time_ttl_secs: u64,
+    /// TTL in seconds of a failed request for the temporal extent of a collection.
+    pub collection_time_failure_ttl_secs: u64,
 }
 
 impl TestDefault for StacCache {
@@ -956,6 +972,11 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
+            search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
+            max_footprint_searches: 50,
+            max_aggregations: 1_000,
+            collection_time_ttl_secs: 3_600,
+            collection_time_failure_ttl_secs: 60,
         }
     }
 }

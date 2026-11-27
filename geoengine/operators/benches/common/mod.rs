@@ -380,7 +380,7 @@ impl Env {
         meta_data: Box<dyn MetaData<L, R, Q>>,
     ) -> NamedData
     where
-        L: Send + Sync + 'static,
+        L: 'static,
         R: Send + Sync + 'static + ResultDescriptor,
         Q: Send + Sync + 'static,
     {

@@ -224,6 +224,12 @@ pub enum Error {
         limit: usize,
     },
 
+    #[snafu(display("Band {band} does not exist, the processing graph has {count} bands"))]
+    FootprintBandOutOfRange {
+        band: u32,
+        count: u32,
+    },
+
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,

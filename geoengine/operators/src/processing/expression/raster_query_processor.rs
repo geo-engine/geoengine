@@ -1,8 +1,8 @@
 use super::RasterExpressionError;
 use crate::{
     engine::{
-        BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryProcessor,
-        RasterResultDescriptor,
+        BoxRasterQueryProcessor, Footprint, FootprintCombine, QueryContext, QueryProcessor,
+        RasterQueryProcessor, RasterResultDescriptor, unknown_footprints, zip_footprints,
     },
     util::Result,
 };
@@ -134,6 +134,51 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.sources.time_query(query, ctx).await
     }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        // A footprint is a superset, so an expression that turns data into no-data, like
+        // `fn(A) -> NODATA`, needs no care. Only turning no-data into data matters:
+        // - Without `map_no_data`, a pixel is no-data if any input is, without evaluating the
+        //   expression. So there is data only where all inputs have data.
+        // - With it, the expression gets the no-data inputs. Evaluated once with all inputs no-data,
+        //   it tells whether a pixel without data in any input stays without data. If it does, as
+        //   `A + B` or `fn(A) -> NODATA`, there is data only where an input has data. If not, as
+        //   `fn(A) -> 1`, any pixel can have data.
+        let combine = if !self.map_no_data {
+            FootprintCombine::Intersection
+        } else if Tuple::maps_no_data_to_no_data(&self.program)? {
+            FootprintCombine::Union
+        } else {
+            // the expression can turn no-data into data anywhere
+            let time_steps = self.time_query(query.time_interval(), ctx).await?;
+            return Ok(unknown_footprints(time_steps));
+        };
+
+        // Each input band is asked for itself and the streams are zipped.
+        let mut streams = Vec::with_capacity(Tuple::num_bands() as usize);
+        for band in 0..Tuple::num_bands() {
+            streams.push(
+                self.sources
+                    .footprint_query(
+                        query.select_attributes(BandSelection::new(vec![band])?),
+                        precision,
+                        ctx,
+                    )
+                    .await?,
+            );
+        }
+
+        Ok(zip_footprints(
+            streams,
+            combine,
+            ctx.footprint_boxes_per_step_limit(),
+        ))
+    }
 }
 
 #[async_trait]
@@ -168,11 +213,23 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
 
     fn num_bands() -> u32;
 
+    /// Whether the expression gives no data if all of its inputs are no data.
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool>;
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>;
+
+    /// The footprints of the input rasters, without the expression. The rule of the expression
+    /// is applied to them in `ExpressionQueryProcessor::_footprint_query`.
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>>;
 }
 
 #[async_trait]
@@ -276,12 +333,31 @@ where
         1
     }
 
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+        let expression = unsafe {
+            // we have to "trust" that the function has the signature we expect
+            program
+                .function_1::<Option<f64>>()
+                .map_err(RasterExpressionError::from)?
+        };
+        Ok(expression(None).is_none())
+    }
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -424,12 +500,31 @@ where
         2
     }
 
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+        let expression = unsafe {
+            // we have to "trust" that the function has the signature we expect
+            program
+                .function_2::<Option<f64>, Option<f64>>()
+                .map_err(RasterExpressionError::from)?
+        };
+        Ok(expression(None, None).is_none())
+    }
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -613,6 +708,20 @@ macro_rules! impl_expression_tuple_processor {
                 $N
             }
 
+            fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+                let expression: Symbol<$FN_T> = unsafe {
+                    // we have to "trust" that the function has the signature we expect
+                    program.function_nary().map_err(RasterExpressionError::from)?
+                };
+                // call expression with $N None values correctly:
+                Ok(expression(
+                    $(
+                        { let _ = $I; None }
+                    ),+
+                )
+                .is_none())
+            }
+
             async fn time_query<'a>(
                 &'a self,
                 query: geoengine_datatypes::primitives::TimeInterval,
@@ -620,6 +729,15 @@ macro_rules! impl_expression_tuple_processor {
                 ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
                     self.raster.time_query(query, ctx).await
                 }
+
+            async fn footprint_query<'a>(
+                &'a self,
+                query: RasterQueryRectangle,
+                precision: crate::engine::FootprintPrecision,
+                ctx: &'a dyn QueryContext,
+            ) -> Result<BoxStream<'a, Result<Footprint>>> {
+                self.raster.footprint_query(query, precision, ctx).await
+            }
         }
 
 
@@ -637,3 +755,101 @@ impl_expression_tuple_processor!(5 => 0, 1, 2, 3, 4);
 impl_expression_tuple_processor!(6 => 0, 1, 2, 3, 4, 5);
 impl_expression_tuple_processor!(7 => 0, 1, 2, 3, 4, 5, 6);
 impl_expression_tuple_processor!(8 => 0, 1, 2, 3, 4, 5, 6, 7);
+
+#[cfg(test)]
+mod footprint_tests {
+    use crate::engine::footprint_test_util::*;
+    use crate::engine::{FootprintBounds, RasterOperator, SingleRasterSource, TypedRasterOperator};
+    use crate::processing::{Expression, ExpressionParams};
+    use geoengine_datatypes::raster::RasterDataType;
+
+    fn expression_of(expression: &str, map_no_data: bool) -> TypedRasterOperator {
+        Expression {
+            params: ExpressionParams {
+                expression: expression.to_string(),
+                output_type: RasterDataType::U8,
+                output_band: None,
+                map_no_data,
+            },
+            sources: SingleRasterSource {
+                raster: stack(stack_inputs()),
+            },
+        }
+        .typed()
+    }
+
+    fn expression(map_no_data: bool) -> TypedRasterOperator {
+        expression_of("A + B", map_no_data)
+    }
+
+    #[tokio::test]
+    async fn it_expression_has_data_only_where_all_inputs_have() {
+        // the inputs have data in different tiles, so no pixel has data in both
+        let footprints = checked_footprints(expression(false), &[0]).await;
+        assert_eq!(step_boxes(&footprints), [[].as_slice(), [].as_slice()]);
+
+        // here both have data in tile 1, and only the first in tile 0
+        let overlapping = Expression {
+            params: ExpressionParams {
+                expression: "A + B".to_string(),
+                output_type: RasterDataType::U8,
+                output_band: None,
+                map_no_data: false,
+            },
+            sources: SingleRasterSource {
+                raster: stack(vec![
+                    source(
+                        vec![
+                            tile(0, 0, 0, true),
+                            tile(0, 1, 0, true),
+                            tile(5, 0, 0, false),
+                            tile(5, 1, 0, false),
+                        ],
+                        1,
+                        regular_time(),
+                    ),
+                    source(
+                        vec![
+                            tile(0, 0, 0, false),
+                            tile(0, 1, 0, true),
+                            tile(5, 0, 0, false),
+                            tile(5, 1, 0, false),
+                        ],
+                        1,
+                        regular_time(),
+                    ),
+                ]),
+            },
+        }
+        .typed();
+        let footprints = checked_footprints(overlapping, &[0]).await;
+        assert_eq!(
+            step_boxes(&footprints),
+            [[tile_box(1)].as_slice(), [].as_slice()]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_expression_with_map_no_data_has_data_where_any_input_has() {
+        // `A + B` gives no data for inputs without data, so there is data where an input has some
+        let footprints = checked_footprints(expression(true), &[0]).await;
+
+        assert_eq!(
+            step_boxes(&footprints),
+            [[tile_box(0), tile_box(1)].as_slice(), [].as_slice()]
+        );
+    }
+
+    #[tokio::test]
+    async fn it_expression_that_makes_data_of_no_data_cannot_tell() {
+        let footprints =
+            checked_footprints(expression_of("if A IS NODATA { 1 } else { A }", true), &[0]).await;
+
+        assert_eq!(footprints.len(), 2);
+        assert!(
+            footprints
+                .iter()
+                .all(|step| step.bounds == FootprintBounds::Unknown)
+        );
+    }
+}

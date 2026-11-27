@@ -284,6 +284,36 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
     }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        // Bands can come from different files that cover different areas. So the footprint is the
+        // one of the selected input bands, not of all bands. The time steps do not depend on the
+        // bands.
+        let input_bands = query
+            .attributes()
+            .as_slice()
+            .iter()
+            .map(|band| {
+                self.output_band_to_input_band_idx
+                    .get(*band as usize)
+                    .copied()
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or(BandFilterError::BandsCannotBeMappedToInput)?;
+
+        self.source
+            .footprint_query(
+                query.select_attributes(BandSelection::new(input_bands)?),
+                precision,
+                ctx,
+            )
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -710,5 +740,31 @@ mod tests {
 
         let deserialized: BandFilterParams = serde_json::from_str(&json).unwrap();
         assert_eq!(params, deserialized);
+    }
+}
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn it_band_filter_answers_for_the_selected_input_band() {
+        let band_filter = BandFilter {
+            params: BandFilterParams {
+                bands: BandsByNameOrIndex::Name(vec!["band1".to_string()]),
+            },
+            sources: SingleRasterSource {
+                raster: two_band_source(),
+            },
+        }
+        .typed();
+
+        let footprints = checked_footprints(band_filter, &[0]).await;
+
+        assert_eq!(
+            step_boxes(&footprints),
+            [[tile_box(1)].as_slice(), [tile_box(1)].as_slice()]
+        );
     }
 }

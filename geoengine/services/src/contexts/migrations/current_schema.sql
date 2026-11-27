@@ -939,7 +939,9 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     stac_grid "StacGrid",
     max_concurrent_cell_searches int,
     item_time "StacItemTime",
-    max_concurrent_asset_probes int
+    max_concurrent_asset_probes int,
+    datetime_frequency_aggregation boolean,
+    time_bounds "TimeInterval"
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

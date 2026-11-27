@@ -1640,7 +1640,7 @@ mod tests {
     /// A `Reprojection` with `dataBounds` optimizes to a `Warp` that derives its grid from the
     /// data bounds as well, so the optimized operator keeps the extent of the original one.
     #[tokio::test]
-    async fn optimized_raster_reprojection_keeps_data_bounds() {
+    async fn it_optimized_raster_reprojection_keeps_data_bounds() {
         let exe_ctx = MockExecutionContext::test_default();
         // 200 km × 200 km in UTM zone 32N, a small part of the zone's area of use
         let source = || {

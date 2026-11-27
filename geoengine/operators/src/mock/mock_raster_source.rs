@@ -1,8 +1,8 @@
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, CreateSpan, InitializedRasterOperator,
-    OperatorData, OperatorName, ProcessingGraphOperatorPath, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SourceOperator,
-    TypedRasterOperator, TypedRasterQueryProcessor,
+    BoxRasterQueryProcessor, CanonicOperatorName, CreateSpan, Footprint, FootprintBounds,
+    InitializedRasterOperator, OperatorData, OperatorName, ProcessingGraphOperatorPath,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, SourceOperator, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -19,8 +19,8 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TileIdxBandCrossProductIter, TilingSpecification,
+    GridBoundingBox2D, GridIntersection, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize,
+    Pixel, RasterTile2D, TileIdxBandCrossProductIter, TilingSpecification,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -269,6 +269,48 @@ where
         };
 
         Ok(times)
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        _precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, Result<Footprint>>> {
+        let time_steps: Vec<TimeInterval> = self
+            .time_query(query.time_interval(), ctx)
+            .await?
+            .try_collect()
+            .await?;
+
+        let footprints = time_steps
+            .into_iter()
+            .map(|time| {
+                let boxes = self
+                    .data
+                    .iter()
+                    .filter(|tile| {
+                        tile.time == time
+                            && !tile.is_empty()
+                            && query.attributes().as_slice().contains(&tile.band)
+                    })
+                    .filter_map(|tile| {
+                        tile.tile_information()
+                            .global_pixel_bounds()
+                            .intersection(&query.spatial_bounds())
+                    });
+
+                Ok(Footprint {
+                    time,
+                    bounds: FootprintBounds::from_boxes(
+                        boxes,
+                        ctx.footprint_boxes_per_step_limit(),
+                    ),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Ok(stream::iter(footprints).boxed())
     }
 }
 
@@ -828,6 +870,30 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
                 TimeInterval::new_unchecked(3, TimeInstance::MAX),
                 TimeInterval::new_unchecked(3, TimeInstance::MAX),
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod footprint_tests {
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn it_has_boxes_only_for_the_tiles_with_data_of_the_selected_bands() {
+        // band 0 has data in tile 0 at the first step, band 1 in tile 1 at both steps
+        let first = checked_footprints(two_band_source(), &[0]).await;
+        assert_eq!(
+            step_boxes(&first),
+            [[tile_box(0)].as_slice(), [].as_slice()]
+        );
+
+        let both = checked_footprints(two_band_source(), &[0, 1]).await;
+        assert_eq!(
+            step_boxes(&both),
+            [
+                [tile_box(0), tile_box(1)].as_slice(),
+                [tile_box(1)].as_slice()
             ]
         );
     }

@@ -17,6 +17,28 @@ use serde::Deserialize;
 
 use super::StacProviderS3Config;
 
+/// The end of a time interval for the closed end `end_millis` of a STAC time range, like the
+/// temporal extent of a collection or `end_datetime` of an item. STAC ends are closed and those of
+/// time intervals are half-open, so it is one millisecond later: an item on the end lies within,
+/// and a range of one instant is not empty.
+pub fn half_open_end(end_millis: i64) -> Option<TimeInstance> {
+    TimeInstance::from_millis(end_millis.checked_add(1)?).ok()
+}
+
+/// The closed end of a STAC search for `interval`, as RFC 3339 text: one microsecond before its
+/// half-open end, the inverse of [`half_open_end`]. An item on the end, which belongs to the next
+/// interval, is not found; one within the last millisecond, which STAC times may carry, still is.
+/// An instant is searched as itself.
+pub fn closed_end(interval: TimeInterval) -> Option<String> {
+    let end = chrono::DateTime::from_timestamp_millis(interval.end().inner())?;
+    let end = if interval.is_instant() {
+        end
+    } else {
+        end - chrono::TimeDelta::microseconds(1)
+    };
+    Some(end.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string())
+}
+
 /// STAC `fields` query parameter used to keep item responses small while including all
 /// metadata needed by the provider (loading info) and the harvester (discovery/mapping).
 ///
@@ -795,6 +817,24 @@ pub fn gdal_config_options_for_file_path(
 mod tests {
     use super::*;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+    #[test]
+    fn it_searches_up_to_one_microsecond_before_the_end_and_an_instant_as_itself() {
+        let day = TimeInterval::new(
+            TimeInstance::from_millis_unchecked(86_400_000),
+            TimeInstance::from_millis_unchecked(2 * 86_400_000),
+        )
+        .unwrap();
+        assert_eq!(
+            closed_end(day).as_deref(),
+            Some("1970-01-02T23:59:59.999999Z")
+        );
+        let instant = TimeInterval::new_instant(TimeInstance::from_millis_unchecked(5)).unwrap();
+        assert_eq!(
+            closed_end(instant).as_deref(),
+            Some("1970-01-01T00:00:00.005000Z")
+        );
+    }
 
     #[test]
     fn it_reads_stac_no_data_for_the_selected_rasterband() {

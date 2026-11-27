@@ -62,8 +62,8 @@ use geoengine_operators::{
     processing::{BandFilter, BandFilterParams, BandsByNameOrIndex},
     source::{
         GdalMetaDataStatic, GdalSource, GdalSourceParameters, MultiBandGdalLoadingInfo,
-        MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource, MultiBandGdalSourceParameters,
-        TileFile,
+        MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
+        MultiBandGdalSourceParameters, TileFile,
     },
     util::{
         AdaptToGrid, TargetGrid, WarpMethods,
@@ -219,11 +219,11 @@ fn multi_band_scene(env: &mut Env, format: Format) -> NamedData {
         Format::Cog => "scene_cog",
         Format::Jp2 => "scene_jp2",
     };
-    env.add_data(
+    env.add_data::<MultiBandGdalLoadingInfo, _, _>(
         name,
         Box::new(
             StaticMetaData::<_, _, MultiBandGdalLoadingInfoQueryRectangle> {
-                loading_info: MultiBandGdalLoadingInfo::new(
+                loading_info: MultiBandGdalLoadingInfoPart::new(
                     vec![TimeInterval::default()],
                     files,
                     None,

@@ -539,6 +539,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
+            time_bounds: None,
             item_time: None,
             max_concurrent_asset_probes: None,
         };
@@ -620,6 +622,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
+            time_bounds: None,
             item_time: None,
             max_concurrent_asset_probes: None,
         };

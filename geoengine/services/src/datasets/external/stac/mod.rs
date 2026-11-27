@@ -4,7 +4,9 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, SpatialResolution, TimeDimension, TimeInterval,
+};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
@@ -137,6 +139,22 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(default)]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+    /// size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the
+    /// Copernicus Data Space cannot).
+    ///
+    /// If set, the availability of a calendar comes from one aggregation over the view per
+    /// `search_chunk_steps` time steps, at any zoom, instead of one search per grid cell and page
+    /// (measured on CODE-DE for 100 days: 0.6-1.3 s instead of 27-42 s). Days without items are
+    /// stored as empty for the grid cells inside the view, so their map tiles need no search. Map
+    /// tiles and the boxes of a date on the map still search. Omitted values do not use it.
+    #[serde(default)]
+    pub datetime_frequency_aggregation: Option<bool>,
+    /// The time of the datasets. Omitted values come from the temporal extent of the collection,
+    /// so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+    /// the data starts.
+    #[serde(default)]
+    pub time_bounds: Option<TimeInterval>,
     /// Which item time decides the layer time steps an item belongs to; omitted values use
     /// [`StacItemTime::Datetime`].
     #[serde(default)]
@@ -478,6 +496,10 @@ pub struct StacDataProvider {
     /// Asset file headers one STAC search reads in parallel
     max_concurrent_asset_probes: NonZeroUsize,
     item_time: StacItemTime,
+    /// Whether the server answers `datetime_frequency` aggregations in the size asked for
+    datetime_frequency_aggregation: bool,
+    /// The time of the datasets from the definition, which overrides that of the collection
+    time_bounds: Option<TimeInterval>,
     grid: StacGrid,
     /// Reads the headers of assets that lack grid metadata
     asset_prober: asset_probe::AssetProber,
@@ -521,6 +543,7 @@ impl StacDataProvider {
                 definition.query_timeout_secs as u64,
             ))
             .build()?;
+        let query_cache = Arc::new(request_registry.new_query_cache());
         let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
@@ -535,8 +558,12 @@ impl StacDataProvider {
             page_limit: definition.page_limit,
             client,
             cache_ttl_secs: definition.cache_ttl_secs,
-            query_cache: Arc::new(StacQueryCache::default()),
+            query_cache,
             max_concurrent_cell_searches,
+            datetime_frequency_aggregation: definition
+                .datetime_frequency_aggregation
+                .unwrap_or(false),
+            time_bounds: definition.time_bounds,
             max_concurrent_asset_probes,
             item_time: definition.item_time.unwrap_or_default(),
             grid,
@@ -631,6 +658,34 @@ mod tests {
             .unwrap();
         assert!(Arc::ptr_eq(&expected, &first_coordinator));
         assert!(Arc::ptr_eq(&expected, &second_coordinator));
+    }
+
+    #[test]
+    fn it_configures_the_cache_of_a_provider_with_the_settings_of_its_registry() {
+        use geoengine_datatypes::util::test::TestDefault;
+
+        let definition: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        let config = crate::config::StacCache {
+            search_chunk_steps: std::num::NonZeroU32::new(11).unwrap(),
+            max_footprint_searches: 7,
+            ..crate::config::StacCache::test_default()
+        };
+
+        let configured = StacDataProvider::from_definition_with_request_registry(
+            definition,
+            StacRequestRegistry::new().with_config(config),
+            crate::util::tests::gdal_process_pool_without_workers(),
+        )
+        .unwrap();
+
+        let cache = &configured.query_cache;
+        assert_eq!(cache.search_chunk_steps().get(), 11);
+        assert_eq!(cache.max_footprint_searches(), 7);
     }
 
     type AuthenticationBucketArrivals =

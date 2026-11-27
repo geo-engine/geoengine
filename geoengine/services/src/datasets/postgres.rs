@@ -1,6 +1,7 @@
 use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
+use crate::config::{DatasetService, get_config_element};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -20,6 +21,7 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use futures::{StreamExt, future, stream};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::{
@@ -35,8 +37,9 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
+    GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::Transaction;
@@ -751,11 +754,19 @@ where
 
         let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
 
+        let part_steps = get_config_element::<DatasetService>()
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+            .loading_info_part_steps
+            .max(1);
+
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
             dataset_cache_ttl,
             data_path,
+            part_steps,
             db: self.clone(),
         }))
     }
@@ -773,6 +784,8 @@ where
     result_descriptor: RasterResultDescriptor,
     dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
+    /// The most time steps of one answer, see `loading_info_part_steps` in the settings.
+    part_steps: usize,
     db: PostgresDb<Tls>,
 }
 
@@ -997,7 +1010,93 @@ where
             }
         })?;
 
-        let files = if query.fetch_tiles {
+        let time_steps = create_gap_free_time_steps(
+            self.dataset_id,
+            query.query_rectangle.time_interval(),
+            &conn,
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+        // A long time range is answered in parts of `part_steps` time steps, so the source does
+        // not hold the files of all steps at once. The first part is read here, on the connection
+        // of the time steps, so a query of few steps takes one connection as before. The files of
+        // each later part are read when the source gets there.
+        let mut parts = time_steps.chunks(self.part_steps).map(<[_]>::to_vec);
+        let Some(first) = parts.next() else {
+            return Ok(stream::empty().boxed());
+        };
+        let first = self.part(&conn, first, &query).await?;
+        drop(conn);
+
+        let provider = self.clone();
+        let rest = stream::iter(parts.collect::<Vec<_>>()).then(move |time_steps| {
+            let provider = provider.clone();
+            let query = query.clone();
+            async move {
+                let conn = provider.db.conn_pool.get().await.map_err(|e| {
+                    geoengine_operators::error::Error::MetaData {
+                        source: Box::new(e),
+                    }
+                })?;
+                provider.part(&conn, time_steps, &query).await
+            }
+        });
+
+        Ok(stream::once(future::ready(Ok(first))).chain(rest).boxed())
+    }
+
+    async fn result_descriptor(
+        &self,
+    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<
+        dyn MetaData<
+                MultiBandGdalLoadingInfo,
+                RasterResultDescriptor,
+                MultiBandGdalLoadingInfoQueryRectangle,
+            >,
+    > {
+        Box::new(self.clone())
+    }
+}
+
+impl<Tls> MultiBandGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    /// One part of the answer to `query`: some of its time steps in a row and their files.
+    async fn part(
+        &self,
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        time_steps: Vec<TimeInterval>,
+        query: &MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> Result<MultiBandGdalLoadingInfoPart, geoengine_operators::error::Error> {
+        // the queried time within the time steps of this part
+        let query_time = query.query_rectangle.time_interval();
+        let files_time = match (time_steps.first(), time_steps.last()) {
+            (Some(first), Some(last)) => TimeInterval::new(
+                query_time.start().max(first.start()),
+                query_time.end().min(last.end()),
+            )?,
+            _ => query_time,
+        };
+
+        let files = if matches!(
+            query.detail,
+            LoadingInfoDetail::Files
+                | LoadingInfoDetail::Availability
+                | LoadingInfoDetail::Coverage
+        ) {
             // query the files
             let rows = conn
                 .query(
@@ -1016,7 +1115,7 @@ where
                     &[
                         &self.dataset_id,
                         &query.query_rectangle.spatial_bounds(),
-                        &query.query_rectangle.time_interval(),
+                        &files_time,
                         &query.query_rectangle.attributes().as_slice(),
                     ],
                 )
@@ -1055,39 +1154,11 @@ where
             vec![]
         };
 
-        let time_steps = create_gap_free_time_steps(
-            self.dataset_id,
-            query.query_rectangle.time_interval(),
-            &conn,
-        )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
-        Ok(MultiBandGdalLoadingInfo::new(
+        Ok(MultiBandGdalLoadingInfoPart::new(
             time_steps,
             files,
             self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
         ))
-    }
-
-    async fn result_descriptor(
-        &self,
-    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        Ok(self.result_descriptor.clone())
-    }
-
-    fn box_clone(
-        &self,
-    ) -> Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
-    > {
-        Box::new(self.clone())
     }
 }
 

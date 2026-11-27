@@ -3,7 +3,7 @@ use crate::{
         datatypes::{
             CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, LayerId,
             MlModelName, RasterDataType, RasterToDatasetQueryRectangle, SpatialReference,
-            SpatialResolution, TimeGranularity,
+            SpatialResolution, TimeGranularity, TimeInterval,
         },
         operators::{
             GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -1167,6 +1167,22 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+    /// size it is asked for with `datetime_frequency_interval` (e.g. CODE-DE; Earth Search and the
+    /// Copernicus Data Space cannot).
+    ///
+    /// If set, the availability of a calendar comes from one aggregation over the view per chunk
+    /// of time steps, at any zoom, instead of one search per grid cell and page, which is much
+    /// faster. Days without items are stored as empty for the grid cells inside the view, so
+    /// their map tiles need no search. Map tiles and the boxes of a date on the map still search.
+    /// Omitted values do not use it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datetime_frequency_aggregation: Option<bool>,
+    /// The time of the datasets. Omitted values come from the temporal extent of the collection,
+    /// so this is only needed where that is missing or wrong. Apps use it to ask no dates before
+    /// the data starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_bounds: Option<TimeInterval>,
     /// Which item time decides the layer time steps an item belongs to; omitted values use
     /// `datetime`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1244,6 +1260,8 @@ impl From<StacDataProviderDefinition>
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
+            datetime_frequency_aggregation: value.datetime_frequency_aggregation,
+            time_bounds: value.time_bounds.map(Into::into),
             item_time: value.item_time.map(Into::into),
             max_concurrent_asset_probes: value
                 .max_concurrent_asset_probes
@@ -1273,6 +1291,8 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
+            datetime_frequency_aggregation: value.datetime_frequency_aggregation,
+            time_bounds: value.time_bounds.map(Into::into),
             item_time: value.item_time.map(Into::into),
             // the database stores a positive `int`, which providers validate
             max_concurrent_asset_probes: value

@@ -34,6 +34,7 @@ use geoengine_operators::source::gdal_worker_process::{
 
 /// Probe a STAC collection and sample items to auto-discover the dataset mapping.
 #[derive(Debug, Parser)]
+#[allow(clippy::struct_excessive_bools)] // independent command line flags, no state-machine
 pub struct StacDiscoverMapping {
     /// STAC API URL
     #[arg(long)]
@@ -108,6 +109,11 @@ pub struct StacDiscoverMapping {
     /// Time dimension step (default: 1)
     #[arg(long, default_value_t = 1)]
     pub time_step: u32,
+
+    /// Write `datetimeFrequencyAggregation` into the definition: the server has the
+    /// `datetime_frequency` aggregation and answers in the bucket size it is asked for.
+    #[arg(long, default_value_t = false)]
+    pub datetime_frequency_aggregation: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -226,6 +232,8 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         cache_ttl_secs: None,
         stac_grid: None,
         max_concurrent_cell_searches: None,
+        datetime_frequency_aggregation: params.datetime_frequency_aggregation.then_some(true),
+        time_bounds: None,
         item_time: None,
         max_concurrent_asset_probes: None,
     };
@@ -1280,6 +1288,7 @@ mod tests {
             time_step: 1,
             page_limit: 100,
             id: None,
+            datetime_frequency_aggregation: true,
         };
 
         discover_mapping(params)
@@ -1296,6 +1305,11 @@ mod tests {
         // Normalize variable fields before comparison
         let output_obj = output_json.as_object_mut().unwrap();
         output_obj.remove("id");
+        // the expected mapping is shared with tests of providers that do not aggregate
+        assert_eq!(
+            output_obj.remove("datetimeFrequencyAggregation"),
+            Some(serde_json::json!(true))
+        );
         output_obj.insert(
             "apiUrl".to_string(),
             serde_json::json!("https://stac.test/v1"),
@@ -1392,6 +1406,7 @@ mod tests {
             time_step: 1,
             page_limit: 100,
             id: None,
+            datetime_frequency_aggregation: false,
         };
 
         discover_mapping(params)

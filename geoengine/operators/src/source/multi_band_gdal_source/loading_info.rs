@@ -1,6 +1,10 @@
 use super::GdalDatasetParameters;
-use crate::engine::RasterResultDescriptor;
+use crate::engine::{MetaData, RasterResultDescriptor, StaticMetaData};
 use crate::source::gdal_read::TilePlan;
+use futures::{
+    StreamExt, future,
+    stream::{self, BoxStream},
+};
 use geoengine_datatypes::{
     primitives::{
         CacheHint, CacheTtlSeconds, SpatialPartition2D, SpatialPartitioned, TimeInterval,
@@ -19,12 +23,46 @@ pub struct GdalMultiBand {
     pub cache_ttl: Option<CacheTtlSeconds>,
 }
 
+/// The loading info of a query: its parts in time order, which together have the gap-free time
+/// steps of the queried time. A provider answers a long time range in several parts, so that the
+/// files of all time steps are never held at once. It is a stream and not a cursor in the answer,
+/// so that a caller cannot stop after the first part by mistake and the provider can keep its
+/// state between the parts.
+pub type MultiBandGdalLoadingInfo =
+    BoxStream<'static, crate::util::Result<MultiBandGdalLoadingInfoPart>>;
+
+/// One part of a [`MultiBandGdalLoadingInfo`]: some time steps in a row and their files.
 #[derive(Debug, Clone)]
-pub struct MultiBandGdalLoadingInfo {
+pub struct MultiBandGdalLoadingInfoPart {
     files: Vec<TileFile>,
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
+    /// For each time step whether it has data, if the provider could tell without the files,
+    /// `None` for a step it cannot tell. The part then has no files. This holds for the whole
+    /// part: either every time step has an entry, or the part has files. Each part of a long time
+    /// range decides this for itself.
+    availability: Option<Vec<Option<bool>>>,
+}
+
+/// Static metadata answers with its one part, e.g. in tests and benches.
+#[async_trait::async_trait]
+impl<Q> MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>
+    for StaticMetaData<MultiBandGdalLoadingInfoPart, RasterResultDescriptor, Q>
+where
+    Q: std::fmt::Debug + Clone + Send + Sync + 'static,
+{
+    async fn loading_info(&self, _query: Q) -> crate::util::Result<MultiBandGdalLoadingInfo> {
+        Ok(stream::once(future::ready(Ok(self.loading_info.clone()))).boxed())
+    }
+
+    async fn result_descriptor(&self) -> crate::util::Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(&self) -> Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>> {
+        Box::new(self.clone())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,7 +74,7 @@ pub struct TileFile {
     pub params: GdalDatasetParameters,
 }
 
-impl MultiBandGdalLoadingInfo {
+impl MultiBandGdalLoadingInfoPart {
     pub fn new(
         time_steps: Vec<TimeInterval>,
         files: Vec<TileFile>,
@@ -75,7 +113,38 @@ impl MultiBandGdalLoadingInfo {
             files,
             time_steps,
             cache_ttl,
+            availability: None,
         }
+    }
+
+    /// Marks this part as telling for each time step whether it has data, without its files.
+    ///
+    /// # Errors
+    /// If `has_data` does not have one entry per time step, because a missing entry would read as
+    /// a step without data.
+    pub fn with_availability(mut self, has_data: Vec<Option<bool>>) -> crate::util::Result<Self> {
+        snafu::ensure!(
+            has_data.len() == self.time_steps.len(),
+            crate::error::LoadingInfoAvailabilityLength {
+                entries: has_data.len(),
+                time_steps: self.time_steps.len(),
+            }
+        );
+        self.availability = Some(has_data);
+        Ok(self)
+    }
+
+    /// Whether the time step with this index has data, if the provider told without files.
+    pub fn has_data(&self, time_step_index: usize) -> Option<bool> {
+        self.availability
+            .as_ref()
+            .and_then(|has_data| has_data.get(time_step_index).copied().flatten())
+    }
+
+    /// Whether the provider told the availability of the time steps instead of their files, see
+    /// [`Self::with_availability`].
+    pub fn tells_availability(&self) -> bool {
+        self.availability.is_some()
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -106,6 +175,18 @@ impl MultiBandGdalLoadingInfo {
             .collect()
     }
 
+    /// The areas of all files of a time step and bands, regardless of which tile needs them.
+    pub fn file_bounds<'a>(
+        &'a self,
+        time: TimeInterval,
+        bands: &'a [u32],
+    ) -> impl Iterator<Item = SpatialPartition2D> + 'a {
+        self.files
+            .iter()
+            .filter(move |file| time.intersects(&file.time) && bands.contains(&file.band))
+            .map(|file| file.spatial_partition)
+    }
+
     pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
         self.cache_ttl.unwrap_or(default_ttl).into()
     }
@@ -127,5 +208,30 @@ impl MultiBandGdalLoadingInfo {
             files,
             cache_hint: self.cache_hint(default_ttl),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_rejects_an_availability_without_one_entry_per_time_step() {
+        let info = || {
+            MultiBandGdalLoadingInfoPart::new(
+                vec![
+                    TimeInterval::new_unchecked(0, 5),
+                    TimeInterval::new_unchecked(5, 10),
+                ],
+                Vec::new(),
+                None,
+            )
+        };
+
+        assert!(info().with_availability(vec![Some(true)]).is_err());
+        let told = info().with_availability(vec![None, Some(false)]).unwrap();
+        assert_eq!(told.has_data(0), None);
+        assert_eq!(told.has_data(1), Some(false));
+        assert!(told.tells_availability());
     }
 }
