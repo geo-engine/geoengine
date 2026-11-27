@@ -1,6 +1,6 @@
 # Generated API clients (`just api-clients build`): collapsed in GitHub PR diffs
-api-clients/python/** linguist-generated=true -diff
-api-clients/rust/** linguist-generated=true -diff
-api-clients/typescript/** linguist-generated=true -diff
+api-clients/python/** linguist-generated=true
+api-clients/rust/** linguist-generated=true
+api-clients/typescript/** linguist-generated=true
 # hand-written tests, untouched by the generator
-api-clients/typescript/test/** -linguist-generated diff
+api-clients/typescript/test/** -linguist-generated
