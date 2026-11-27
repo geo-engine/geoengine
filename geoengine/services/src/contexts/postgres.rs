@@ -35,7 +35,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
-    engine::{ChunkByteSize, GdalReadAhead},
+    engine::{ChunkByteSize, GdalReadAhead, QueryParallelism},
     machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
     processing::ExpressionEnvironment,
@@ -70,6 +70,7 @@ where
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
+    available_parallelism_per_query: usize,
     provider_registry: Arc<DataConnectorRegistry>,
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
@@ -167,6 +168,8 @@ where
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(0),
+            available_parallelism_per_query: get_config_element::<crate::config::QueryContext>()?
+                .available_parallelism_per_query,
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -246,6 +249,8 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            available_parallelism_per_query: get_config_element::<crate::config::QueryContext>()?
+                .available_parallelism_per_query,
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -282,6 +287,7 @@ where
         expression_environment: ExpressionEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
+        let query_context_config = get_config_element::<crate::config::QueryContext>()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -334,6 +340,7 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            available_parallelism_per_query: query_context_config.available_parallelism_per_query,
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -580,6 +587,7 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
+            QueryParallelism::new(self.context.available_parallelism_per_query),
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(self.context.quota.create_quota_tracking(

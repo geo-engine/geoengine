@@ -252,6 +252,8 @@ pub struct QueryContext {
     pub gdal_source_read_ahead: NonZeroUsize,
     /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+    /// Sub-queries of one query that may run at once, see `QueryParallelism`
+    pub available_parallelism_per_query: usize,
     /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
     /// output tile
     pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,

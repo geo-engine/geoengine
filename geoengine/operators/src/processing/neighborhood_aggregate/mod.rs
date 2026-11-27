@@ -295,7 +295,7 @@ where
                     .tiling_grid_definition(self.tiling_specification)
                     .generate_data_tiling_strategy();
 
-                let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                let sq = RasterSubQueryAdapter::<'a, P>::new(
                     &self.source,
                     query,
                     tiling_strat,

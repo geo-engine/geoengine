@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     task::{Context, Poll},
 };
 
@@ -41,6 +44,53 @@ impl Default for GdalReadAhead {
     }
 }
 
+/// The parallelism available to a query, shared by all of its operators, so nested operators
+/// add up instead of multiplying their fanout.
+///
+/// Work beyond what an operator needs to make progress takes a [`ParallelismPermit`], which never
+/// waits. The needed work runs even at 0 permits, e.g. one sub-query of each raster sub-query
+/// adapter; otherwise an inner adapter could wait forever for the permits of an outer one.
+pub struct QueryParallelism {
+    available: Arc<AtomicUsize>,
+}
+
+/// One unit of optional work; goes back to the counter when dropped.
+pub struct ParallelismPermit(Arc<AtomicUsize>);
+
+impl Drop for ParallelismPermit {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+impl QueryParallelism {
+    /// Up to `available_per_query` units of work of the query run at once, counting the
+    /// needed one of each running operator chain.
+    pub fn new(available_per_query: usize) -> Self {
+        Self {
+            // the needed work takes no permit, so the counter holds the rest
+            available: Arc::new(AtomicUsize::new(available_per_query.saturating_sub(1))),
+        }
+    }
+
+    /// A permit, or `None` when the query's parallelism is in use.
+    pub fn try_acquire(&self) -> Option<ParallelismPermit> {
+        // Relaxed: the counter guards no other data, it only bounds the amount of work
+        self.available
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+            .ok()?;
+        Some(ParallelismPermit(self.available.clone()))
+    }
+}
+
+/// Parallel, so tests exercise concurrent work; servers read
+/// `[query_context] available_parallelism_per_query` (default 1).
+impl TestDefault for QueryParallelism {
+    fn test_default() -> Self {
+        Self::new(4)
+    }
+}
+
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
     pub const MAX: ChunkByteSize = ChunkByteSize(usize::MAX);
@@ -77,6 +127,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+    fn parallelism(&self) -> &QueryParallelism;
 
     fn gdal_read_ahead(&self) -> GdalReadAhead {
         GdalReadAhead::default()
@@ -212,6 +263,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
+    pub parallelism: QueryParallelism,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -243,6 +295,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool,
+            parallelism: QueryParallelism::test_default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -272,6 +325,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            parallelism: QueryParallelism::test_default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -299,6 +353,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
+            parallelism: QueryParallelism::test_default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -333,6 +388,10 @@ impl QueryContext for MockQueryContext {
 
     fn gdal_read_ahead(&self) -> GdalReadAhead {
         self.gdal_read_ahead
+    }
+
+    fn parallelism(&self) -> &QueryParallelism {
+        &self.parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -434,5 +493,20 @@ mod tests {
             Some(Err(error::Error::QueryCanceled))
         ));
         assert!(stream.next().await.is_none());
+    }
+
+    #[test]
+    fn it_hands_out_up_to_the_available_parallelism() {
+        assert!(QueryParallelism::new(0).try_acquire().is_none());
+        assert!(QueryParallelism::new(1).try_acquire().is_none());
+
+        let parallelism = QueryParallelism::new(3);
+        // the guaranteed one plus 2 permits = 3
+        let held = [parallelism.try_acquire(), parallelism.try_acquire()];
+        assert!(held.iter().all(Option::is_some));
+        assert!(parallelism.try_acquire().is_none());
+
+        drop(held);
+        assert!(parallelism.try_acquire().is_some());
     }
 }
