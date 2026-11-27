@@ -8,6 +8,12 @@ import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, MapExtent, VisualizationPreset} from './data-sources';
 
+/** Initial catalogue path, matched by name so it works across deployments with different collection and layer ids. */
+const INITIAL_DATA_SOURCE = {
+    category: 'Sentinel-2',
+    name: 'Sentinel-2 Global Mosaics',
+};
+
 /**
  * Service for managing layers in the EOdyssey.
  */
@@ -20,14 +26,24 @@ export class EOdysseyLayerService {
         source: () => (this.catalogueLoading() ? undefined : this.categories()),
         computation: (categories, previous) => {
             if (!categories) return previous?.value;
-            return categories.find((category) => category.key === previous?.value?.key) ?? categories[0];
+            return (
+                categories.find((category) => category.key === previous?.value?.key) ??
+                categories.find((category) => category.name === INITIAL_DATA_SOURCE.category) ??
+                categories[0]
+            );
         },
     });
     readonly selectedDataSource = linkedSignal<DataSourceDefinition[] | undefined, DataSourceDefinition | undefined>({
         source: () => (this.catalogueLoading() ? undefined : this.dataSources()),
         computation: (sources, previous) => {
             if (!sources) return previous?.value;
-            return sources.find((source) => source.key === previous?.value?.key) ?? sources[0];
+            return (
+                sources.find((source) => source.key === previous?.value?.key) ??
+                (this.selectedCategory()?.name === INITIAL_DATA_SOURCE.category
+                    ? sources.find((source) => source.name === INITIAL_DATA_SOURCE.name)
+                    : undefined) ??
+                sources[0]
+            );
         },
     });
     readonly selectedVariantKey = linkedSignal<DataSourceDefinition | undefined, string | undefined>({
