@@ -199,3 +199,35 @@ lint-markdown: common::_clear
     python/README.md python/AGENTS.md \
     ui/README.md ui/AGENTS.md \
     www/README.md www/AGENTS.md
+
+# Mark the generated files of a pull request as viewed for yourself, so that "Hide viewed files" hides them. Usage: `just repo mark-generated-files-viewed 1234`.
+# Generated files are the ones marked `linguist-generated` in `.gitattributes`. GitHub resets the mark when a file changes again.
+[arg("pr", help="Number of the pull request.")]
+[group("review")]
+[script("bash")]
+mark-generated-files-viewed pr: common::_clear
+    set -euo pipefail
+    batch_size=50
+
+    pr_id=$(gh pr view "{{ pr }}" --json id --jq .id)
+    mapfile -t changed < <(gh api --paginate "repos/{owner}/{repo}/pulls/{{ pr }}/files" --jq '.[].filename')
+    mapfile -t generated < <(
+        printf '%s\n' "${changed[@]}" \
+        | git check-attr --stdin linguist-generated \
+        | awk -F': ' '$3 == "true" { print $1 }'
+    )
+
+    # one GraphQL request per batch, with one aliased mutation per file
+    for ((i = 0; i < ${#generated[@]}; i += batch_size)); do
+        query=$(
+            printf '%s\n' "${generated[@]:i:batch_size}" \
+            | jq -Rrs --arg id "$pr_id" '
+                split("\n") | map(select(. != "")) | to_entries
+                | map("m\(.key): markFileAsViewed(input: {pullRequestId: \($id | tojson), path: \(.value | tojson)}) { clientMutationId }")
+                | "mutation { \(join(" ")) }"
+            '
+        )
+        gh api graphql -f query="$query" > /dev/null
+    done
+
+    echo "Marked ${#generated[@]} of ${#changed[@]} changed files as viewed in #{{ pr }}."
