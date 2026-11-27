@@ -6,6 +6,8 @@ Inside this directory, drop the module prefix from the `just` recipes below (`ju
 
 `python/`, `rust/` and `typescript/` are **generated** by openapi-generator from `../openapi.json`.
 Never edit them by hand: the next build overwrites them, and CI fails if the committed code differs from a fresh build.
+The root `.gitattributes` marks them `linguist-generated`, so GitHub collapses them in PR diffs.
+A hand-written file in these directories (kept by `.openapi-generator-ignore`, like `typescript/test/`) needs a `-linguist-generated` exception there.
 
 - `just api-clients build` regenerates all three.
   Single language: `build-python`, `build-rust`, `build-typescript`.
