@@ -1,5 +1,6 @@
-use super::GdalDatasetParameters;
-use crate::engine::{MetaData, RasterResultDescriptor, StaticMetaData};
+use super::meta_data::{MultiBandGdalMetaData, StepFootprint};
+use super::{GdalDatasetParameters, MultiBandGdalLoadingInfoQueryRectangle};
+use crate::engine::{RasterResultDescriptor, StaticMetaData};
 use crate::source::gdal_read::TilePlan;
 use futures::{
     StreamExt, future,
@@ -38,28 +39,50 @@ pub struct MultiBandGdalLoadingInfoPart {
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
-    /// For each time step whether it has data, if the provider could tell without the files.
-    /// The part then has no files. This holds for the whole part: either every time step has
-    /// an entry, or the part has files. Each part of a long time range decides this for itself.
-    availability: Option<Vec<bool>>,
 }
 
 /// Static metadata answers with its one part, e.g. in tests and benches.
 #[async_trait::async_trait]
-impl<Q> MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>
-    for StaticMetaData<MultiBandGdalLoadingInfoPart, RasterResultDescriptor, Q>
-where
-    Q: std::fmt::Debug + Clone + Send + Sync + 'static,
+impl MultiBandGdalMetaData
+    for StaticMetaData<
+        MultiBandGdalLoadingInfoPart,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    >
 {
-    async fn loading_info(&self, _query: Q) -> crate::util::Result<MultiBandGdalLoadingInfo> {
-        Ok(stream::once(future::ready(Ok(self.loading_info.clone()))).boxed())
-    }
-
     async fn result_descriptor(&self) -> crate::util::Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
     }
 
-    fn box_clone(&self) -> Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, Q>> {
+    async fn time_steps(
+        &self,
+        time: TimeInterval,
+    ) -> crate::util::Result<BoxStream<'static, crate::util::Result<TimeInterval>>> {
+        let steps = self.loading_info.time_steps.clone();
+        Ok(stream::iter(
+            steps
+                .into_iter()
+                .filter(move |step| step.intersects(&time))
+                .map(Ok),
+        )
+        .boxed())
+    }
+
+    async fn loading_info(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> crate::util::Result<MultiBandGdalLoadingInfo> {
+        // the same steps as `time_steps`; the files of other steps are never read
+        let time = query.query_rectangle.time_interval();
+        let mut part = self.loading_info.clone();
+        part.time_steps.retain(|step| step.intersects(&time));
+        if part.time_steps.is_empty() {
+            return Ok(stream::empty().boxed());
+        }
+        Ok(stream::once(future::ready(Ok(part))).boxed())
+    }
+
+    fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData> {
         Box::new(self.clone())
     }
 }
@@ -112,32 +135,21 @@ impl MultiBandGdalLoadingInfoPart {
             files,
             time_steps,
             cache_ttl,
-            availability: None,
         }
     }
 
-    /// Marks this part as telling for each time step whether it has data, without its files.
-    ///
-    /// # Errors
-    /// If `has_data` does not have one entry per time step, because a missing entry would read as
-    /// a step without data.
-    pub fn with_availability(mut self, has_data: Vec<bool>) -> crate::util::Result<Self> {
-        snafu::ensure!(
-            has_data.len() == self.time_steps.len(),
-            crate::error::LoadingInfoAvailabilityLength {
-                entries: has_data.len(),
-                time_steps: self.time_steps.len(),
-            }
-        );
-        self.availability = Some(has_data);
-        Ok(self)
-    }
-
-    /// Whether the time step with this index has data, if the provider told without files.
-    pub fn has_data(&self, time_step_index: usize) -> Option<bool> {
-        self.availability
-            .as_ref()
-            .and_then(|has_data| has_data.get(time_step_index).copied())
+    /// Where each time step has data: the areas of its files of `bands`, none for a step without
+    /// files. See [`MultiBandGdalMetaData::footprints`].
+    pub fn footprints(&self, bands: &[u32]) -> Vec<(TimeInterval, StepFootprint)> {
+        self.time_steps
+            .iter()
+            .map(|&time| {
+                (
+                    time,
+                    StepFootprint::Areas(self.file_bounds(time, bands).collect()),
+                )
+            })
+            .collect()
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -207,27 +219,99 @@ impl MultiBandGdalLoadingInfoPart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::TimeDescriptor;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::primitives::BandSelection;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::util::test::TestDefault;
 
-    #[test]
-    fn it_rejects_an_availability_without_one_entry_per_time_step() {
-        let info = || {
-            MultiBandGdalLoadingInfoPart::new(
-                vec![
-                    TimeInterval::new_unchecked(0, 5),
-                    TimeInterval::new_unchecked(5, 10),
-                ],
+    #[tokio::test]
+    async fn it_answers_the_time_and_the_data_of_static_meta_data_with_the_same_steps() {
+        let first = TimeInterval::new_unchecked(0, 5);
+        let meta_data = StaticMetaData {
+            loading_info: MultiBandGdalLoadingInfoPart::new(
+                vec![first, TimeInterval::new_unchecked(5, 10)],
                 Vec::new(),
                 None,
-            )
+            ),
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+                GridBoundingBox2D::new([0, 0], [0, 0]).unwrap(),
+                GeoTransform::test_default(),
+                TimeDescriptor::new_irregular(None),
+            ),
+            phantom: Default::default(),
         };
 
-        assert!(info().with_availability(vec![true]).is_err());
+        let time_steps: Vec<_> = meta_data
+            .time_steps(first)
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+        let parts: Vec<_> = meta_data
+            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                first,
+                BandSelection::first(),
+            ))
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+
+        assert_eq!(time_steps, vec![first]);
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].time_steps(), time_steps.as_slice());
+    }
+
+    #[test]
+    fn it_tells_the_areas_of_the_files_of_each_step_and_none_for_a_step_without_files() {
+        let area = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let file = |band| TileFile {
+            time: TimeInterval::new_unchecked(0, 5),
+            spatial_partition: area,
+            band,
+            z_index: 0,
+            params: GdalDatasetParameters {
+                file_path: "/foo/bar.tiff".into(),
+                rasterband_channel: 1,
+                geo_transform: geoengine_datatypes::util::test::TestDefault::test_default(),
+                width: 1,
+                height: 1,
+                file_not_found_handling: crate::source::FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: true,
+                retry: None,
+            },
+        };
+        let part = MultiBandGdalLoadingInfoPart::new(
+            vec![
+                TimeInterval::new_unchecked(0, 5),
+                TimeInterval::new_unchecked(5, 10),
+            ],
+            vec![file(0), file(1)],
+            None,
+        );
+
         assert_eq!(
-            info()
-                .with_availability(vec![true, false])
-                .unwrap()
-                .has_data(1),
-            Some(false)
+            part.footprints(&[1]),
+            vec![
+                (
+                    TimeInterval::new_unchecked(0, 5),
+                    StepFootprint::Areas(vec![area])
+                ),
+                (
+                    TimeInterval::new_unchecked(5, 10),
+                    StepFootprint::Areas(vec![])
+                ),
+            ]
         );
     }
 }

@@ -28,8 +28,8 @@ use geoengine_operators::{
     },
     mock::MockDatasetDataSourceLoadingInfo,
     source::{
-        GdalLoadingInfo, GdalSource, GdalSourceParameters, MultiBandGdalLoadingInfo,
-        MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+        GdalLoadingInfo, GdalSource, GdalSourceParameters, MultiBandGdalMetaDataProvider,
+        OgrSourceDataset,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -457,30 +457,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-#[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for CopernicusDataspaceDataProvider
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotImplemented)
-    }
-}
+impl MultiBandGdalMetaDataProvider for CopernicusDataspaceDataProvider {}
 
 #[async_trait]
 impl

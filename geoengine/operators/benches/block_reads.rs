@@ -87,16 +87,14 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::new_raster_cache::{BlockReadMode, CacheStats, NewRasterCacheEnum},
     engine::{
-        BoxRasterQueryProcessor, InitializedRasterOperator, MetaData, ProcessingGraphOperatorPath,
+        BoxRasterQueryProcessor, InitializedRasterOperator, ProcessingGraphOperatorPath,
         QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedRasterOperator,
-        TypedRasterQueryProcessor,
+        StaticMetaData, TimeDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
     },
     source::{
         GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
-        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart,
-        MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource, MultiBandGdalSourceParameters,
-        TileFile, gdal_worker_process::PoolRequestStats,
+        MultiBandGdalLoadingInfoPart, MultiBandGdalMetaData, MultiBandGdalSource,
+        MultiBandGdalSourceParameters, TileFile, gdal_worker_process::PoolRequestStats,
     },
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
@@ -303,13 +301,7 @@ fn add_multi_band_dataset(
         })
         .collect();
 
-    let meta_data: Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
-    > = Box::new(StaticMetaData {
+    let meta_data: Box<dyn MultiBandGdalMetaData> = Box::new(StaticMetaData {
         loading_info: MultiBandGdalLoadingInfoPart::new(
             vec![TimeInterval::default()],
             tile_files,
@@ -318,7 +310,7 @@ fn add_multi_band_dataset(
         result_descriptor,
         phantom: PhantomData,
     });
-    env.add_data(&format!("files_{}", DatasetId::new()), meta_data)
+    env.add_multi_band_gdal_data(&format!("files_{}", DatasetId::new()), meta_data)
 }
 
 fn multi_band_source(name: &NamedData) -> TypedRasterOperator {

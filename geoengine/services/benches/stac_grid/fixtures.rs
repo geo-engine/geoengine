@@ -491,7 +491,7 @@ pub(super) async fn first_part(
     query: geoengine_operators::source::MultiBandGdalLoadingInfoQueryRectangle,
 ) -> geoengine_operators::util::Result<geoengine_operators::source::MultiBandGdalLoadingInfoPart> {
     use futures::TryStreamExt as _;
-    use geoengine_operators::engine::MetaData as _;
+    use geoengine_operators::source::MultiBandGdalMetaData as _;
 
     let part = meta.loading_info(query).await?.try_next().await?;
     Ok(part.expect("a loading info has at least one part"))
@@ -502,7 +502,7 @@ pub(super) async fn validate_trace_capture() {
     use geoengine_datatypes::primitives::{
         BandSelection, DateTime, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_operators::source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle};
+    use geoengine_operators::source::MultiBandGdalLoadingInfoQueryRectangle;
 
     if !CacheTraceCapture::enabled() {
         return;
@@ -531,7 +531,6 @@ pub(super) async fn validate_trace_capture() {
                 )
                 .expect("test day"),
                 BandSelection::first(),
-                LoadingInfoDetail::Files,
             )
         };
         let (first, follower) =

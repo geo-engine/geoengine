@@ -50,7 +50,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+        MultiBandGdalMetaDataProvider, OgrSourceDataset,
     },
     util::gdal::gdal_open_dataset_ex,
 };
@@ -1541,30 +1541,7 @@ impl<D: GeoEngineDb>
     }
 }
 
-#[async_trait]
-impl<D: GeoEngineDb>
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for NetCdfCfDataProvider<D>
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
+impl<D: GeoEngineDb> MultiBandGdalMetaDataProvider for NetCdfCfDataProvider<D> {}
 
 fn netcfg_gdal_path(
     base_path: Option<&Path>,

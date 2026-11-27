@@ -1724,7 +1724,7 @@ mod tests {
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use futures::TryStreamExt;
+    use futures::{StreamExt as _, TryStreamExt};
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
@@ -1738,12 +1738,12 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ExecutionContext, InitializedVectorOperator, MetaData, MetaDataProvider,
-            ProcessingGraphOperatorPath, QueryProcessor, RasterOperator as _, StaticMetaData,
-            VectorOperator, VectorResultDescriptor,
+            ExecutionContext, InitializedVectorOperator, ProcessingGraphOperatorPath,
+            QueryProcessor, RasterOperator as _, StaticMetaData, VectorOperator,
+            VectorResultDescriptor,
         },
         source::{
-            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
+            MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalMetaDataProvider, OgrSource,
             OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
         },
         util::{
@@ -5563,14 +5563,8 @@ mod tests {
             panic!("expected raster dataset");
         };
 
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: id_and_name.id.into(),
                     r#type:
@@ -5654,14 +5648,8 @@ mod tests {
             panic!("expected raster dataset");
         };
 
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: id_and_name.id.into(),
                     r#type:
@@ -5720,14 +5708,8 @@ mod tests {
             .resolve_dataset_name_to_id(&dataset_name)
             .await?
             .expect("the dataset exists");
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    geoengine_operators::engine::RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = db
-            .meta_data(
+        let meta_data = db
+            .multi_band_gdal_meta_data(
                 &DataId::Internal(InternalDataId {
                     dataset_id: dataset_id.into(),
                     r#type:
@@ -5747,7 +5729,6 @@ mod tests {
                         .unwrap(),
                 )?,
                 BandSelection::first(),
-                geoengine_operators::source::LoadingInfoDetail::Files,
             ))
             .await?
             .try_collect()
@@ -5767,6 +5748,32 @@ mod tests {
         assert_eq!(rest.time_steps().len(), 8);
         let last = *rest.time_steps().last().unwrap();
         assert!(rest.file_bounds(last, &[0]).count() > 0);
+
+        // The monthly steps up to the end of time cannot all be built: the last one would end
+        // after it. So only steps built as they are read answer the time query and the first part.
+        let open_end = TimeInterval::new(
+            geoengine_datatypes::primitives::DateTime::new_utc(2000, 1, 1, 0, 0, 0),
+            geoengine_datatypes::primitives::TimeInstance::MAX,
+        )?;
+        let steps: Vec<_> = meta_data
+            .time_steps(open_end)
+            .await?
+            .take(3)
+            .try_collect()
+            .await?;
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].start(), open_end.start());
+        let first = meta_data
+            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+                open_end,
+                BandSelection::first(),
+            ))
+            .await?
+            .try_next()
+            .await?
+            .expect("a first part");
+        assert_eq!(first.time_steps().len(), 32);
 
         Ok(())
     }

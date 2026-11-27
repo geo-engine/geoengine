@@ -31,9 +31,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::error::Error::{Bb8Postgres, Postgres};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
-    OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-    OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
+    GdalLoadingInfo, MultiBandGdalMetaDataProvider, OgrSource, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceParameters, OgrSourceTimeFormat,
 };
 use itertools::Itertools;
 use postgres_types::{FromSql, ToSql};
@@ -1498,29 +1498,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-#[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for GbifDataProvider
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-    > {
-        Err(geoengine_operators::error::Error::NotYetImplemented)
-    }
-}
+impl MultiBandGdalMetaDataProvider for GbifDataProvider {}
 
 #[async_trait]
 impl DataProvider for GbifDataProvider {

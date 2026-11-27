@@ -45,8 +45,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     processing::ExpressionEnvironment,
     source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
+        GdalLoadingInfo, MultiBandGdalMetaData, MultiBandGdalMetaDataProvider, OgrSourceDataset,
         gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     },
 };
@@ -358,11 +357,8 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + MetaDataProvider<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        > + LayerProviderDb
+        + MultiBandGdalMetaDataProvider
+        + LayerProviderDb
         + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -647,41 +643,22 @@ where
 }
 
 #[async_trait]
-impl<D>
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for ExecutionContextImpl<D>
+impl<D> MultiBandGdalMetaDataProvider for ExecutionContextImpl<D>
 where
-    D: DatasetDb
-        + MetaDataProvider<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        > + LayerProviderDb,
+    D: DatasetDb + MultiBandGdalMetaDataProvider + LayerProviderDb,
 {
-    async fn meta_data(
+    async fn multi_band_gdal_meta_data(
         &self,
         data_id: &DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
+    ) -> Result<Box<dyn MultiBandGdalMetaData>, geoengine_operators::error::Error> {
         match data_id {
-            DataId::Internal { dataset_id: _ } => {
-                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
-                    geoengine_operators::error::Error::LoadingInfo {
-                        source: Box::new(e),
-                    }
-                })
-            }
+            DataId::Internal { dataset_id: _ } => self
+                .db
+                .multi_band_gdal_meta_data(data_id)
+                .await
+                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(e),
+                }),
             DataId::External(external) => {
                 self.db
                     .load_layer_provider(external.provider_id)
@@ -689,7 +666,7 @@ where
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(data_id)
+                    .multi_band_gdal_meta_data(data_id)
                     .await
             }
         }

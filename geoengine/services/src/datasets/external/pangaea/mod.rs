@@ -17,8 +17,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+    GdalLoadingInfo, MultiBandGdalMetaDataProvider, OgrSourceDataset,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -239,30 +238,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-#[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for PangaeaDataProvider
-{
-    async fn meta_data(
-        &self,
-        _id: &geoengine_datatypes::dataset::DataId,
-    ) -> Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-        geoengine_operators::error::Error,
-    > {
-        Err(geoengine_operators::error::Error::NotImplemented)
-    }
-}
+impl MultiBandGdalMetaDataProvider for PangaeaDataProvider {}
 
 #[async_trait]
 impl

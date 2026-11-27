@@ -25,8 +25,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+    GdalLoadingInfo, MultiBandGdalMetaData, MultiBandGdalMetaDataProvider, OgrSourceDataset,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -69,11 +68,8 @@ pub trait DataProvider: LayerCollectionProvider
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > + Send
+    + MultiBandGdalMetaDataProvider
+    + Send
     + Sync
     + std::fmt::Debug
     + AsAny
@@ -203,26 +199,12 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for SharedDataConnector
-{
-    async fn meta_data(
+impl MultiBandGdalMetaDataProvider for SharedDataConnector {
+    async fn multi_band_gdal_meta_data(
         &self,
         id: &DataId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn geoengine_operators::engine::MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-    > {
-        self.0.meta_data(id).await
+    ) -> geoengine_operators::util::Result<Box<dyn MultiBandGdalMetaData>> {
+        self.0.multi_band_gdal_meta_data(id).await
     }
 }
 

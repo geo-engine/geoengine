@@ -12,13 +12,13 @@ use crate::util::join_base_url_and_path;
 use crate::util::retry::RetryPolicy;
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
-use futures::{FutureExt, StreamExt, TryStreamExt, future::BoxFuture};
+use futures::{FutureExt, StreamExt, TryStreamExt, future::BoxFuture, stream::BoxStream};
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, RasterQueryRectangle,
-    RegularTimeDimension, SpatialPartition2D, SpatialResolution, TimeDimension, TimeInstance,
-    TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, CacheTtlSeconds, QueryRectangle,
+    RasterQueryRectangle, RegularTimeDimension, SpatialPartition2D, SpatialResolution,
+    TimeDimension, TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
@@ -26,15 +26,15 @@ use geoengine_datatypes::spatial_reference::{
 };
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
-    VectorResultDescriptor,
+    FootprintPrecision, MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor,
+    TimeDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, LoadingInfoDetail, LoadingInfoResolution, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
-    TileFile,
+    GdalRetryOptions, LoadingInfoResolution, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalMetaData,
+    MultiBandGdalMetaDataProvider, OgrSourceDataset, StepFootprint, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -167,59 +167,7 @@ async fn query_stac_item_collection(
 }
 
 #[async_trait]
-impl
-    MetaData<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for StacMultiBandMetaData
-{
-    async fn loading_info(
-        &self,
-        query: MultiBandGdalLoadingInfoQueryRectangle,
-    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfo> {
-        let time_interval =
-            stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
-
-        if query.detail == LoadingInfoDetail::TimeSteps {
-            // Regular layers expose every step, including steps without any assets.
-            // Their time axis is defined by the provider, so no STAC search is needed.
-            let part = MultiBandGdalLoadingInfoPart::new(
-                regular_time_steps(self.time_dimension, time_interval)?
-                    .collect::<geoengine_operators::util::Result<Vec<_>>>()?,
-                Vec::new(),
-                self.cache_ttl_secs,
-            );
-            return Ok(futures::stream::once(futures::future::ready(Ok(part))).boxed());
-        }
-
-        // Decided for the whole request, not for each of its parts: a window that a chunk border
-        // cuts into parts of one step is still a window.
-        let one_step_request = regular_time_steps(self.time_dimension, time_interval)?
-            .take(2)
-            .count()
-            <= 1;
-
-        // A long time range is answered one chunk at a time, each when the caller gets there.
-        // A query of one step, like a map tile's, fits into one chunk.
-        let metadata = self.clone();
-        Ok(
-            futures::stream::try_unfold(Some(time_interval), move |rest| {
-                let metadata = metadata.clone();
-                let query = query.clone();
-                async move {
-                    let Some(rest) = rest else {
-                        return Ok(None);
-                    };
-                    let (chunk, rest) = metadata.first_chunk(rest)?;
-                    let part = metadata.part(&query, chunk, one_step_request).await?;
-                    Ok(Some((part, rest)))
-                }
-            })
-            .boxed(),
-        )
-    }
-
+impl MultiBandGdalMetaData for StacMultiBandMetaData {
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let bands = RasterBandDescriptors::new(
             self.dataset
@@ -241,15 +189,83 @@ impl
         })
     }
 
-    fn box_clone(
+    async fn time_steps(
         &self,
-    ) -> Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
+        time: TimeInterval,
+    ) -> geoengine_operators::util::Result<
+        BoxStream<'static, geoengine_operators::util::Result<TimeInterval>>,
     > {
+        // Regular layers expose every step, including steps without any assets.
+        // Their time axis is defined by the provider, so no STAC search is needed.
+        let time = stac_query_time_interval(time, self.time_dimension)?;
+        Ok(futures::stream::iter(regular_time_steps(self.time_dimension, time)?).boxed())
+    }
+
+    async fn loading_info(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfo> {
+        let bounds = query.query_rectangle.spatial_bounds();
+        let metadata = self.clone();
+        Ok(self
+            .chunks(query.query_rectangle.time_interval())?
+            .and_then(move |chunk| {
+                let metadata = metadata.clone();
+                async move {
+                    let cells = metadata.chunk_cells(bounds, chunk)?;
+                    metadata
+                        .files_part(bounds, cells, query.resolution, KnownSteps::new())
+                        .await
+                }
+            })
+            .boxed())
+    }
+
+    async fn footprints(
+        &self,
+        query: QueryRectangle<SpatialPartition2D, BandSelection>,
+        precision: FootprintPrecision,
+    ) -> geoengine_operators::util::Result<
+        BoxStream<'static, geoengine_operators::util::Result<Vec<(TimeInterval, StepFootprint)>>>,
+    > {
+        let bounds = query.spatial_bounds();
+        let bands = query.attributes().as_vec();
+        let one_step_request = self.is_one_step(query.time_interval())?;
+        let metadata = self.clone();
+        Ok(self
+            .chunks(query.time_interval())?
+            .and_then(move |chunk| {
+                let metadata = metadata.clone();
+                let bands = bands.clone();
+                async move {
+                    let cells = metadata.chunk_cells(bounds, chunk)?;
+                    if precision == FootprintPrecision::Availability
+                        && let Some(has_data) = metadata.availability(bounds, &cells).await?
+                    {
+                        return Ok(cells
+                            .time_steps
+                            .into_iter()
+                            .zip(has_data)
+                            .map(|(step, has_data)| {
+                                let footprint = if has_data {
+                                    StepFootprint::Somewhere
+                                } else {
+                                    StepFootprint::Areas(Vec::new())
+                                };
+                                (step, footprint)
+                            })
+                            .collect());
+                    }
+                    let part = metadata
+                        .footprint_files(bounds, cells, one_step_request)
+                        .await?;
+                    Ok(part.footprints(&bands))
+                }
+            })
+            .boxed())
+    }
+
+    fn box_clone(&self) -> Box<dyn MultiBandGdalMetaData> {
         Box::new(self.clone())
     }
 }
@@ -331,79 +347,144 @@ fn files_per_step(
 /// before the cache, so the searches it counted are all that run, whatever the cache keeps.
 type KnownSteps = HashMap<(GridIdx2D, TimeInterval), Arc<Vec<StacTileFile>>>;
 
-impl StacMultiBandMetaData {
-    /// The part of the answer to `query` for `time_interval`, which lies in one chunk.
-    async fn part(
-        &self,
-        query: &MultiBandGdalLoadingInfoQueryRectangle,
-        time_interval: TimeInterval,
-        one_step_request: bool,
-    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
-        let spatial_bounds = query.query_rectangle.spatial_bounds();
-        let items_url = self.items_url()?;
+/// A chunk of a query: its time steps and the grid cells of its bounds.
+struct ChunkCells {
+    time: TimeInterval,
+    time_steps: Vec<TimeInterval>,
+    cell_bboxes: Vec<(GridIdx2D, BoundingBox2D)>,
+    /// the search box of the view itself, for the aggregation of the calendar
+    view_bbox: Option<BoundingBox2D>,
+}
 
+impl StacMultiBandMetaData {
+    /// A long time range is answered one chunk at a time, each when the caller gets there. A
+    /// query of one step, like a map tile's, fits into one chunk.
+    fn chunks(
+        &self,
+        time: TimeInterval,
+    ) -> geoengine_operators::util::Result<
+        BoxStream<'static, geoengine_operators::util::Result<TimeInterval>>,
+    > {
+        let time = stac_query_time_interval(time, self.time_dimension)?;
+        let metadata = self.clone();
+        Ok(futures::stream::try_unfold(Some(time), move |rest| {
+            let chunk = rest.map(|rest| metadata.first_chunk(rest)).transpose();
+            async move { chunk }
+        })
+        .boxed())
+    }
+
+    /// Whether `time` is one step. Decided for the whole request, not for each of its chunks: a
+    /// window that a chunk border cuts into parts of one step is still a window.
+    fn is_one_step(&self, time: TimeInterval) -> geoengine_operators::util::Result<bool> {
+        let time = stac_query_time_interval(time, self.time_dimension)?;
+        Ok(regular_time_steps(self.time_dimension, time)?
+            .take(2)
+            .count()
+            <= 1)
+    }
+
+    /// The time steps of `chunk` and the grid cells of `spatial_bounds`.
+    fn chunk_cells(
+        &self,
+        spatial_bounds: SpatialPartition2D,
+        chunk: TimeInterval,
+    ) -> geoengine_operators::util::Result<ChunkCells> {
+        let time_steps = regular_time_steps(self.time_dimension, chunk)?
+            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
         let (grid, cells) = self.grid_cells(spatial_bounds)?;
         if cells.clone().next().is_none() {
-            // Preserve the existing empty result for queries outside the CRS area of use.
-            let time_steps = regular_time_steps(self.time_dimension, time_interval)?
-                .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
-            return Ok(MultiBandGdalLoadingInfoPart::new(
+            // queries outside the CRS area of use have no files
+            return Ok(ChunkCells {
+                time: chunk,
                 time_steps,
-                Vec::new(),
-                self.cache_ttl_secs,
-            ));
+                cell_bboxes: Vec::new(),
+                view_bbox: None,
+            });
         }
+        Ok(ChunkCells {
+            time: chunk,
+            time_steps,
+            view_bbox: grid.clip_cell_to_extent(spatial_bounds.as_bbox()),
+            cell_bboxes: self.cell_bboxes(grid, cells)?,
+        })
+    }
 
-        let time_steps = regular_time_steps(self.time_dimension, time_interval)?
-            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+    /// Which steps of `cells` have items, from one aggregation over the view, with no search.
+    /// `None` if the server cannot tell it.
+    async fn availability(
+        &self,
+        spatial_bounds: SpatialPartition2D,
+        cells: &ChunkCells,
+    ) -> geoengine_operators::util::Result<Option<Vec<bool>>> {
+        let Some(view_bbox) = cells.view_bbox else {
+            return Ok(None);
+        };
+        let Some(view_bbox) = stac_query_bbox(view_bbox, self.dataset.projection)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .steps_with_items(
+                &self.items_url()?,
+                cells.time,
+                &cells.time_steps,
+                &cells.cell_bboxes,
+                spatial_bounds,
+                view_bbox,
+            )
+            .await)
+    }
 
-        // the search box of the view itself, for the aggregation of the calendar
-        let view_bbox = grid.clip_cell_to_extent(spatial_bounds.as_bbox());
-        let cell_bboxes = self.cell_bboxes(grid, cells)?;
+    /// The files of `cells` for their footprints. Unlike the files of a data query, the searches
+    /// they need are limited by `max_footprint_searches`.
+    async fn footprint_files(
+        &self,
+        spatial_bounds: SpatialPartition2D,
+        cells: ChunkCells,
+        one_step_request: bool,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
+        // Items with a time range are matched against the step a search asks for, so a search
+        // over several steps cannot tell them apart; such items are searched step by step, like
+        // a request of one step.
+        let known = if one_step_request || self.item_time == StacItemTime::Range {
+            // the hits counted here are the ones used, even if the cache drops them meanwhile
+            let known = self
+                .cached_steps(&cells.time_steps, &cells.cell_bboxes)
+                .await;
+            self.reject_too_many_searches(
+                cells.time_steps.len() * cells.cell_bboxes.len() - known.len(),
+            )?;
+            known
+        } else {
+            self.prepare_window_search(
+                &self.items_url()?,
+                cells.time,
+                cells.time_steps.len(),
+                &cells.cell_bboxes,
+            )
+            .await?
+        };
+        self.files_part(spatial_bounds, cells, LoadingInfoResolution::Native, known)
+            .await
+    }
 
-        // The calendar only needs to know which steps have items. One aggregation over the view
-        // tells it at any zoom, with no search. Without aggregation the files are searched instead.
-        if query.detail == LoadingInfoDetail::Availability
-            && let Some(view_bbox) = view_bbox
-            && let Some(view_bbox) = stac_query_bbox(view_bbox, self.dataset.projection)?
-            && let Some(has_data) = self
-                .steps_with_items(
-                    &items_url,
-                    time_interval,
-                    &time_steps,
-                    &cell_bboxes,
-                    spatial_bounds,
-                    view_bbox,
-                )
-                .await
-        {
-            return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
-                .with_availability(has_data);
-        }
-
-        let mut known = KnownSteps::new();
-        if query.detail.is_for_footprints() {
-            // Items with a time range are matched against the step a search asks for, so a search
-            // over several steps cannot tell them apart; such items are searched step by step, like
-            // a request of one step.
-            if one_step_request || self.item_time == StacItemTime::Range {
-                // the hits counted here are the ones used, even if the cache drops them meanwhile
-                known = self.cached_steps(&time_steps, &cell_bboxes).await;
-                self.reject_too_many_searches(time_steps.len() * cell_bboxes.len() - known.len())?;
-            } else {
-                known = self
-                    .prepare_window_search(
-                        &items_url,
-                        time_interval,
-                        time_steps.len(),
-                        &cell_bboxes,
-                    )
-                    .await?;
-            }
-        }
+    /// The files of `cells`: each search of a step and cell that `known` does not answer goes
+    /// through the cache.
+    async fn files_part(
+        &self,
+        spatial_bounds: SpatialPartition2D,
+        cells: ChunkCells,
+        resolution: LoadingInfoResolution,
+        known: KnownSteps,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
+        let items_url = self.items_url()?;
 
         // Searches are created lazily and are independent; the result is sorted and deduplicated below.
-        let searches = time_steps.iter().copied().cartesian_product(cell_bboxes);
+        let searches = cells
+            .time_steps
+            .iter()
+            .copied()
+            .cartesian_product(cells.cell_bboxes);
         let mut tile_files = futures::stream::iter(searches)
             .map(|(step, (cell, bbox))| {
                 let found = known.get(&(cell, step)).cloned();
@@ -436,13 +517,13 @@ impl StacMultiBandMetaData {
             .await?;
 
         tile_files.retain(|file| {
-            time_interval.intersects(&file.file.time)
+            cells.time.intersects(&file.file.time)
                 && file.file.spatial_partition.intersects(&spatial_bounds)
         });
-        let tile_files = self.select_files(tile_files, query.resolution);
+        let tile_files = self.select_files(tile_files, resolution);
 
         Ok(MultiBandGdalLoadingInfoPart::new(
-            time_steps,
+            cells.time_steps,
             tile_files,
             self.cache_ttl_secs,
         ))
@@ -1824,32 +1905,27 @@ fn stac_query_time_interval(
 }
 
 #[async_trait]
-impl
-    MetaDataProvider<
-        MultiBandGdalLoadingInfo,
-        RasterResultDescriptor,
-        MultiBandGdalLoadingInfoQueryRectangle,
-    > for StacDataProvider
-{
-    async fn meta_data(
+impl MultiBandGdalMetaDataProvider for StacDataProvider {
+    async fn multi_band_gdal_meta_data(
         &self,
         id: &DataId,
-    ) -> geoengine_operators::util::Result<
-        Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        >,
-    > {
+    ) -> geoengine_operators::util::Result<Box<dyn MultiBandGdalMetaData>> {
+        Ok(Box::new(self.stac_meta_data(id).await?))
+    }
+}
+
+impl StacDataProvider {
+    async fn stac_meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<StacMultiBandMetaData> {
         let dataset = self.dataset_from_data_id(id)?;
 
         // like other providers, e.g. Pangaea, the metadata asks the server once when it is created
-        Ok(Box::new(StacMultiBandMetaData {
+        Ok(StacMultiBandMetaData {
             time_bounds: self.time_bounds().await,
             ..StacMultiBandMetaData::new(self, dataset.clone())
-        }))
+        })
     }
 }
 
@@ -1887,11 +1963,7 @@ trait FirstPart {
 #[async_trait]
 impl<M> FirstPart for M
 where
-    M: MetaData<
-            MultiBandGdalLoadingInfo,
-            RasterResultDescriptor,
-            MultiBandGdalLoadingInfoQueryRectangle,
-        > + ?Sized,
+    M: MultiBandGdalMetaData + ?Sized,
 {
     async fn first_part(
         &self,
@@ -1920,13 +1992,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::SpatialGridDescriptor;
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, ProcessingGraphOperatorPath, RasterBandDescriptor,
-        RasterResultDescriptor,
-    };
-    use geoengine_operators::source::{
-        MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    };
+    use geoengine_operators::engine::{ProcessingGraphOperatorPath, RasterBandDescriptor};
+    use geoengine_operators::source::MultiBandGdalLoadingInfoQueryRectangle;
     use httptest::{
         Expectation, Server, all_of,
         matchers::{contains, request, url_decoded},
@@ -2399,7 +2466,6 @@ mod tests {
                         bounds,
                         time,
                         BandSelection::first(),
-                        LoadingInfoDetail::Files,
                     ))
                     .await
                     .unwrap();
@@ -2516,12 +2582,8 @@ mod tests {
             (Some(8), 60.),
             (Some(64), 60.),
         ] {
-            let mut query = MultiBandGdalLoadingInfoQueryRectangle::new(
-                bounds,
-                time,
-                BandSelection::first(),
-                LoadingInfoDetail::Files,
-            );
+            let mut query =
+                MultiBandGdalLoadingInfoQueryRectangle::new(bounds, time, BandSelection::first());
             if let Some(level) = level {
                 query = query.with_resolution(LoadingInfoResolution::OverviewLevel(
                     NonZeroU32::new(level).unwrap(),
@@ -2616,7 +2678,6 @@ mod tests {
                     bounds,
                     interval,
                     BandSelection::first(),
-                    LoadingInfoDetail::Files,
                 ))
                 .await
                 .unwrap();
@@ -3303,13 +3364,8 @@ mod tests {
         }
         .into();
 
-        let meta: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = MetaDataProvider::meta_data(provider.as_ref(), &data_id)
+        let meta = provider
+            .multi_band_gdal_meta_data(&data_id)
             .await
             .expect("meta_data should succeed");
 
@@ -3325,7 +3381,6 @@ mod tests {
             spatial_bounds,
             time_interval,
             BandSelection::new_unchecked(vec![0, 1]),
-            LoadingInfoDetail::Files,
         );
 
         let loading_info = meta
@@ -3619,16 +3674,7 @@ mod tests {
             }
             .into();
 
-            let meta_result: Result<
-                Box<
-                    dyn MetaData<
-                            MultiBandGdalLoadingInfo,
-                            RasterResultDescriptor,
-                            MultiBandGdalLoadingInfoQueryRectangle,
-                        >,
-                >,
-                geoengine_operators::error::Error,
-            > = MetaDataProvider::meta_data(provider.as_ref(), &data_id).await;
+            let meta_result = provider.multi_band_gdal_meta_data(&data_id).await;
 
             assert!(
                 meta_result.is_ok(),
@@ -3646,8 +3692,9 @@ mod grid_request_tests {
         StacAssetBand, StacDataProvider, StacDataProviderDefinition, StacGrid, StacItemTime,
         StacProviderDataset, StacProviderDatasetBand, cache::StacQueryCache,
     };
-    use super::{FirstPart as _, LoadingInfoDetail, stac_query_bbox};
-    use futures::TryStreamExt as _;
+    use super::{FirstPart as _, StacMultiBandMetaData, stac_query_bbox, stac_query_time_interval};
+    use futures::{StreamExt as _, TryStreamExt as _};
+    use geoengine_datatypes::primitives::QueryRectangle;
     use geoengine_datatypes::{
         dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
         primitives::{
@@ -3662,10 +3709,10 @@ mod grid_request_tests {
         util::Identifier,
     };
     use geoengine_operators::{
-        engine::{MetaData, MetaDataProvider, RasterResultDescriptor, SpatialGridDescriptor},
+        engine::{FootprintPrecision, SpatialGridDescriptor},
         source::{
-            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart,
-            MultiBandGdalLoadingInfoQueryRectangle,
+            MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle,
+            MultiBandGdalMetaData as _, StepFootprint,
         },
     };
     use httptest::{
@@ -3680,13 +3727,7 @@ mod grid_request_tests {
         time::{Duration, Instant},
     };
 
-    type LoadingMetadata = Box<
-        dyn MetaData<
-                MultiBandGdalLoadingInfo,
-                RasterResultDescriptor,
-                MultiBandGdalLoadingInfoQueryRectangle,
-            >,
-    >;
+    type LoadingMetadata = StacMultiBandMetaData;
 
     fn bounds(left: f64, right: f64) -> SpatialPartition2D {
         SpatialPartition2D::new((left, 1.).into(), (right, 0.).into()).unwrap()
@@ -3713,38 +3754,49 @@ mod grid_request_tests {
         bounds: SpatialPartition2D,
         time: TimeInterval,
     ) -> MultiBandGdalLoadingInfoQueryRectangle {
-        MultiBandGdalLoadingInfoQueryRectangle::new(
-            bounds,
-            time,
-            BandSelection::first(),
-            LoadingInfoDetail::Files,
-        )
+        MultiBandGdalLoadingInfoQueryRectangle::new(bounds, time, BandSelection::first())
     }
 
-    /// The query of the coverage of a date or a window: the files, for their areas.
-    fn coverage_query(
-        bounds: SpatialPartition2D,
-        time: TimeInterval,
-    ) -> MultiBandGdalLoadingInfoQueryRectangle {
-        MultiBandGdalLoadingInfoQueryRectangle::new(
-            bounds,
-            time,
-            BandSelection::first(),
-            LoadingInfoDetail::Coverage,
-        )
-    }
+    impl StacMultiBandMetaData {
+        /// The files that the footprints of the first chunk of `time` come from.
+        async fn first_coverage(
+            &self,
+            bounds: SpatialPartition2D,
+            time: TimeInterval,
+        ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
+            let (chunk, _) =
+                self.first_chunk(stac_query_time_interval(time, self.time_dimension)?)?;
+            self.footprint_files(
+                bounds,
+                self.chunk_cells(bounds, chunk)?,
+                self.is_one_step(time)?,
+            )
+            .await
+        }
 
-    /// The query of a calendar: which steps have data, not the files.
-    fn availability_query(
-        bounds: SpatialPartition2D,
-        time: TimeInterval,
-    ) -> MultiBandGdalLoadingInfoQueryRectangle {
-        MultiBandGdalLoadingInfoQueryRectangle::new(
-            bounds,
-            time,
-            BandSelection::first(),
-            LoadingInfoDetail::Availability,
-        )
+        /// The footprints of the first chunk of `time` for a calendar.
+        async fn first_availability(
+            &self,
+            bounds: SpatialPartition2D,
+            time: TimeInterval,
+        ) -> geoengine_operators::util::Result<Vec<(TimeInterval, StepFootprint)>> {
+            let part = self
+                .footprints(
+                    QueryRectangle::new(bounds, time, BandSelection::first()),
+                    FootprintPrecision::Availability,
+                )
+                .await?
+                .try_next()
+                .await?;
+            Ok(part.expect("footprints have at least one part"))
+        }
+
+        async fn all_time_steps(
+            &self,
+            time: TimeInterval,
+        ) -> geoengine_operators::util::Result<Vec<TimeInterval>> {
+            self.time_steps(time).await?.try_collect().await
+        }
     }
 
     fn item(id: &str, left: f64) -> Value {
@@ -3852,7 +3904,7 @@ mod grid_request_tests {
 
     async fn metadata(provider: &StacDataProvider, index: usize) -> LoadingMetadata {
         provider
-            .meta_data(&DataId::External(ExternalDataId {
+            .stac_meta_data(&DataId::External(ExternalDataId {
                 provider_id: provider.id,
                 layer_id: LayerId(format!("dataset/{index}")),
             }))
@@ -3862,7 +3914,7 @@ mod grid_request_tests {
 
     #[tokio::test]
     async fn time_only_queries_use_provider_steps_without_stac_requests() {
-        // No requests are expected, even when the query covers the entire world.
+        // No requests are expected.
         let server = Server::run();
         let mut provider = provider(
             &server,
@@ -3897,24 +3949,15 @@ mod grid_request_tests {
             ),
         ];
         provider.time_dimension = daily;
-        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
         for (time, expected) in daily_cases {
-            let info = tokio::time::timeout(
+            let steps = tokio::time::timeout(
                 Duration::from_secs(2),
-                metadata(&provider, 0).await.first_part(
-                    MultiBandGdalLoadingInfoQueryRectangle::new(
-                        world,
-                        time,
-                        BandSelection::first(),
-                        LoadingInfoDetail::TimeSteps,
-                    ),
-                ),
+                metadata(&provider, 0).await.all_time_steps(time),
             )
             .await
             .expect("time-only queries must not perform STAC searches")
             .unwrap();
-            assert_eq!(info.time_steps(), expected);
-            assert_eq!(info.tile_files(expected[0], tile(0.), 0), [] as [_; 0]);
+            assert_eq!(steps, expected);
         }
 
         // Time-only queries also bypass URL parsing and reprojection entirely.
@@ -3931,23 +3974,61 @@ mod grid_request_tests {
         let february = DateTime::new_utc(2024, 2, 1, 0, 0, 0);
         let march = DateTime::new_utc(2024, 3, 1, 0, 0, 0);
         let april = DateTime::new_utc(2024, 4, 1, 0, 0, 0);
-        let info = metadata(&provider, 0)
+        let steps = metadata(&provider, 0)
             .await
-            .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
-                world,
+            .all_time_steps(
                 TimeInterval::new(DateTime::new_utc(2024, 2, 15, 12, 0, 0), april).unwrap(),
-                BandSelection::first(),
-                LoadingInfoDetail::TimeSteps,
-            ))
+            )
             .await
             .unwrap();
         assert_eq!(
-            info.time_steps(),
+            steps,
             &[
                 TimeInterval::new(february, march).unwrap(),
                 TimeInterval::new(march, april).unwrap(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn it_builds_time_steps_as_they_are_read() {
+        // no request is expected
+        let server = Server::run();
+        let mut provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.time_dimension =
+            TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(TimeStep {
+                granularity: TimeGranularity::Days,
+                step: 1,
+            }));
+        // about 11 M days: built at once, they take seconds (about 3 s for 10,000 years in a debug
+        // build); built as they are read, the first five take microseconds
+        let years = TimeInterval::new(
+            DateTime::new_utc(-15_000, 1, 1, 0, 0, 0),
+            DateTime::new_utc(15_000, 1, 1, 0, 0, 0),
+        )
+        .unwrap();
+        let metadata = metadata(&provider, 0).await;
+
+        let started = Instant::now();
+        let steps: Vec<_> = metadata
+            .time_steps(years)
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect()
+            .await
+            .unwrap();
+        let elapsed = started.elapsed();
+
+        assert_eq!(steps.len(), 5);
+        assert_eq!(steps[0].start(), years.start());
+        assert!(elapsed < Duration::from_secs(1), "{elapsed:?}");
     }
 
     #[tokio::test]
@@ -3970,12 +4051,7 @@ mod grid_request_tests {
             provider.time_dimension = dimension;
             let result = metadata(&provider, 0)
                 .await
-                .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
-                    bounds(0., 1.),
-                    interval(3),
-                    BandSelection::first(),
-                    LoadingInfoDetail::TimeSteps,
-                ))
+                .all_time_steps(interval(3))
                 .await;
             assert!(matches!(
                 result,
@@ -4274,7 +4350,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -4320,7 +4396,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.time_steps().len(), 2);
@@ -4351,7 +4427,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(5, 7)))
+            .first_coverage(bounds(0.1, 0.4), window(5, 7))
             .await
             .unwrap();
 
@@ -4395,7 +4471,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -4448,7 +4524,7 @@ mod grid_request_tests {
 
         // both steps are cached, so the window needs no search and stays within the limit
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -4499,7 +4575,7 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -4507,7 +4583,7 @@ mod grid_request_tests {
 
         // a warm window costs no request, and neither does a step it filled
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -4541,7 +4617,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), interval(3)))
+            .first_coverage(bounds(0.1, 0.4), interval(3))
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -4593,7 +4669,10 @@ mod grid_request_tests {
 
         // the window is answered chunk by chunk
         let parts = meta
-            .loading_info(coverage_query(bounds(0.1, 0.4), window))
+            .footprints(
+                QueryRectangle::new(bounds(0.1, 0.4), window, BandSelection::first()),
+                FootprintPrecision::Coverage,
+            )
             .await
             .unwrap()
             .try_collect::<Vec<_>>()
@@ -4651,24 +4730,27 @@ mod grid_request_tests {
         .unwrap();
 
         let mut parts = meta
-            .loading_info(coverage_query(bounds(0.1, 0.4), window))
+            .footprints(
+                QueryRectangle::new(bounds(0.1, 0.4), window, BandSelection::first()),
+                FootprintPrecision::Coverage,
+            )
             .await
             .unwrap();
 
         // the first part has the steps up to the end of the chunk, the second one the next chunk
         let first = parts.try_next().await.unwrap().unwrap();
-        assert_eq!(first.time_steps().first().copied(), Some(interval(1)));
+        assert_eq!(first.first().map(|(step, _)| *step), Some(interval(1)));
         assert_eq!(
-            first.time_steps().last().map(TimeInterval::end),
+            first.last().map(|(step, _)| step.end()),
             Some(DateTime::new_utc(2026, 1, 7, 0, 0, 0).into())
         );
         let second = parts.try_next().await.unwrap().unwrap();
         assert_eq!(
-            second.time_steps().first().map(TimeInterval::start),
+            second.first().map(|(step, _)| step.start()),
             Some(DateTime::new_utc(2026, 1, 7, 0, 0, 0).into())
         );
         assert_eq!(
-            second.time_steps().last().map(TimeInterval::end),
+            second.last().map(|(step, _)| step.end()),
             Some(DateTime::new_utc(2026, 2, 6, 0, 0, 0).into())
         );
 
@@ -4712,14 +4794,17 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0., 1.), window(3, 5)))
+            .first_availability(bounds(0., 1.), window(3, 5))
             .await
             .unwrap();
 
-        assert_eq!(info.time_steps(), &[interval(3), interval(4)]);
-        assert_eq!(info.has_data(0), Some(true));
-        assert_eq!(info.has_data(1), Some(false));
-        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 0);
+        assert_eq!(
+            info,
+            [
+                (interval(3), StepFootprint::Somewhere),
+                (interval(4), StepFootprint::Areas(vec![]))
+            ]
+        );
         assert_eq!(starts.lock().unwrap().len(), 0);
 
         // the day without items is known to be empty in the cell, which lies in the view
@@ -4760,17 +4845,17 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let month = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 4)))
+            .first_availability(bounds(0.1, 0.4), window(3, 4))
             .await
             .unwrap();
-        assert_eq!(month.has_data(0), Some(false));
+        assert_eq!(month[0].1, StepFootprint::Areas(vec![]));
 
         let rest = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(4, 6)))
+            .first_availability(bounds(0.1, 0.4), window(4, 6))
             .await
             .unwrap();
-        assert_eq!(rest.has_data(0), Some(false));
-        assert_eq!(rest.has_data(1), Some(true));
+        assert_eq!(rest[0].1, StepFootprint::Areas(vec![]));
+        assert_eq!(rest[1].1, StepFootprint::Somewhere);
     }
 
     #[tokio::test]
@@ -4795,11 +4880,11 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(5, 7)))
+            .first_availability(bounds(0.1, 0.4), window(5, 7))
             .await
             .unwrap();
-        assert_eq!(info.has_data(0), Some(true));
-        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(info[0].1, StepFootprint::Somewhere);
+        assert_eq!(info[1].1, StepFootprint::Areas(vec![]));
     }
 
     #[tokio::test]
@@ -4832,11 +4917,11 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_availability(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
-        assert_eq!(info.has_data(0), Some(true));
-        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(info[0].1, StepFootprint::Somewhere);
+        assert_eq!(info[1].1, StepFootprint::Areas(vec![]));
         assert_eq!(starts.lock().unwrap().len(), 0);
 
         meta.first_part(query(bounds(0.1, 0.4), interval(4)))
@@ -4878,11 +4963,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let info = meta
-            .first_part(availability_query(world, window(3, 5)))
-            .await
-            .unwrap();
-        assert_eq!(info.has_data(1), Some(false));
+        let info = meta.first_availability(world, window(3, 5)).await.unwrap();
+        assert_eq!(info[1].1, StepFootprint::Areas(vec![]));
 
         meta.first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
@@ -4913,12 +4995,12 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_availability(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
 
-        assert_eq!(info.has_data(0), None);
-        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        // without the aggregation, the area of the file found
+        assert!(matches!(&info[0].1, StepFootprint::Areas(areas) if areas.len() == 1));
         assert_eq!(starts.lock().unwrap().len(), 1);
     }
 
@@ -4946,12 +5028,12 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_availability(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
 
-        assert_eq!(info.has_data(0), None);
-        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        // without the aggregation, the area of the file found
+        assert!(matches!(&info[0].1, StepFootprint::Areas(areas) if areas.len() == 1));
         assert_eq!(starts.lock().unwrap().len(), 1);
     }
 
@@ -4993,11 +5075,11 @@ mod grid_request_tests {
 
         // the calendar of the same view is answered from what the map found
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_availability(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
-        assert_eq!(info.has_data(0), Some(true));
-        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(info[0].1, StepFootprint::Somewhere);
+        assert_eq!(info[1].1, StepFootprint::Areas(vec![]));
         assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
@@ -5028,7 +5110,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         for _ in 0..2 {
-            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            meta.first_coverage(bounds(0.1, 0.4), window(3, 5))
                 .await
                 .unwrap();
         }
@@ -5058,8 +5140,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let (first, second) = futures::join!(
-            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5))),
-            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5))),
+            meta.first_coverage(bounds(0.1, 0.4), window(3, 5)),
+            meta.first_coverage(bounds(0.1, 0.4), window(3, 5)),
         );
         assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(
@@ -5083,7 +5165,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let result = meta.first_part(coverage_query(world, window(3, 5))).await;
+        let result = meta.first_coverage(world, window(3, 5)).await;
 
         assert!(matches!(
             result,
@@ -5118,7 +5200,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
+            .first_coverage(bounds(0.1, 0.4), window(3, 5))
             .await
             .unwrap();
 
@@ -5267,7 +5349,7 @@ mod grid_request_tests {
             .unwrap();
 
         // one of the two cells is cached, so one search is counted, within the limit
-        meta.first_part(coverage_query(bounds(0.5, 1.5), interval(3)))
+        meta.first_coverage(bounds(0.5, 1.5), interval(3))
             .await
             .unwrap();
 
@@ -5290,9 +5372,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         // one cell, but two steps: without a cache each step is a search of its own
-        let result = meta
-            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
-            .await;
+        let result = meta.first_coverage(bounds(0.1, 0.4), window(3, 5)).await;
 
         assert!(matches!(
             result,
@@ -5326,7 +5406,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         // one step over more cells than the limit, and none of them is cached
-        let one_step = meta.first_part(coverage_query(world, interval(3))).await;
+        let one_step = meta.first_coverage(world, interval(3)).await;
         assert!(matches!(
             one_step,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
@@ -5336,10 +5416,10 @@ mod grid_request_tests {
         meta.first_part(query(world, interval(3))).await.unwrap();
 
         // now the step needs no search, so its footprints are answered
-        let one_step = meta.first_part(coverage_query(world, interval(3))).await;
+        let one_step = meta.first_coverage(world, interval(3)).await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
-        let window = meta.first_part(coverage_query(world, window(3, 5))).await;
+        let window = meta.first_coverage(world, window(3, 5)).await;
         assert!(matches!(
             window,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
@@ -5348,10 +5428,10 @@ mod grid_request_tests {
         // A chunk ends on January 7, so these two days are two parts of one step each. They are
         // still a window.
         let across_chunks = meta
-            .first_part(coverage_query(
+            .first_coverage(
                 world,
                 TimeInterval::new(interval(6).start(), interval(7).end()).unwrap(),
-            ))
+            )
             .await;
         assert!(matches!(
             across_chunks,
