@@ -1,3 +1,4 @@
+import type View from 'ol/View';
 import type {MapExtent} from '../layers/data-sources';
 
 /**
@@ -11,4 +12,17 @@ export function mapExtentMaxResolution(limit: MapExtent | undefined, size: reado
     const cos = Math.abs(Math.cos(rotation));
     const sin = Math.abs(Math.sin(rotation));
     return Math.min(limit.width / (width * cos + height * sin), limit.height / (width * sin + height * cos));
+}
+
+/**
+ * The first whole zoom level of `view` whose resolution lies below the exclusive `maxResolution`, where the imagery loads.
+ * Undefined without a limit, or while the map has no size yet.
+ */
+export function zoomBelowResolution(view: View, maxResolution: number): number | undefined {
+    if (!(maxResolution > 0 && Number.isFinite(maxResolution))) return undefined;
+    let zoom = Math.ceil(view.getZoomForResolution(maxResolution) ?? NaN);
+    if (!Number.isFinite(zoom)) return undefined;
+    // the limit is exclusive, so a level exactly at it does not load yet
+    if ((view.getResolutionForZoom(zoom) ?? 0) >= maxResolution) zoom += 1;
+    return Math.min(zoom, view.getMaxZoom());
 }
