@@ -2,7 +2,7 @@ import {computed, effect, inject, linkedSignal, resource, ResourceRef, Service, 
 import {unByKey} from 'ol/Observable';
 import {toLonLat} from 'ol/proj';
 import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
-import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
+import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, timeStepDictTotimeStepDuration} from '@geoengine/common';
 import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
@@ -70,13 +70,43 @@ export class EOdysseyLayerService {
         source: () => this.selectedDataSource()?.key,
         computation: () => !untracked(this.mapCenter),
     });
+    /**
+     * The imagery the map shows of the data source: none or the selected preset. A new data source shows its selected
+     * preset, the first one, so the map shows data at once; "None" is chosen explicitly.
+     */
+    readonly shown = linkedSignal<string | undefined, 'none' | 'preset'>({
+        source: () => this.selectedDataSource()?.key,
+        computation: () => 'preset',
+    });
+    /**
+     * The date a newly selected data source moved, because the date before lay outside its data: from where, to which time
+     * step start, and in which direction the data ended. Set by the panel, told on the map; another data source forgets it.
+     */
+    readonly dateMoved = linkedSignal<string | undefined, {from: Time; to: number; direction: 1 | -1} | undefined>({
+        source: () => this.selectedDataSource()?.key,
+        computation: () => undefined,
+    });
+    /** The map shows where the scenes of the date are, alone or over the imagery. Kept when the data source changes. */
+    readonly availabilityShown = signal(false);
+    /** The map does not load the tiles of the imagery at this zoom yet. Set by the map. */
+    readonly zoomRequired = signal(false);
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    /**
+     * The data source whose time step was applied last. Removing the visualization keeps it, so applying the same
+     * data source again does not reset the step.
+     */
+    private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
+    readonly dataSourceOfTime = this.timeSource.asReadonly();
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
     });
+    /** The zoom limit of the selected visualization, also while it is not on the map. */
+    readonly selectedMinTileMatrixIndex = computed(
+        () => this.selectedPreset()?.minTileMatrixIndex ?? this.selectedDataSource()?.minTileMatrixIndex ?? 0,
+    );
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -237,7 +267,13 @@ export class EOdysseyLayerService {
         const preset = this.selectedPreset();
         if (source && preset && this.canApplyPreset()) {
             this.appliedVisualization.set({source, preset});
+            this.timeSource.set(source);
         }
+    }
+
+    /** Takes the visualization off the map, e.g. to see only the boxes where data exists. */
+    removeVisualization(): void {
+        this.appliedVisualization.set(undefined);
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */
@@ -289,7 +325,7 @@ export class EOdysseyLayerService {
             key,
             name: dataset.name,
             variants,
-            defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
+            // no `edv:defaultTime`: selecting a data source keeps the date the user chose
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
             minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),

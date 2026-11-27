@@ -15,6 +15,7 @@ import {
     viewChild,
     viewChildren,
     signal,
+    untracked,
 } from '@angular/core';
 import {toObservable} from '@angular/core/rxjs-interop';
 import {MatGridList, MatGridListModule, MatGridTile} from '@angular/material/grid-list';
@@ -115,6 +116,8 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
     private backgroundLayers: Array<OlLayer<OlSource, any>> = [];
 
     readonly overlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
+    /** A layer that describes the data on the map, kept below the `overlayLayer`. */
+    readonly dataOverlayLayer = signal<OlLayerVector<OlSourceVector<OlFeature<OlGeometry>>> | undefined>(undefined);
 
     private userSelect?: OlInteractionSelect;
 
@@ -154,19 +157,38 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
             }),
         ];
 
+        // `projection$` emits at once, so a redraw would run inside the effect and track the layers and their
+        // visibility it reads: untracked, so each effect only reruns for what it names
         effect(() => {
             this.basemapService.basemap();
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.backgroundLayerSource = undefined; // reset source to force recreation
-                this.redrawLayers(projection);
-            });
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.backgroundLayerSource = undefined; // reset source to force recreation
+                    this.redrawLayers(projection);
+                }),
+            );
         });
 
         effect(() => {
             this.overlayLayer();
-            this.projection$.pipe(first()).subscribe((projection) => {
-                this.redrawLayers(projection);
-            });
+            this.dataOverlayLayer();
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.redrawLayers(projection);
+                }),
+            );
+        });
+
+        // A redraw adds only the visible layers, see `redrawLayers`, so one shown later needs a redraw. A hidden layer
+        // stays on the map and hides itself, so hiding needs none.
+        effect(() => {
+            const shown = this.mapLayersRaw().filter((layer) => layer.isVisible());
+            if (shown.every((layer) => this.mapLayers.includes(layer))) return;
+            untracked(() =>
+                this.projection$.pipe(first()).subscribe((projection) => {
+                    this.redrawLayers(projection);
+                }),
+            );
         });
     }
 
@@ -556,6 +578,11 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
                 }
             } else {
                 this.mapLayers.forEach((layerComponent) => map.addLayer(layerComponent.mapLayer));
+            }
+
+            const dataOverlayLayer = this.dataOverlayLayer();
+            if (dataOverlayLayer) {
+                map.getLayers().push(dataOverlayLayer);
             }
 
             const overlayLayer = this.overlayLayer();

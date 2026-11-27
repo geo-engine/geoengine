@@ -27,29 +27,54 @@ mat-toolbar {
     z-index: 10;
 }
 
-.zoom-prompt {
+// at the top edge, never over the middle: the map stays usable, only the buttons take clicks
+.map-notice {
     position: absolute;
-    top: 50%;
+    top: 1rem;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    max-width: calc(100% - 10rem);
-    padding: 1rem;
+    box-sizing: border-box;
+    width: min(36rem, calc(100% - 10rem));
+    padding: 0.5rem 0.5rem 0.5rem 1rem;
     border-radius: 0.5rem;
     background: var(--geoengine-card-background-color);
     color: var(--geoengine-foreground-text-color);
-    @include mat.elevation(3);
+    @include mat.elevation(1);
     pointer-events: none;
 
     mat-icon {
         flex-shrink: 0;
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+
+    .notice-text {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        min-width: 0;
+    }
+
+    .notice-title {
+        font-weight: 500;
+    }
+
+    .notice-detail {
+        font-size: 0.85rem;
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+
+    .notice-action,
+    .notice-close {
+        flex-shrink: 0;
+        pointer-events: auto;
     }
 }
 
 mat-drawer {
-    width: 360px;
+    width: min(500px, 90vw);
 
     .drawer-container {
         display: flex;
@@ -79,7 +104,7 @@ mat-drawer {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 0 0.5rem;
+            padding: 0 1rem;
             overflow: auto;
         }
     }

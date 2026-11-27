@@ -11,7 +11,8 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
     DEFAULTS: {
         PROJECT: {
             NAME: 'Default',
-            TIME: '2026-04-01T00:00:00.000Z',
+            // today; the first data source moves it to its last date if its data ends earlier
+            TIME: new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString(),
             TIMESTEP: '1 day',
             PROJECTION: 'EPSG:3857',
         },

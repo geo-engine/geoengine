@@ -1,13 +1,27 @@
+import {WritableSignal, signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNativeDateAdapter} from '@angular/material/core';
+import type {MatDatepicker} from '@angular/material/datepicker';
 import View from 'ol/View';
 import {Observable, of} from 'rxjs';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, type Mock, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
-import {MapService, ProjectService} from '@geoengine/core';
-import {LayersComponent} from './layers.component';
+import {FootprintsService, MapService, ProjectService} from '@geoengine/core';
+import {formatDate, LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
+
+describe('formatDate', () => {
+    it('names a date as precisely as the time step of the data', () => {
+        const time = Date.UTC(2024, 3, 5, 6, 7, 8);
+        expect(formatDate(time)).toBe('05.04.2024');
+        expect(formatDate(time, 'years')).toBe('2024');
+        expect(formatDate(time, 'month')).toBe('04.2024');
+        expect(formatDate(time, 'days')).toBe('05.04.2024');
+        expect(formatDate(time, 'hour')).toBe('05.04.2024 06:07');
+        expect(formatDate(time, 'seconds')).toBe('05.04.2024 06:07:08');
+    });
+});
 
 describe('LayersComponent', () => {
     let fixture: ComponentFixture<LayersComponent>;
@@ -141,6 +155,40 @@ describe('LayersComponent', () => {
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
+                {
+                    provide: FootprintsService,
+                    useValue: {
+                        dateClass: (): string => '',
+                        calendarOpen: signal(false),
+                        overlayVisible: signal(false),
+                        overlayLight: signal(false),
+                        tooLarge: signal(false),
+                        hasError: signal(false),
+                        stepsOfSelection: signal([]),
+                        layer: signal({key: 'provider/layer'}),
+                        calendarStartView: signal('month'),
+                        time: signal(undefined),
+                        datesNeeded: signal(false),
+                        dateFilter: (): boolean => true,
+                        dateWithData: vi.fn(),
+                        dateBeyondLoaded: vi.fn(),
+                        stepsAround: vi.fn().mockReturnValue([]),
+                        selectedOutsideData: signal(undefined),
+                        datesFailed: signal(false),
+                        retryDates: vi.fn(),
+                        timeRange: signal({start: -Infinity, end: Infinity}),
+                        datesReachTimeRange: vi.fn().mockReturnValue(false),
+                        timeStep: signal({durationAmount: 1, durationUnit: 'day'}),
+                        isLoading: signal(false),
+                        datesStale: signal(false),
+                        overlayLoading: signal(false),
+                        overlayBlocked: signal(false),
+                        overlayTooLarge: signal(false),
+                        selectedDateEmpty: signal(false),
+                        viewCoverage: signal(undefined),
+                        showDate: vi.fn(),
+                    },
+                },
                 provideNativeDateAdapter(),
                 {
                     provide: LayersService,
@@ -215,38 +263,38 @@ describe('LayersComponent', () => {
             key: 'sentinel',
             citation: 'Source citation',
             minTileMatrixIndex: 5,
-            defaultTime: 1775001600000,
         });
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
         expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
-        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        // the first preset is on the map at once
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(eodysseyLayerService.selectedPreset()?.layerId);
         expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('radarRegion');
         fixture.componentInstance.applySelectedPreset();
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
-        expect(setTime).toHaveBeenCalled();
+        expect(setTime).not.toHaveBeenCalled();
         await fixture.whenStable();
         expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
     });
 
-    it('switches categories through the accordion while keeping the applied visualization until Apply', async () => {
+    it('switches categories through the accordion and shows the first preset of the new data source', async () => {
         mockCategorizedCatalogue();
         fixture.detectChanges();
         await fixture.whenStable();
-        fixture.componentInstance.applySelectedPreset();
-        const applied = eodysseyLayerService.mapTileLayer();
         const element = fixture.nativeElement as HTMLElement;
         (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedCategory()?.key).toBe('radar');
         expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
-        expect(eodysseyLayerService.selectedPreset()?.layerId).toBe('radar-layer');
-        expect(eodysseyLayerService.mapTileLayer()).toEqual(applied);
+        await vi.waitFor(() => {
+            fixture.detectChanges();
+            expect(eodysseyLayerService.selectedPreset()?.layerId).toBe('radar-layer');
+            expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('radar-layer');
+        });
         const panels = element.querySelectorAll('mat-expansion-panel');
         expect(panels[0].classList.contains('mat-expanded')).toBe(false);
         expect(panels[1].classList.contains('mat-expanded')).toBe(true);
-        fixture.componentInstance.applySelectedPreset();
-        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('radar-layer');
         (element.querySelectorAll('mat-expansion-panel-header')[0] as HTMLElement).click();
         fixture.detectChanges();
         await fixture.whenStable();
@@ -284,6 +332,404 @@ describe('LayersComponent', () => {
         await vi.waitFor(() => expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default'));
     });
 
+    describe('picking a calendar cell of the size of the time step', () => {
+        const picker = {close: vi.fn()};
+        const startView = (view: string): void => {
+            const footprints = TestBed.inject(FootprintsService) as unknown as {calendarStartView: WritableSignal<string>};
+            footprints.calendarStartView.set(view);
+        };
+
+        it('selects the month and closes the picker for a time step of months', async () => {
+            startView('year');
+            picker.close.mockClear();
+
+            await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);
+
+            expect(picker.close).toHaveBeenCalledOnce();
+            expect(setTime).toHaveBeenCalledWith(new Time(new Date(Date.UTC(2026, 2, 1))));
+        });
+
+        it('leaves the picker open for a time step of days, so a day can still be picked', async () => {
+            startView('month');
+            picker.close.mockClear();
+
+            await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);
+
+            expect(picker.close).not.toHaveBeenCalled();
+            expect(setTime).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('dates of the layer', () => {
+        interface FootprintsMock {
+            time: WritableSignal<Time | undefined>;
+            datesNeeded: WritableSignal<boolean>;
+            dateWithData: Mock;
+            dateBeyondLoaded: Mock;
+            stepsAround: Mock;
+            datesFailed: WritableSignal<boolean>;
+            retryDates: Mock;
+            selectedOutsideData: WritableSignal<{direction: 1 | -1; step: {time: {start: number; end: number}}} | undefined>;
+            isLoading: WritableSignal<boolean>;
+            datesStale: WritableSignal<boolean>;
+            overlayVisible: WritableSignal<boolean>;
+            overlayLoading: WritableSignal<boolean>;
+            overlayBlocked: WritableSignal<boolean>;
+            selectedDateEmpty: WritableSignal<boolean>;
+            timeRange: WritableSignal<{start: number; end: number} | undefined>;
+            datesReachTimeRange: Mock;
+            stepsOfSelection: WritableSignal<unknown[]>;
+            viewCoverage: WritableSignal<'full' | 'part' | 'none' | 'unknown' | undefined>;
+        }
+        const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
+
+        it('says how much of the view the date covers while the availability is on the map', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            const element = fixture.nativeElement as HTMLElement;
+            const status = (): string => element.querySelector('.coverage-status')?.textContent?.trim() ?? '';
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(footprints().datesNeeded()).toBe(true);
+            expect(footprints().overlayVisible()).toBe(false);
+            const statusLine = (): string => element.querySelector('.coverage-status[role=status]')?.textContent?.trim() ?? '';
+
+            footprints().viewCoverage.set('part');
+            fixture.detectChanges();
+            expect(statusLine()).toBe('');
+
+            element.querySelector<HTMLElement>('.availability-toggle button')!.click();
+            fixture.detectChanges();
+            expect(footprints().overlayVisible()).toBe(true);
+            expect(status()).toContain('on 01.04.2026');
+            expect(statusLine()).toBe('Scenes cover part of this view');
+            expect(element.querySelector('.status-dot.status-part')).not.toBeNull();
+
+            // the imagery is on, but its tiles load only further in than the boxes
+            eodysseyLayerService.shown.set('preset');
+            eodysseyLayerService.zoomRequired.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view. Zoom in to load the imagery.');
+            eodysseyLayerService.zoomRequired.set(false);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Scenes cover part of this view');
+
+            footprints().viewCoverage.set('none');
+            footprints().overlayLoading.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('No scenes in this view on this date');
+            expect(element.querySelector('.coverage-stale')).not.toBeNull();
+
+            footprints().viewCoverage.set('unknown');
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Not known for this visualization');
+
+            footprints().overlayBlocked.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('Zoom in to see where the scenes of this date are.');
+
+            // the dates of the view say that the date has no scenes, so zooming in is no use
+            footprints().selectedDateEmpty.set(true);
+            fixture.detectChanges();
+            expect(statusLine()).toBe('No scenes in this view on this date');
+        });
+
+        it('shows the dates around the selected one as bars that select their date', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            footprints().time.set(new Time(Date.UTC(2026, 3, 2)));
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty'), day(3, 'unknown')]);
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
+            expect(Array.from(ticks, (tick) => tick.className.replace('mat-mdc-tooltip-trigger ', ''))).toEqual([
+                'tick tick-data',
+                'tick tick-selected',
+                'tick tick-unknown',
+            ]);
+            expect(ticks[0].getAttribute('aria-label')).toBe('01.04.2026: scenes');
+
+            setTime.mockClear();
+            ticks[0].click();
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 1)));
+        });
+
+        it('reaches the bars of the strip with the keyboard, the selected one first', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            footprints().time.set(new Time(Date.UTC(2026, 3, 2)));
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty'), day(3, 'unknown')]);
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
+            expect(Array.from(ticks, (tick) => tick.tabIndex)).toEqual([-1, 0, -1]);
+            ticks[1].focus();
+            ticks[1].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}));
+            expect(document.activeElement).toBe(ticks[2]);
+            ticks[2].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}));
+            expect(document.activeElement).toBe(ticks[2]);
+            ticks[2].dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowLeft'}));
+            expect(document.activeElement).toBe(ticks[1]);
+        });
+
+        it('keeps the place of the strip while the dates load, so the panel does not move', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+
+            // the first dates of a layer load: an empty strip with a bar, and the line below it keeps its height
+            footprints().isLoading.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('.date-strip')).not.toBeNull();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(0);
+            expect(element.querySelector('.date-strip .strip-loading')).not.toBeNull();
+            expect(element.querySelector('.date-strip')?.getAttribute('aria-busy')).toBe('true');
+
+            // the dates of an earlier view stay, faded, while those of a moved view load
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().datesStale.set(true);
+            // the strip is computed from signals, which the mocked `stepsAround` is not
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip.strip-stale')).not.toBeNull();
+
+            footprints().isLoading.set(false);
+            footprints().datesStale.set(false);
+            fixture.detectChanges();
+            expect(element.querySelector('.strip-loading')).toBeNull();
+            expect(element.querySelector('.strip-stale')).toBeNull();
+        });
+
+        it('shows the last dates of the data, none of them selected, where the selected one lies after them', async () => {
+            const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().selectedOutsideData.set({direction: 1, step: day(2, 'empty')});
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            // the last dates of the data, none of them selected
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip .tick-selected')).toBeNull();
+        });
+
+        it('moves a date after the data of a new source to its last date, silently at start, else telling the map', async () => {
+            const day = (d: number, status: string): {time: {start: number; end: number}; status: string} => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            setTime.mockImplementation((time: Time) => {
+                footprints().time.set(time);
+                return Promise.resolve();
+            });
+            mockCategorizedCatalogue();
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().stepsOfSelection.set([day(1, 'data'), day(2, 'data')]);
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'data')]);
+            footprints().selectedOutsideData.set({direction: 1, step: day(2, 'data')});
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            // the start date, which the user did not choose, moves without a note
+            expect(setTime).toHaveBeenCalledTimes(1);
+            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
+            expect(eodysseyLayerService.dateMoved()).toBeUndefined();
+
+            // a date the user chose moves with a note on the map, which offers the date before
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
+            await vi.waitFor(() => {
+                fixture.detectChanges();
+                expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
+                expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 3, 2));
+            });
+            expect(eodysseyLayerService.dateMoved()).toEqual({
+                from: new Time(Date.UTC(2026, 3, 9)),
+                to: Date.UTC(2026, 3, 2),
+                direction: 1,
+            });
+        });
+
+        it('moves a date before the data also without loaded dates, by the time of the data', async () => {
+            setTime.mockImplementation((time: Time) => {
+                footprints().time.set(time);
+                return Promise.resolve();
+            });
+            mockCategorizedCatalogue();
+            // no dates, e.g. a view that needs too many searches; the service tells from the time of the data
+            footprints().stepsOfSelection.set([]);
+            footprints().selectedOutsideData.set({
+                direction: -1,
+                step: {time: {start: Date.UTC(2026, 5, 1), end: Date.UTC(2026, 5, 1) + 1}},
+            });
+            footprints().time.set(new Time(Date.UTC(2026, 3, 9)));
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            expect(footprints().time()?.start.valueOf()).toBe(Date.UTC(2026, 5, 1));
+        });
+
+        it('says that the dates could not be loaded and loads them again on retry', async () => {
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().datesFailed.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('[role=alert] .catalogue-error')?.textContent).toContain('Could not load the dates');
+            element.querySelector<HTMLButtonElement>('.retry-dates')?.click();
+            expect(footprints().retryDates).toHaveBeenCalled();
+        });
+
+        it('marks the date of today in the strip', async () => {
+            const now = Date.now();
+            const start = now - (now % 86_400_000);
+            footprints().time.set(new Time(start));
+            footprints().stepsAround.mockReturnValue([
+                {time: {start: start - 86_400_000, end: start}, status: 'data'},
+                {time: {start, end: start + 86_400_000}, status: 'empty'},
+            ]);
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            const ticks = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.date-strip .tick');
+            expect(ticks[1].getAttribute('aria-label')).toMatch(/: no scenes, today$/);
+        });
+
+        it('names where the buttons below the date go', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            const label = (name: string): string =>
+                (fixture.nativeElement as HTMLElement)
+                    .querySelector(`.time-${name}`)
+                    ?.textContent?.replace(/navigate_\w+/, '')
+                    .trim() ?? '';
+            fixture.detectChanges();
+            await fixture.whenStable();
+            // the data source cannot tell its dates
+            expect(label('backwards')).toBe('1 day back');
+            expect(label('forward')).toBe('1 day on');
+
+            footprints().dateWithData.mockImplementation((direction: number) =>
+                direction === 1 ? new Time(Date.UTC(2026, 3, 17)) : undefined,
+            );
+            footprints().dateBeyondLoaded.mockReturnValue(new Time(Date.UTC(2026, 2, 31)));
+            footprints().time.set(new Time(Date.UTC(2026, 3, 2)));
+            fixture.detectChanges();
+            expect(label('forward')).toBe('17.04.2026');
+            expect(label('backwards')).toBe('Earlier');
+
+            setTime.mockClear();
+            await fixture.componentInstance.timeBackwards();
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 2, 31)));
+        });
+
+        it('offers no later dates where the loaded dates reach now, and none beyond the time of the data', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            footprints().datesReachTimeRange.mockImplementation((direction: number) => direction === 1);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(button('forward').textContent).toContain('No later dates');
+            expect(button('forward').disabled).toBe(true);
+            expect(button('backwards').disabled).toBe(false);
+
+            // no dates are loaded, e.g. for a date before the data starts: stepping stays within the data's time
+            footprints().datesReachTimeRange.mockReturnValue(false);
+            footprints().timeRange.set({start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 5, 1)});
+            fixture.detectChanges();
+            expect(button('backwards').textContent).toContain('No earlier dates');
+            expect(button('backwards').disabled).toBe(true);
+            expect(button('forward').disabled).toBe(false);
+            setTime.mockClear();
+            await fixture.componentInstance.timeBackwards();
+            expect(setTime).not.toHaveBeenCalled();
+        });
+
+        it('steps on where the loaded dates reach now but the data source cannot tell them', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 10, 20)));
+            footprints().datesReachTimeRange.mockReturnValue(true);
+            footprints().stepsOfSelection.set(
+                [19, 20, 21, 22].map((d) => ({time: {start: Date.UTC(2026, 10, d), end: Date.UTC(2026, 10, d + 1)}, status: 'unknown'})),
+            );
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(button('forward').disabled).toBe(false);
+            expect(button('forward').textContent).toContain('1 day on');
+            expect(button('backwards').disabled).toBe(false);
+
+            // the steps after the selected one are known to be empty: there are no later dates
+            footprints().stepsOfSelection.update((steps) =>
+                steps.map((step, i) => (i < 2 ? step : {...(step as object), status: 'empty'})),
+            );
+            fixture.detectChanges();
+            expect(button('forward').textContent).toContain('No later dates');
+            expect(button('backwards').disabled).toBe(false);
+        });
+
+        it('goes nowhere while the dates of a newly selected source load', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().isLoading.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            const button = (name: string): HTMLButtonElement =>
+                (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(`.time-${name}`)!;
+            expect(button('backwards').disabled).toBe(true);
+            expect(button('forward').disabled).toBe(true);
+            setTime.mockClear();
+            await fixture.componentInstance.timeBackwards();
+            expect(setTime).not.toHaveBeenCalled();
+
+            // the same until the metadata of the new layer tells the time of its data
+            footprints().isLoading.set(false);
+            footprints().timeRange.set(undefined);
+            fixture.detectChanges();
+            expect(button('forward').disabled).toBe(true);
+
+            // a source without presets has no dates, so the buttons step by the time step
+            (footprints() as unknown as {layer: WritableSignal<unknown>}).layer.set(undefined);
+            fixture.detectChanges();
+            expect(button('forward').disabled).toBe(false);
+            expect(button('forward').textContent).toContain('1 day on');
+        });
+
+        it('goes to the next date with data', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateWithData.mockImplementation((direction: number) =>
+                direction === 1 ? new Time(Date.UTC(2026, 3, 17)) : undefined,
+            );
+            setTime.mockClear();
+
+            await fixture.componentInstance.timeForward();
+
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 17)));
+        });
+
+        it('steps by the time step when no date with data is known', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateWithData.mockReturnValue(undefined);
+            setTime.mockClear();
+
+            await fixture.componentInstance.timeBackwards();
+
+            expect(setTime).toHaveBeenCalledOnce();
+        });
+    });
+
     it('preselects the matching coverage on source switches and preserves the initial choice while panning', async () => {
         mockCoverageCatalogue();
         mapView.setCenter([9, 50]);
@@ -305,7 +751,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('reads each source minimum tile matrix index and changes the applied limit only on Apply', async () => {
+    it('reads each source minimum tile matrix index and changes the applied limit with the shown preset', async () => {
         const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === 'edv') {
@@ -346,25 +792,27 @@ describe('LayersComponent', () => {
         });
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(4);
         expect(eodysseyLayerService.appliedDataSource()).toBeUndefined();
         eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
+        // a new data source shows its first preset, and with it its limit
         eodysseyLayerService.setSelectedDataSource('other');
         fixture.detectChanges();
         await fixture.whenStable();
+        fixture.detectChanges();
         expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(5);
-        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
-        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
-        eodysseyLayerService.applySelectedPreset();
         expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(5);
         expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('other-layer');
     });
 
     it.each([0, 2, undefined])(
-        'uses preset limit %j before the source fallback and changes it only on Apply',
+        'uses preset limit %j before the source fallback and changes it only when a preset is applied',
         async (minTileMatrixIndex) => {
             const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
             getLayerCollectionItems.mockImplementation((_provider, collection) => {
@@ -392,6 +840,9 @@ describe('LayersComponent', () => {
             });
             fixture.detectChanges();
             await fixture.whenStable();
+            // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+            fixture.componentInstance.show();
+            fixture.detectChanges();
             expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
             eodysseyLayerService.applySelectedPreset();
             expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
@@ -504,7 +955,7 @@ describe('LayersComponent', () => {
         expect(element.textContent).toContain('Sentinel');
     });
 
-    it('loads later coverage and preset pages and applies a map-center choice only on Apply', async () => {
+    it('loads later coverage and preset pages and applies a map-center choice only when a preset is applied', async () => {
         const regionNumbers = [...Array.from({length: 19}, (_, index) => index + 1), 32];
         const regionCollections = regionNumbers.map((zone) => {
             return {
@@ -565,6 +1016,9 @@ describe('LayersComponent', () => {
         mapView.setCenter([148.5, -35.5]);
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.currentPresets()).toHaveLength(25));
         fixture.detectChanges();
         expect(eodysseyLayerService.currentVariants()).toHaveLength(21);
@@ -583,7 +1037,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32755');
         const useCenterButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((button) =>
-            button.textContent?.includes('Select at map center'),
+            button.textContent?.includes('Map center'),
         );
         expect(useCenterButton).toBeDefined();
         useCenterButton?.click();
@@ -632,181 +1086,86 @@ describe('LayersComponent', () => {
         expect(element.textContent).not.toContain('No data sources are available');
         expect(element.textContent).toContain('Sentinel');
         expect(eodysseyLayerService.dataSources()).toHaveLength(1);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
     });
 
-    it('selects the default preset and requires explicit apply, with the button tracking changes', async () => {
+    it('shows the first preset for a new data source, then the chosen one, with the availability alone or over it', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
-        expect(eodysseyLayerService.dataSources().map((source) => source.key)).toEqual(['sentinel']);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        const tiles = (): HTMLElement[] => Array.from(element.querySelectorAll<HTMLElement>('.visualization-presets mat-list-item'));
+        const active = (): string[] =>
+            tiles().flatMap((tile) => (tile.classList.contains('preset-active') ? [tile.textContent.replace('check', '').trim()] : []));
+        const footprints = TestBed.inject(FootprintsService);
+        const toggle = (): HTMLElement => element.querySelector<HTMLElement>('.availability-toggle button')!;
+        const presets = eodysseyLayerService.currentPresets();
         expect(eodysseyLayerService.selectedPresetKey()).toBe('Default');
-        expect(button.disabled).toBe(false);
+        // the first preset is on the map at once, without a click
+        expect(active()).toEqual([presets[0].displayName]);
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
         expect(setTime).not.toHaveBeenCalled();
-        expect(setTimeStepDuration).not.toHaveBeenCalled();
 
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
+        tiles()[0].click();
         fixture.detectChanges();
-        expect(button.disabled).toBe(false);
-        button.click();
-        fixture.detectChanges();
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
-        expect(button.disabled).toBe(true);
         await fixture.whenStable();
-        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
-        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
+        expect(active()).toEqual([presets[0].displayName]);
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(setTime).not.toHaveBeenCalled();
 
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[1].key);
+        tiles()[1].click();
         fixture.detectChanges();
-        expect(button.disabled).toBe(false);
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
-        button.click();
-        fixture.detectChanges();
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'alternate'});
-        expect(button.disabled).toBe(true);
         await fixture.whenStable();
-        expect(setTime).toHaveBeenCalledTimes(1);
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(presets[1].layerId);
+
+        // the availability lies over the imagery as outlines
+        toggle().click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(footprints.overlayVisible()).toBe(true);
+        expect(footprints.overlayLight()).toBe(true);
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(presets[1].layerId);
+
+        // "None" takes the imagery off, keeps the availability and goes back to the default preset for the dates
+        tiles()[2].click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(active()).toEqual(['None']);
+        expect(footprints.overlayVisible()).toBe(true);
+        expect(footprints.overlayLight()).toBe(false);
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe(presets[0].key);
+
+        toggle().click();
+        fixture.detectChanges();
+        expect(footprints.overlayVisible()).toBe(false);
     });
 
-    it('defaults to True Color Image by catalogue order and preserves a manual choice', async () => {
-        const preset = (key: string, name: string, order: number): unknown => ({
-            type: 'layer',
-            name,
-            id: {providerId: 'provider', layerId: key},
-            description: '',
-            properties: [
-                ['edv:presetKey', key],
-                ['edv:order', String(order)],
-            ],
-        });
-        getLayerCollectionItems.mockImplementation((_provider, collection) =>
-            Promise.resolve(
-                collection === 'region'
-                    ? {items: [preset('ndvi', 'NDVI', 30), preset('true_color_tci', 'True Color Image', 10)]}
-                    : (listings[collection] ?? {items: []}),
-            ),
-        );
+    it('removes the visualization from the map without resetting the time when it is applied again', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.selectedPreset()?.displayName).toBe('True Color Image');
-        expect(eodysseyLayerService.selectedPresetIndex()).toBe(0);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
-
-        eodysseyLayerService.setSelectedPreset('ndvi');
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(eodysseyLayerService.selectedPresetKey()).toBe('ndvi');
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
-    });
-
-    it('keeps the applied layer and time while selecting another source until apply is clicked', async () => {
-        const pages: Record<string, {items: unknown[]}> = {
-            ...listings,
-            edv: {
-                items: [
-                    ...listings.edv.items,
-                    {
-                        type: 'collection',
-                        name: 'Z Other source',
-                        id: {providerId: 'provider', collectionId: 'otherDataset'},
-                        description: '',
-                        properties: [
-                            ['edv:dataset', 'other'],
-                            ['edv:defaultTime', '1775088000000'],
-                            ['edv:timeStep', '{"step":2,"granularity":"days"}'],
-                        ],
-                    },
-                ],
-            },
-            otherDataset: {
-                items: [
-                    {
-                        type: 'collection',
-                        name: 'Global',
-                        description: '',
-                        id: {providerId: 'provider', collectionId: 'otherRegion'},
-                        properties: [['edv:crs', 'EPSG:4326']],
-                    },
-                ],
-            },
-            otherRegion: {
-                items: [
-                    {
-                        type: 'layer',
-                        name: 'Other visualization',
-                        id: {providerId: 'provider', layerId: 'other'},
-                        description: '',
-                        properties: [['edv:presetKey', 'other']],
-                    },
-                ],
-            },
-        };
-        getLayerCollectionItems.mockImplementation((_provider, collection) => Promise.resolve(pages[collection] ?? {items: []}));
-        fixture.detectChanges();
-        await fixture.whenStable();
-        const component = fixture.componentInstance;
         eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        component.applySelectedPreset();
+        fixture.componentInstance.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
-        const appliedLayer = eodysseyLayerService.mapTileLayer();
-        const appliedSource = eodysseyLayerService.appliedDataSource();
-        expect(appliedLayer).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
-        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775001600000)));
-        setTime.mockClear();
-        setTimeStepDuration.mockClear();
-        getLayer.mockClear();
-
-        eodysseyLayerService.setSelectedDataSource('other');
-        fixture.detectChanges();
-        await fixture.whenStable();
-        await vi.waitFor(() => expect(eodysseyLayerService.currentPresets()).toHaveLength(1));
-        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('other');
-        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
-        expect(eodysseyLayerService.appliedDataSource()).toBe(appliedSource);
-        expect(eodysseyLayerService.selectedPresetKey()).toBe('other');
-        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
-        expect(eodysseyLayerService.mapTileLayer()).toBe(appliedLayer);
-        expect(setTime).not.toHaveBeenCalled();
-        expect(setTimeStepDuration).not.toHaveBeenCalled();
-        expect(getLayer).not.toHaveBeenCalled();
-
-        component.applySelectedPreset();
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'other'});
-        expect(eodysseyLayerService.appliedDataSource()?.key).toBe('other');
-        expect(setTime).toHaveBeenCalledWith(new Time(new Date(1775088000000)));
-        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 2, durationUnit: 'days'});
-        expect(getLayer).toHaveBeenCalledWith('provider', 'other');
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
 
         setTime.mockClear();
-        component.autoSelectTime.set(false);
+        fixture.componentInstance.show();
         fixture.detectChanges();
         await fixture.whenStable();
-        eodysseyLayerService.setSelectedDataSource('sentinel');
-        fixture.detectChanges();
-        await fixture.whenStable();
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        component.applySelectedPreset();
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+
+        fixture.componentInstance.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
         expect(setTime).not.toHaveBeenCalled();
     });
 
     it('preserves the applied layer and time when returning to the layers panel', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        fixture.componentInstance.applySelectedPreset();
+        fixture.componentInstance.show(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         await fixture.whenStable();
         const appliedLayer = eodysseyLayerService.mapTileLayer();
@@ -822,22 +1181,15 @@ describe('LayersComponent', () => {
         expect(setTimeStepDuration).not.toHaveBeenCalled();
     });
 
-    it('loads the legend only after applying a preset and handles a failed request', async () => {
+    it('loads the legend of the shown preset and handles a failed request', async () => {
         getLayer.mockRejectedValue(new Error('Layer unavailable'));
         fixture.detectChanges();
         await fixture.whenStable();
-        const component = fixture.componentInstance;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
-        fixture.detectChanges();
-        await fixture.whenStable();
-        expect(getLayer).not.toHaveBeenCalled();
-        expect(element.querySelector('.legend')).toBeNull();
-
-        component.applySelectedPreset();
-        fixture.detectChanges();
-        await fixture.whenStable();
-        fixture.detectChanges();
+        // the first preset is shown at once, with its legend
         expect(getLayer).toHaveBeenCalledWith('provider', 'vv');
         expect(element.querySelector('.legend-error')?.textContent).toContain('Failed to load legend');
         expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'provider', layerId: 'vv'});
@@ -845,8 +1197,6 @@ describe('LayersComponent', () => {
         eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[1].key);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(getLayer).toHaveBeenCalledTimes(1);
-        component.applySelectedPreset();
         fixture.detectChanges();
         await fixture.whenStable();
         expect(getLayer).toHaveBeenLastCalledWith('provider', 'alternate');
@@ -1057,6 +1407,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.currentVariants().map((variant) => variant.key)).toEqual(['EPSG:32632', 'EPSG:32633']);
         expect(getLayerCollectionItems.mock.calls.map(([, collection]) => collection)).not.toContain('v330');
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
@@ -1078,7 +1431,8 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:32633');
-        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data0', layerId: 'red33-0'});
+        // the reloaded catalogue shows the kept preset with its new ids
+        expect(eodysseyLayerService.mapTileLayer()).toEqual({dataConnectorId: 'data1', layerId: 'red33-1'});
         expect(eodysseyLayerService.selectedPresetKey()).toBe('red_band');
     });
 
@@ -1148,6 +1502,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         resolve33({items: [layer('red33')]});
@@ -1225,6 +1582,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('variant unavailable'));
@@ -1291,6 +1651,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         eodysseyLayerService.setSelectedPreset('ndvi');
         expect(eodysseyLayerService.canApplyPreset()).toBe(true);
@@ -1363,6 +1726,9 @@ describe('LayersComponent', () => {
 
         fixture.detectChanges();
         await fixture.whenStable();
+        // the selection is the subject here, so nothing is shown on its own: "None", which applies only on request
+        fixture.componentInstance.show();
+        fixture.detectChanges();
         eodysseyLayerService.setSelectedVariant('EPSG:32633');
         fixture.detectChanges();
         await vi.waitFor(() => expect(eodysseyLayerService.variantError()).toBe('B unavailable'));
