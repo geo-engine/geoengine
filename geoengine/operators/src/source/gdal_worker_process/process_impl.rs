@@ -572,7 +572,15 @@ impl GdalHandling {
             window = %format!("({},{})", read_window.size_x, read_window.size_y),
         )
         .entered();
-        let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
+        let (Some(out_x), Some(out_y)) = (
+            NonZeroUsize::new(out_shape.axis_size_x()),
+            NonZeroUsize::new(out_shape.axis_size_y()),
+        ) else {
+            return Err(IpcProcessError::IpcOther {
+                msg: format!("cannot read window {read_window:?} into an empty grid"),
+            });
+        };
+        let gdal_out_shape = (out_x, out_y);
 
         let dataset_mask_flags = rasterband.mask_flags()?;
 
@@ -591,19 +599,13 @@ impl GdalHandling {
         }
 
         let read_start = Instant::now();
-        let buffer = rasterband.read_as::<T>(
-            read_window.gdal_window_start(), // pixelspace origin
-            read_window.gdal_window_size(),  // pixelspace size
-            gdal_out_shape,                  // requested raster size
-            None,                            // sampling mode
-        )?;
+        let buffer_data = Self::read_window_as::<T>(rasterband, read_window, gdal_out_shape)?;
         let read_duration = read_start.elapsed();
         tracing::debug!(
             "GDAL rasterband read took {read_duration:?} for window size ({}, {})",
             read_window.size_x,
             read_window.size_y,
         );
-        let (_, buffer_data) = buffer.into_shape_and_vec();
 
         if dataset_mask_flags.is_all_valid() {
             // Even if GDAL reports all pixels as valid, honor an explicit
@@ -641,17 +643,101 @@ impl GdalHandling {
         debug!("use mask based no-data handling.");
 
         let mask_band = rasterband.open_mask_band()?;
-        let mask_buffer = mask_band.read_as::<u8>(
-            read_window.gdal_window_start(), // pixelspace origin
-            read_window.gdal_window_size(),  // pixelspace size
-            gdal_out_shape,                  // requested raster size
-            None,                            // sampling mode
-        )?;
-        let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+        let mask_buffer_data = Self::read_window_as::<u8>(&mask_band, read_window, gdal_out_shape)?;
         Ok(GdalDataGridVariant::WithExplicitMask {
             data: buffer_data,
             validity_mask: mask_buffer_data,
         })
+    }
+
+    /// Reads `read_window` of `band` into a buffer of `out_shape` (x, y) with nearest neighbour
+    /// resampling. A window that does not lie on whole pixels is read exactly: GDAL samples the
+    /// file pixel under the center of every buffer pixel.
+    fn read_window_as<T: GdalType + Copy + Default>(
+        band: &GdalRasterBand,
+        read_window: &GdalReadWindow,
+        out_shape: (NonZeroUsize, NonZeroUsize),
+    ) -> Result<Vec<T>, IpcProcessError> {
+        let out_shape = (out_shape.0.get(), out_shape.1.get());
+        let Some(subpixel) = read_window.subpixel else {
+            let buffer = band.read_as::<T>(
+                read_window.gdal_window_start(), // pixelspace origin
+                read_window.gdal_window_size(),  // pixelspace size
+                out_shape,                       // requested raster size
+                None,                            // sampling mode
+            )?;
+            return Ok(buffer.into_shape_and_vec().1);
+        };
+
+        // the envelope of the window is only for checking whether data is stored
+        let ([x, y], [width, height]) = subpixel.gdal_integer_window();
+        let (Ok(x), Ok(y), Ok(width), Ok(height), Ok(out_x), Ok(out_y)) = (
+            x.try_into(),
+            y.try_into(),
+            width.get().try_into(),
+            height.get().try_into(),
+            out_shape.0.try_into(),
+            out_shape.1.try_into(),
+        ) else {
+            return Err(IpcProcessError::IpcOther {
+                msg: format!("read window {read_window:?} exceeds the GDAL range"),
+            });
+        };
+        let [x_off, y_off, x_size, y_size] = subpixel.in_file_pixels();
+        let mut buffer = vec![T::default(); out_shape.0 * out_shape.1];
+
+        // TODO: The gdal crate cannot read floating-point windows yet, hence the FFI call. Once
+        // https://github.com/georust/gdal/pull/738 is released, use
+        // `RasterBand::read_into_slice_with_options` with a `FloatingPointWindow` instead.
+
+        // SAFETY: an all-zero `GDALRasterIOExtraArg` is valid: null pointers and no callback
+        let mut extra_arg: gdal_sys::GDALRasterIOExtraArg = unsafe { std::mem::zeroed() };
+        extra_arg.nVersion = 1;
+        extra_arg.eResampleAlg = gdal_sys::GDALRIOResampleAlg::GRIORA_NearestNeighbour;
+        extra_arg.bFloatingPointWindowValidity = 1;
+        extra_arg.dfXOff = x_off;
+        extra_arg.dfYOff = y_off;
+        extra_arg.dfXSize = x_size;
+        extra_arg.dfYSize = y_size;
+
+        // SAFETY: the buffer has `out_x * out_y` values of the type GDAL writes
+        let status = unsafe {
+            gdal_sys::GDALRasterIOEx(
+                band.c_rasterband(),
+                gdal_sys::GDALRWFlag::GF_Read,
+                x,
+                y,
+                width,
+                height,
+                buffer.as_mut_ptr().cast::<std::ffi::c_void>(),
+                out_x,
+                out_y,
+                T::gdal_ordinal(),
+                0,
+                0,
+                &raw mut extra_arg,
+            )
+        };
+        if status != gdal_sys::CPLErr::CE_None {
+            // SAFETY: GDAL owns the message and keeps it until the next error, which the copy
+            // is taken before. Like the gdal crate, reset the error afterwards, so that it does
+            // not show up in later errors of this thread.
+            let (number, msg) = unsafe {
+                let msg = std::ffi::CStr::from_ptr(gdal_sys::CPLGetLastErrorMsg())
+                    .to_string_lossy()
+                    .into_owned();
+                let number = gdal_sys::CPLGetLastErrorNo();
+                gdal_sys::CPLErrorReset();
+                (number, msg)
+            };
+            return Err(GdalError::CplError {
+                class: status,
+                number,
+                msg,
+            }
+            .into());
+        }
+        Ok(buffer)
     }
 
     /// Checks if the read window is missing in a sparse file (e.g. written with `SPARSE_OK`), so that reading it would only return no-data.

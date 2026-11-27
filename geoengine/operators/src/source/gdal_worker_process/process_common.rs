@@ -45,6 +45,59 @@ pub struct GdalReadWindow {
     pub(crate) start_y: isize,
     pub(crate) size_x: usize, // pixelspace size
     pub(crate) size_y: usize,
+    /// The exact window if it does not lie on whole pixels of the file, e.g. for a file that is
+    /// coarser than its dataset. The integer window above is its envelope.
+    #[serde(default)]
+    pub(crate) subpixel: Option<SubpixelWindow>,
+}
+
+/// A read window in pixels `divisor` times finer than the file's pixels, i.e. the window
+/// `start / divisor` with the size `size / divisor` in file pixels.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct SubpixelWindow {
+    pub(crate) start_x: isize,
+    pub(crate) start_y: isize,
+    pub(crate) size_x: NonZeroUsize,
+    pub(crate) size_y: NonZeroUsize,
+    pub(crate) divisor: NonZeroUsize,
+}
+
+impl SubpixelWindow {
+    /// The window in file pixels: start x, start y, size x, size y.
+    pub fn in_file_pixels(&self) -> [f64; 4] {
+        let divisor = self.divisor.get() as f64;
+        [
+            self.start_x as f64 / divisor,
+            self.start_y as f64 / divisor,
+            self.size_x.get() as f64 / divisor,
+            self.size_y.get() as f64 / divisor,
+        ]
+    }
+
+    /// The integer window GDAL reads alongside this window, as start x, start y, size x, size y
+    /// in file pixels.
+    ///
+    /// GDAL requires the integer start to be less than one pixel before the exact start and the
+    /// integer size to be less than one pixel larger than the exact size (see
+    /// `GDALRasterIOExtraArg`), so the envelope of the window does not do. Like GDAL for the
+    /// sources of VRT datasets, the start is rounded down and the size to the nearest integer,
+    /// but is at least 1.
+    pub fn gdal_integer_window(&self) -> ([isize; 2], [NonZeroUsize; 2]) {
+        let divisor = self.divisor.get();
+        // floor(size / divisor + 0.5)
+        let size = |size: NonZeroUsize| {
+            NonZeroUsize::new((2 * size.get() + divisor) / (2 * divisor))
+                .unwrap_or(NonZeroUsize::MIN)
+        };
+        let divisor = divisor as isize;
+        (
+            [
+                self.start_x.div_euclid(divisor),
+                self.start_y.div_euclid(divisor),
+            ],
+            [size(self.size_x), size(self.size_y)],
+        )
+    }
 }
 
 impl GdalReadWindow {
@@ -54,6 +107,7 @@ impl GdalReadWindow {
             start_y: start.y(),
             size_x: size.axis_size_x(),
             size_y: size.axis_size_y(),
+            subpixel: None,
         }
     }
 
@@ -844,6 +898,42 @@ mod tests {
             })
             .is_grid()
         );
+    }
+
+    #[test]
+    fn subpixel_window_has_the_integer_window_gdal_requires() {
+        let nz = |value: usize| NonZeroUsize::new(value).unwrap();
+        let window = |start: isize, size: usize| SubpixelWindow {
+            start_x: start,
+            start_y: 0,
+            size_x: nz(size),
+            size_y: nz(6),
+            divisor: nz(6),
+        };
+        let integer_window = |window: SubpixelWindow| {
+            let ([x, _], [width, _]) = window.gdal_integer_window();
+            (x, width.get())
+        };
+
+        // 682 2/3 file pixels from 0 and from 682 2/3: the envelopes would be 683 and 684 pixels
+        assert_eq!(integer_window(window(0, 4096)), (0, 683));
+        assert_eq!(integer_window(window(4096, 4096)), (682, 683));
+        // whole file pixels
+        assert_eq!(integer_window(window(12, 18)), (2, 3));
+        // a window smaller than half a file pixel still reads one
+        assert_eq!(integer_window(window(7, 2)), (1, 1));
+        // negative starts are rounded down as well
+        assert_eq!(integer_window(window(-1, 6)), (-1, 1));
+
+        // GDAL: start - integer start < 1, integer size - size < 1
+        for start in -12..12 {
+            for size in 1..24 {
+                let exact = window(start, size).in_file_pixels();
+                let ([x, _], [width, _]) = window(start, size).gdal_integer_window();
+                assert!(exact[0] - (x as f64) < 1. && exact[0] >= x as f64);
+                assert!((width.get() as f64) - exact[2] < 1.);
+            }
+        }
     }
 
     #[test]
