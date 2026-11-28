@@ -641,6 +641,33 @@ pub struct GdalProcessPoolWorkerConfig {
     pub open_telemetry: OpenTelemetryConfig,
     #[serde(default)]
     pub retry: geoengine_operators::source::gdal_worker_process::WorkerRetryConfig,
+    #[serde(default)]
+    pub byte_cache: ByteCacheSettings,
+}
+
+/// A cache of remote file bytes that all GDAL workers of the server share.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ByteCacheSettings {
+    /// 0 to read remote files without the cache
+    pub size_in_mb: u64,
+    /// the most one remote file may take, in percent of the size
+    pub max_file_percent: u64,
+    /// relative to the server's working directory; created readable only by the server's user
+    pub directory: std::path::PathBuf,
+    /// how long a worker waits for chunks another worker downloads before it downloads them itself
+    pub lock_wait_seconds: u64,
+}
+
+impl Default for ByteCacheSettings {
+    fn default() -> Self {
+        Self {
+            size_in_mb: 0,
+            max_file_percent: 25,
+            directory: "gdal-byte-cache".into(),
+            lock_wait_seconds: 10,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -720,6 +747,17 @@ impl From<GdalProcessPoolWorkerConfig>
                 endpoint: config.open_telemetry.endpoint,
             },
             retry: config.retry,
+            byte_cache: (config.byte_cache.size_in_mb > 0).then(|| {
+                let size_bytes = config.byte_cache.size_in_mb * 1024 * 1024;
+                geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
+                    // absolute, as the workers need not share the server's working directory
+                    directory: std::path::absolute(&config.byte_cache.directory)
+                        .unwrap_or(config.byte_cache.directory),
+                    size_bytes,
+                    max_file_bytes: size_bytes / 100 * config.byte_cache.max_file_percent.min(100),
+                    lock_wait: std::time::Duration::from_secs(config.byte_cache.lock_wait_seconds),
+                }
+            }),
         }
     }
 }
@@ -1178,6 +1216,26 @@ mod tests {
                 max_backoff_seconds: 2,
                 max_duration_seconds: 20,
             }
+        );
+    }
+
+    #[test]
+    fn it_gives_the_workers_a_byte_cache_only_with_a_size() {
+        let byte_cache =
+            |local: Option<&str>| worker_config(local, "BYTE_CACHE__SIZE_IN_MB", None).byte_cache;
+        assert_eq!(byte_cache(None), None);
+        assert_eq!(
+            byte_cache(Some(
+                "[gdal_process_pool.worker.byte_cache]\nsize_in_mb = 2\n"
+            )),
+            Some(
+                geoengine_operators::source::gdal_worker_process::byte_cache::ByteCacheConfig {
+                    directory: std::path::absolute("gdal-byte-cache").unwrap(),
+                    size_bytes: 2 * 1024 * 1024,
+                    max_file_bytes: 2 * 1024 * 1024 / 100 * 25,
+                    lock_wait: std::time::Duration::from_secs(10),
+                }
+            )
         );
     }
 

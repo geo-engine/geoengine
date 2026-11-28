@@ -3,6 +3,7 @@ members = [
     "crs-constants",
     "datatypes",
     "expression",
+    "gdal-byte-cache",
     "macros",
     "operators",
     "server",
@@ -139,6 +140,7 @@ image = { version = "0.25", default-features = false, features = ["png", "rayon"
 indoc = "2.0"
 ipc-channel = "0.23.1"
 itertools = "0.15"
+libc = "0.2"
 libloading = "0.9"
 lru = "0.19"
 lz4_flex = "0.14"

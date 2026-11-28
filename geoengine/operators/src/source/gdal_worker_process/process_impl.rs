@@ -125,6 +125,10 @@ pub struct WorkerConfig {
     pub open_telemetry: OpenTelemetryConfig,
     #[serde(default)]
     pub retry: WorkerRetryConfig,
+    /// A cache of remote file bytes that all workers share, see [`super::byte_cache`]; `None` to
+    /// read remote files without it.
+    #[serde(default)]
+    pub byte_cache: Option<super::byte_cache::ByteCacheConfig>,
 }
 
 /// Limits for retrying a failed GDAL open or read in a worker. They apply on top of the number
@@ -163,6 +167,7 @@ impl Default for WorkerConfig {
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
             retry: WorkerRetryConfig::default(),
+            byte_cache: None,
         }
     }
 }
@@ -284,6 +289,8 @@ pub struct GdalDatasetHolder {
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
     retry: WorkerRetryConfig,
+    /// open remote files through `/vsigecache/`, which the worker installed
+    byte_cache: Option<&'static super::byte_cache::ByteCache>,
 }
 
 struct PrevDatasetOpt {
@@ -298,16 +305,56 @@ impl GdalDatasetHolder {
             dataset: None,
             thread_local: None,
             retry,
+            byte_cache: None,
         }
     }
 
+    /// Opens remote files through the byte cache, which [`super::byte_cache::install`] installed
+    /// in this process.
+    pub fn with_byte_cache(
+        retry: WorkerRetryConfig,
+        byte_cache: &'static super::byte_cache::ByteCache,
+    ) -> Self {
+        Self {
+            byte_cache: Some(byte_cache),
+            ..Self::new(retry)
+        }
+    }
+
+    /// The path GDAL opens: remote files through the byte cache if it is on, keyed by the
+    /// parameters that decide which bytes the dataset may read.
+    fn path_for_open(&self, dataset_params: &GdalDatasetParameters) -> std::path::PathBuf {
+        let path = dataset_params.file_path_for_open();
+        if self.byte_cache.is_none() {
+            return path;
+        }
+        // collision-resistant: the parameters, credentials included, come partly from users
+        let mut hasher = super::byte_cache::KeyHasher::default();
+        dataset_params.partial_hash(&mut hasher);
+        super::byte_cache::wrap(&path, &hasher.key()).unwrap_or(path)
+    }
+
     fn open_ex(
+        &self,
         dataset_params: &GdalDatasetParameters,
     ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
         let options = dataset_params
             .gdal_open_options
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
+
+        // only this worker builds cache paths: a dataset must not pick the key its bytes are
+        // read under
+        if dataset_params
+            .file_path
+            .to_string_lossy()
+            .contains(super::byte_cache::PREFIX)
+        {
+            return Err(GdalError::BadArgument(format!(
+                "a dataset path must not contain {}",
+                super::byte_cache::PREFIX
+            )));
+        }
 
         // reverts the process-global configs on drop
         let thread_local_configs: Option<GdalConfigOptions> = dataset_params
@@ -318,7 +365,7 @@ impl GdalDatasetHolder {
             .expect("GdalConfigOptions must not fail");
 
         let ds = gdal_open_ex_gdal_error(
-            &dataset_params.file_path_for_open(),
+            &self.path_for_open(dataset_params),
             DatasetOptions {
                 open_flags: GdalOpenFlags::GDAL_OF_RASTER,
                 open_options: options.as_deref(),
@@ -367,7 +414,7 @@ impl GdalDatasetHolder {
             )
             .entered();
 
-            let (ds, tlo) = Self::open_ex(params)?;
+            let (ds, tlo) = self.open_ex(params)?;
 
             self.params = Some(params.clone());
             self.dataset = Some(ds);
@@ -413,6 +460,16 @@ impl GdalDatasetHolder {
 pub struct GdalHandling;
 
 impl GdalHandling {
+    /// Clears what this worker remembers of a remote file before a retry: GDAL's cache of it and
+    /// the version the byte cache knows, so that a file replaced by one of the same size is read
+    /// anew.
+    fn clear_caches_for_path(file_path: &Path, byte_cache: Option<&super::byte_cache::ByteCache>) {
+        Self::clear_gdal_vsi_cache_for_path(file_path);
+        if let Some(byte_cache) = byte_cache {
+            byte_cache.forget(file_path);
+        }
+    }
+
     fn clear_gdal_vsi_cache_for_path(file_path: &Path) {
         unsafe {
             if let Some(Some(c_string)) = file_path.to_str().map(|s| CString::new(s).ok()) {
@@ -470,6 +527,7 @@ impl GdalHandling {
         let is_remote = dataset_params.is_remote();
         let limits = Self::retry_limits(dataset_params, cache.retry);
         let dp = &dataset_params;
+        let byte_cache = cache.byte_cache;
 
         // Wrap both OPEN and READ actions inside the retry loop
 
@@ -480,7 +538,7 @@ impl GdalHandling {
                     Ok(dataset) => dataset,
                     Err(gdal_error) => {
                         if is_remote {
-                            Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
+                            Self::clear_caches_for_path(&dp.file_path_for_open(), byte_cache);
                         }
                         return Err(IpcProcessError::from(gdal_error));
                     }
@@ -488,7 +546,7 @@ impl GdalHandling {
 
                 read(ds, dataset_params).inspect_err(|_e| {
                     if is_remote {
-                        Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
+                        Self::clear_caches_for_path(&dp.file_path_for_open(), byte_cache);
                     }
                 })
             },
@@ -1618,6 +1676,200 @@ mod tests {
             GdalHandling::retry_limits(&get_params(), WorkerRetryConfig::default()).max_retries,
             0
         );
+    }
+
+    /// The byte cache, installed once in the test process, as a worker does at start.
+    fn test_byte_cache() -> &'static super::super::byte_cache::ByteCache {
+        type Installed = (
+            tempfile::TempDir,
+            &'static super::super::byte_cache::ByteCache,
+        );
+        static CACHE: std::sync::OnceLock<Installed> = std::sync::OnceLock::new();
+        CACHE
+            .get_or_init(|| {
+                let dir = tempfile::tempdir().expect("a temporary directory");
+                let cache =
+                    super::super::byte_cache::install(&super::super::byte_cache::ByteCacheConfig {
+                        directory: dir.path().join("cache"),
+                        size_bytes: 1 << 30,
+                        max_file_bytes: 1 << 28,
+                        lock_wait: std::time::Duration::from_secs(10),
+                    })
+                    .expect("the cache installs");
+                (dir, cache)
+            })
+            .1
+    }
+
+    /// A missing object in an object store reports "object not found", not an HTTP code: through
+    /// the byte cache it ends the same as without it.
+    #[test]
+    #[serial_test::serial]
+    fn it_reports_a_missing_s3_object_through_the_byte_cache_as_without_it() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(httptest::matchers::any())
+                .times(..)
+                .respond_with(responders::status_code(404).body(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>NoSuchKey</Code>\
+                     <Message>The specified key does not exist.</Message></Error>",
+                )),
+        );
+        let ds = GdalDatasetParameters {
+            file_path: "s3://bucket/missing.tif".into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(
+                [
+                    ("AWS_S3_ENDPOINT", server.addr().to_string()),
+                    ("AWS_HTTPS", "NO".to_string()),
+                    ("AWS_VIRTUAL_HOSTING", "FALSE".to_string()),
+                    ("AWS_NO_SIGN_REQUEST", "YES".to_string()),
+                    ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif".to_string()),
+                    ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR".to_string()),
+                    ("GDAL_HTTP_MAX_RETRY", "0".to_string()),
+                ]
+                .map(|(name, value)| (name.to_string(), value))
+                .to_vec(),
+            ),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+        let read = |holder: &mut GdalDatasetHolder| {
+            let advise = GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
+                read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+                bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+                flip_y: false,
+            };
+            match GdalHandling::load_tile_data_with_dataset_retry::<u8>(holder, &ds, advise, None) {
+                Err(IpcProcessError::GdalError { kind, .. }) => kind,
+                other => panic!("expected a GDAL error, got {other:?}"),
+            }
+        };
+
+        let without = read(&mut GdalDatasetHolder::default());
+        let through = read(&mut GdalDatasetHolder::with_byte_cache(
+            WorkerRetryConfig::default(),
+            test_byte_cache(),
+        ));
+
+        assert_eq!(through, without);
+    }
+
+    /// A dataset cannot name a cache path itself, with or without the cache.
+    #[test]
+    fn it_rejects_dataset_paths_that_name_the_byte_cache() {
+        let ds = GdalDatasetParameters {
+            file_path: format!("/vsigecache/{}/vsis3/bucket/a.tif", "0".repeat(64)).into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+        let result = GdalDatasetHolder::default().open_ex(&ds);
+        assert!(matches!(result, Err(GdalError::BadArgument(_))));
+    }
+
+    /// A remote file that does not exist stays "not found" when the worker reads through the byte
+    /// cache, so datasets that turn missing files into no data keep doing so.
+    #[test]
+    #[serial_test::serial]
+    fn it_creates_no_data_for_http_404_through_the_byte_cache() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/non_existing.tif"))
+                .times(1..)
+                .respond_with(responders::status_code(404)),
+        );
+        let ds = GdalDatasetParameters {
+            file_path: server.url_str("/non_existing.tif").into(),
+            rasterband_channel: 1,
+            geo_transform: TestDefault::test_default(),
+            width: 100,
+            height: 100,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: Some(vec![
+                (
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif".to_owned(),
+                ),
+                (
+                    "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                    "EMPTY_DIR".to_owned(),
+                ),
+                ("GDAL_HTTP_NETRC".to_owned(), "NO".to_owned()),
+                ("GDAL_HTTP_MAX_RETRY".to_owned(), "0".to_string()),
+            ]),
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+        let gdal_read_advice = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
+            read_window_bounds: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            bounds_of_target: GridBoundingBox2D::new([0, 0], [7, 7]).unwrap(),
+            flip_y: false,
+        };
+
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut GdalDatasetHolder::with_byte_cache(
+                WorkerRetryConfig::default(),
+                test_byte_cache(),
+            ),
+            &ds,
+            gdal_read_advice,
+            None,
+        );
+
+        match result {
+            Err(IpcProcessError::GdalError {
+                kind: IpcProcessGdalErrorKind::FileNotFound,
+                ..
+            }) => {}
+            other => panic!("expected FileNotFound error, got {other:?}"),
+        }
+
+        // any other failure stays an error
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/internal_error.tif"))
+                .times(1..)
+                .respond_with(responders::status_code(500)),
+        );
+        let ds = GdalDatasetParameters {
+            file_path: server.url_str("/internal_error.tif").into(),
+            ..ds
+        };
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut GdalDatasetHolder::with_byte_cache(
+                WorkerRetryConfig::default(),
+                test_byte_cache(),
+            ),
+            &ds,
+            gdal_read_advice,
+            None,
+        );
+        match result {
+            Err(IpcProcessError::GdalError { kind, .. }) => {
+                assert_ne!(kind, IpcProcessGdalErrorKind::FileNotFound);
+            }
+            other => panic!("expected GdalError error, got {other:?}"),
+        }
     }
 
     #[test]

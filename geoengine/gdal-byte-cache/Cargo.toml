@@ -1,0 +1,25 @@
+[package]
+name = "gdal-byte-cache"
+description = "A cache of remote file bytes that the GDAL worker processes of one server share, as the GDAL file system /vsigecache/."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
+
+[dependencies]
+gdal-sys = { workspace = true }
+libc = { workspace = true }
+lru = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+gdal = { workspace = true }
+serial_test = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

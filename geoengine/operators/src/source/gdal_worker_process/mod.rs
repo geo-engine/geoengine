@@ -1,3 +1,4 @@
+pub use gdal_byte_cache as byte_cache;
 mod db_types;
 mod gdal_dataset_params;
 mod grid_and_properties;

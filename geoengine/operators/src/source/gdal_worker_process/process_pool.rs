@@ -49,6 +49,10 @@ const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
+/// How often the server deletes the oldest chunks of the workers' byte cache above its size. The
+/// cache may exceed its size by what the workers download in this time.
+const BYTE_CACHE_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
+
 /// Interval for logging the broker statistics.
 const STATS_REPORT_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -71,6 +75,11 @@ pub enum GdalProcessPoolError {
 
     #[snafu(display("Timed out waiting for GDAL worker caches to be cleared"))]
     CacheClearTimeout,
+
+    #[snafu(display("Could not clear the GDAL byte cache: {error}"))]
+    ByteCacheClear {
+        error: String,
+    },
 }
 
 impl From<IpcProcessError> for GdalProcessPoolError {
@@ -211,6 +220,9 @@ struct BrokerStats {
     evictions: u64,
     cancelled_dropped: u64,
     max_dataset_queue_len: usize,
+    /// time dispatched requests waited for a worker, from sending them to the broker
+    wait_sum: Duration,
+    wait_max: Duration,
 }
 
 struct DatasetSlot {
@@ -264,6 +276,8 @@ struct QueuedRequest {
     /// Closed once the leader task drops its receiver because all callers gave up (see
     /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
+    /// when the request was sent to the broker, to measure how long it waited for a worker
+    enqueued: Instant,
 }
 
 /// Result of a read operation, carrying the IPC payload and the companion
@@ -331,6 +345,22 @@ pub struct GdalProcessPool {
     in_flight_tiles: DashMap<u64, InFlightRead, BuildHasherDefault<FxHasher>>,
     header_cache: HeaderCache,
     counters: PoolCounters,
+    /// the directory of the workers' byte cache, if they have one
+    byte_cache_directory: Option<std::path::PathBuf>,
+    /// the task that keeps the byte cache within its size, ended with the pool
+    byte_cache_sweeper: Option<tokio::task::AbortHandle>,
+}
+
+impl Drop for GdalProcessPool {
+    fn drop(&mut self) {
+        if let Some(sweeper) = &self.byte_cache_sweeper {
+            sweeper.abort();
+        }
+        // the bytes of datasets must not outlive the server on disk
+        if let Some(directory) = &self.byte_cache_directory {
+            let _ = super::byte_cache::sweep(directory, 0);
+        }
+    }
 }
 
 /// Lets structs that hold the pool, such as `PostgresDb` and `StacDataProvider` in services,
@@ -449,7 +479,19 @@ impl GdalProcessPool {
                 .try_for_each(|ack| ack.unwrap_or(Err(GdalProcessPoolError::WorkerPanic)))
         })
         .await
-        .map_err(|_| GdalProcessPoolError::CacheClearTimeout)?
+        .map_err(|_| GdalProcessPoolError::CacheClearTimeout)??;
+        if let Some(directory) = self.byte_cache_directory.clone() {
+            // after the workers, so that no read in progress stores chunks of the old bytes
+            tokio::task::spawn_blocking(move || super::byte_cache::sweep(&directory, 0))
+                .await
+                .map_err(|err| GdalProcessPoolError::ByteCacheClear {
+                    error: err.to_string(),
+                })?
+                .map_err(|err| GdalProcessPoolError::ByteCacheClear {
+                    error: err.to_string(),
+                })?;
+        }
+        Ok(())
     }
 
     const STRATEGY: SchedulingStrategy = SchedulingStrategy::GlobalMatrix;
@@ -477,6 +519,10 @@ impl GdalProcessPool {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
         let worker_config_clone = worker_config.clone();
+        let byte_cache_sweeper = worker_config
+            .byte_cache
+            .clone()
+            .map(|config| handle.spawn(sweep_byte_cache(config)).abort_handle());
 
         handle.spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
@@ -519,6 +565,8 @@ impl GdalProcessPool {
             in_flight_tiles: DashMap::default(),
             header_cache: HeaderCache::new(header_cache_entries),
             counters: PoolCounters::default(),
+            byte_cache_directory: worker_config.byte_cache.map(|config| config.directory),
+            byte_cache_sweeper,
         })
     }
 
@@ -911,6 +959,8 @@ impl BrokerState {
             evictions = stats.evictions,
             cancelled_dropped = stats.cancelled_dropped,
             max_dataset_queue_len = stats.max_dataset_queue_len,
+            wait_ms_sum = stats.wait_sum.as_secs_f64() * 1000.,
+            wait_ms_max = stats.wait_max.as_secs_f64() * 1000.,
             "GDAL process pool statistics"
         );
     }
@@ -1162,6 +1212,18 @@ impl BrokerState {
         };
         self.stats.dispatched += 1;
         self.global_active_count += 1;
+        let wait = now.saturating_duration_since(req.enqueued);
+        self.stats.wait_sum += wait;
+        self.stats.wait_max = self.stats.wait_max.max(wait);
+        // one event per dispatch for the benches, joined with the worker's `gdal_worker_read` by `read_id`
+        tracing::debug!(
+            target: "gdal_pool_dispatch",
+            worker_id,
+            affinity,
+            wait_ms = wait.as_secs_f64() * 1000.,
+            read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+            "GDAL read dispatched"
+        );
 
         // The worker holds the requested dataset once the read starts, not its previous one.
         // Recorded now, so that a busy worker switching datasets does not count as a holder of
@@ -1191,6 +1253,40 @@ impl BrokerState {
         }
 
         self.set_affinity(worker_id, Some(busy_affinity));
+    }
+}
+
+/// Empties the byte cache of the workers, as its files are not synced to disk and may not have
+/// survived a crash of the machine, then keeps it within its size, logging its size (target
+/// `gdal_byte_cache`). Runs until its pool is dropped.
+async fn sweep_byte_cache(config: super::byte_cache::ByteCacheConfig) {
+    if let Err(err) = super::byte_cache::create_directory(&config.directory) {
+        tracing::error!(
+            "GDAL byte cache directory {} not usable: {err}",
+            config.directory.display()
+        );
+        return;
+    }
+    let mut interval = tokio::time::interval(BYTE_CACHE_SWEEP_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // the first tick is at once: delete everything
+    let mut size_bytes = 0;
+    loop {
+        interval.tick().await;
+        let directory = config.directory.clone();
+        let sweep =
+            tokio::task::spawn_blocking(move || super::byte_cache::sweep(&directory, size_bytes));
+        size_bytes = config.size_bytes;
+        match sweep.await {
+            Ok(Ok((bytes, deleted))) => tracing::debug!(
+                target: "gdal_byte_cache",
+                bytes,
+                deleted,
+                "GDAL byte cache swept"
+            ),
+            Ok(Err(err)) => tracing::warn!("GDAL byte cache sweep failed: {err}"),
+            Err(err) => tracing::warn!("GDAL byte cache sweep panicked: {err}"),
+        }
     }
 }
 
@@ -1428,6 +1524,7 @@ impl GdalPoolDispatcher {
                             dataset_hash: routing_hash,
                             request: request_clone,
                             respond_to: oneshot_tx,
+                            enqueued: Instant::now(),
                         })))
                         .await;
 
@@ -1731,6 +1828,8 @@ mod tests {
                 in_flight_tiles: DashMap::default(),
                 header_cache: HeaderCache::default(),
                 counters: PoolCounters::default(),
+                byte_cache_directory: None,
+                byte_cache_sweeper: None,
             },
             broker_rx,
         )
@@ -1935,6 +2034,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_empties_the_byte_cache_when_clearing_caches() {
+        let directory = tempfile::tempdir().unwrap();
+        let chunks = directory.path().join("chunks");
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig {
+                byte_cache: Some(super::super::byte_cache::ByteCacheConfig {
+                    directory: chunks.clone(),
+                    size_bytes: 1 << 20,
+                    max_file_bytes: 1 << 18,
+                    lock_wait: std::time::Duration::from_secs(10),
+                }),
+                ..WorkerConfig::default()
+            },
+        );
+        std::fs::create_dir_all(&chunks).unwrap();
+        // the cache names its files by a SHA-256
+        let file = chunks.join(format!("{}.cache", "0".repeat(64)));
+        std::fs::write(&file, [1_u8; 16]).unwrap();
+
+        pool.clear_caches().await.unwrap();
+
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
+    async fn it_empties_the_byte_cache_when_the_pool_is_dropped() {
+        let directory = tempfile::tempdir().unwrap();
+        let chunks = directory.path().join("chunks");
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig {
+                byte_cache: Some(super::super::byte_cache::ByteCacheConfig {
+                    directory: chunks.clone(),
+                    size_bytes: 1 << 20,
+                    max_file_bytes: 1 << 18,
+                    lock_wait: std::time::Duration::from_secs(10),
+                }),
+                ..WorkerConfig::default()
+            },
+        );
+        // after the sweep that empties the directory at start
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        std::fs::create_dir_all(&chunks).unwrap();
+        let file = chunks.join(format!("{}.cache", "0".repeat(64)));
+        std::fs::write(&file, [1_u8; 16]).unwrap();
+
+        drop(pool);
+
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
     async fn it_clears_open_datasets_without_restarting_workers() {
         use crate::source::gdal_worker_process::process_common::GdalDataGridVariant;
         let directory = tempfile::tempdir().unwrap();
@@ -1968,6 +2126,7 @@ mod tests {
                     dataset_hash: 0,
                     request: request.request.clone(),
                     respond_to: tx,
+                    enqueued: Instant::now(),
                 })))
                 .await
                 .unwrap();
@@ -2245,6 +2404,7 @@ mod tests {
             dataset_hash,
             request: msg,
             respond_to: tx,
+            enqueued: Instant::now(),
         });
         (req, rx)
     }
@@ -2448,6 +2608,25 @@ mod tests {
         assert_eq!(state.stats.cancelled_dropped, 1);
     }
 
+    #[test]
+    fn it_counts_how_long_dispatched_requests_waited() {
+        let (w0, _rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (mut waited, _r1) = make_request(100, 1, w);
+        waited.enqueued = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
+        let (queued, _r2) = make_request(100, 1, w);
+
+        state.enqueue_request(waited);
+        state.enqueue_request(queued);
+        state.try_dispatch();
+
+        // the second request still waits for the only worker, so only the first counts
+        assert_eq!(state.stats.dispatched, 1);
+        assert!(state.stats.wait_max >= Duration::from_secs(2));
+        assert_eq!(state.stats.wait_sum, state.stats.wait_max);
+    }
+
     fn affinity_idle_for(dataset_hash: u64, idle_secs: u64) -> WorkerAffinity {
         let mut aff = make_affinity(dataset_hash, 1, window([0, 0], [255, 255]));
         aff.timestamp = Instant::now()
@@ -2588,6 +2767,8 @@ mod tests {
             in_flight_tiles: DashMap::default(),
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
+            byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
         (pool, held_rx)
     }
@@ -2694,6 +2875,8 @@ mod tests {
             in_flight_tiles: DashMap::default(),
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
+            byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
 
         // Mock broker: respond to every Read with a fixed success result.
@@ -2747,6 +2930,8 @@ mod tests {
             in_flight_tiles: DashMap::default(),
             header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
+            byte_cache_directory: None,
+            byte_cache_sweeper: None,
         });
 
         // Mock broker: respond with a FileNotFound error.
