@@ -29,7 +29,7 @@
 //! allowed to download but it is not. The version adds the file's size and modification time
 //! (`Last-Modified`), so a changed file gets a new file. The worker that asked the remote file
 //! system for a version shares it with the others through a symbolic link `<hash>.version` whose
-//! target is the version. For [`VERSION_CHECK_INTERVAL`], opening a known file costs no request,
+//! target is the version. For [`ByteCacheConfig::version_check`], opening a known file costs no request,
 //! and the remote file is only opened when a chunk is missing. After that time, or at once after
 //! [`ByteCache::forget`], a worker asks again. While the link's cache file exists, asking again
 //! downloads only the least of the file's start, whatever the dataset's
@@ -65,6 +65,9 @@ const EXTENSION: &str = "cache";
 /// The extension of the links through which workers share the versions of remote files.
 const VERSION_EXTENSION: &str = "version";
 
+/// The name of the file whose bytes workers lock while they ask for the version of a remote file.
+const VERSION_LOCKS: &str = "versions.lock";
+
 /// Remote GDAL file systems whose files are read through the cache.
 const REMOTE_FILE_SYSTEMS: [&str; 7] = [
     "/vsicurl/",
@@ -77,16 +80,10 @@ const REMOTE_FILE_SYSTEMS: [&str; 7] = [
 ];
 
 /// Files whose version a process remembers, so that it asks the remote file system for a file's
-/// version once per [`VERSION_CHECK_INTERVAL`], not for every handle (GDAL opens one per decoding
+/// version once per [`ByteCacheConfig::version_check`], not for every handle (GDAL opens one per decoding
 /// thread).
 const REMEMBERED_FILES: std::num::NonZeroUsize =
     std::num::NonZeroUsize::new(4096).expect("not zero");
-
-/// How long a process trusts a file's version before asking the remote file system again. A
-/// replaced file gets a new cache file by then if its size or modification time changed; if the
-/// remote file system reports no modification time, only after a read of it failed
-/// ([`ByteCache::forget`]).
-pub const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The sweep deletes down to this share of the size, so that it does not delete on every run.
 const LOW_WATERMARK_PERCENT: u64 = 90;
@@ -118,6 +115,17 @@ pub struct ByteCacheConfig {
     /// how long a worker waits for chunks another worker downloads before it downloads them
     /// itself, so that a download stuck in retries does not stall every worker that needs it
     pub lock_wait: Duration,
+    /// How long the workers trust a file's version before asking the remote file system again. A
+    /// replaced file gets a new cache file by then if its size or modification time changed; if
+    /// the remote file system reports no modification time, only after a read of it failed
+    /// ([`ByteCache::forget`]).
+    pub version_check: Duration,
+    /// The least a worker downloads for missing chunks: it widens a missing run to multiples of
+    /// this size, as far as the chunks around it are missing too. More bytes, fewer requests.
+    pub fetch_bytes: u64,
+    /// Extensions of the remote files read through the cache, without the dot and in any case,
+    /// e.g. `tif` and `jp2`. Other files, e.g. `NetCDF`, are read directly.
+    pub file_extensions: Vec<String>,
 }
 
 /// Chunk counters of a process since the last [`ByteCache::take_counts`].
@@ -152,12 +160,23 @@ pub struct ByteCache {
     directory: PathBuf,
     max_file_bytes: u64,
     lock_wait: Duration,
+    version_trust: Duration,
+    /// [`ByteCacheConfig::fetch_bytes`] in chunks, at least 1
+    fetch_chunks: u64,
+    /// [`ByteCacheConfig::file_extensions`]
+    file_extensions: Vec<String>,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
     write_failures: AtomicU64,
     /// version and when it was checked, by key and inner path
     versions: std::sync::Mutex<lru::LruCache<FileId, (Version, Instant)>>,
+    /// The file whose bytes workers lock while they ask for a file's version ([`VersionLock`]);
+    /// `None` if it could not be opened: every worker then asks itself.
+    version_locks: Option<File>,
+    /// Held with a lock on `version_locks`: the threads of a process share its open file, and
+    /// such locks do not exclude them from each other.
+    asking: std::sync::Mutex<()>,
 }
 
 impl ByteCache {
@@ -169,6 +188,12 @@ impl ByteCache {
             waited: self.waited.swap(0, Ordering::Relaxed),
             write_failures: self.write_failures.swap(0, Ordering::Relaxed),
         }
+    }
+
+    /// Whether the worker reads `path` through the cache: its extension is one of
+    /// [`ByteCacheConfig::file_extensions`]. [`wrap`] decides whether it is a remote file.
+    pub fn caches(&self, path: &Path) -> bool {
+        has_extension(path, &self.file_extensions)
     }
 
     /// Forgets the versions of the remote file `inner` (e.g. `/vsicurl/https://...`), so that the
@@ -277,11 +302,24 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         directory: config.directory.clone(),
         max_file_bytes: config.max_file_bytes,
         lock_wait: config.lock_wait,
+        version_trust: config.version_check,
+        fetch_chunks: (config.fetch_bytes / CHUNK_SIZE).max(1),
+        file_extensions: config.file_extensions.clone(),
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
         write_failures: AtomicU64::new(0),
         versions: std::sync::Mutex::new(lru::LruCache::new(REMEMBERED_FILES)),
+        version_locks: OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(config.directory.join(VERSION_LOCKS))
+            .ok(),
+        asking: std::sync::Mutex::new(()),
     }));
     // SAFETY: GDAL copies the callbacks but keeps the prefix pointer, so the prefix is a static
     // string; `cache` is never freed, as every handle refers to it
@@ -295,7 +333,9 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         (*callbacks).tell = Some(tell);
         (*callbacks).seek = Some(seek);
         (*callbacks).read = Some(read);
+        // COG reads were as fast with multi-range reads as with advised reads and threaded decoding
         (*callbacks).read_multi_range = Some(read_multi_range);
+        (*callbacks).advise_read = Some(advise_read);
         (*callbacks).eof = Some(eof);
         (*callbacks).close = Some(close);
         // no buffering on top: the cache file and the page cache are the buffer
@@ -322,6 +362,17 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
 pub fn wrap(path: &Path, key: &str) -> Option<PathBuf> {
     let path = path.to_str()?;
     (is_cache_stem(key) && is_remote(path)).then(|| PathBuf::from(format!("{PREFIX}{key}{path}")))
+}
+
+/// Whether the file name of `path` ends in one of `extensions`, ignoring case and a URL's query.
+fn has_extension(path: &Path, extensions: &[String]) -> bool {
+    let Some(path) = path.to_str() else {
+        return false;
+    };
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rsplit_once('.')
+        .is_some_and(|(_, extension)| extensions.iter().any(|e| e.eq_ignore_ascii_case(extension)))
 }
 
 fn is_remote(path: &str) -> bool {
@@ -561,6 +612,8 @@ struct Handle {
     eof: bool,
     /// when this handle last marked its file as used
     touched: Instant,
+    /// the cache's `fetch_chunks`
+    fetch_chunks: u64,
 }
 
 impl Handle {
@@ -588,41 +641,27 @@ impl Handle {
         let hits: u64 = present.iter().map(|&b| u64::from(b == 1)).sum();
         self.cache.hits.fetch_add(hits, Ordering::Relaxed);
 
-        // download each run of missing chunks once: under a lock on its map bytes, so that other
-        // workers missing them wait and then read them. Downloaded bytes go straight to the
-        // caller's buffer.
+        // download the runs of missing chunks once, see `fetch`. Downloaded bytes go straight to
+        // the caller's buffer.
+        let wanted: Vec<(u64, u64)> = runs(present.len(), |i| present[i] != 1)
+            .into_iter()
+            .map(|(a, b)| self.widen(file, first + a, first + b))
+            .collect();
+        let Ok(fetched) = self.fetch(file, &wanted) else {
+            return 0;
+        };
         let mut downloaded = vec![false; present.len()];
-        for (a, b) in runs(present.len(), |i| present[i] != 1) {
-            let (a, b) = (first + a, first + b);
-            let _lock = file.lock(a, b - a + 1, self.cache.lock_wait);
-            let now = file.present(a, b);
-            let missing = runs(now.len(), |i| now[i] != 1);
-            let still = missing.iter().map(|(c, d)| d - c + 1).sum::<u64>();
-            self.cache
-                .waited
-                .fetch_add(b - a + 1 - still, Ordering::Relaxed);
-            for (c, d) in missing {
-                let (c, d) = (a + c, a + d);
-                let start = c * CHUNK_SIZE;
-                let mut bytes = vec![0_u8; (d * CHUNK_SIZE + self.chunk_len(d) - start) as usize];
-                if self.inner_read(start, &mut bytes).is_err() {
-                    return 0;
-                }
-                self.cache.misses.fetch_add(d - c + 1, Ordering::Relaxed);
-                // as many chunks as the file's share still holds; the rest is served, not stored.
-                // shortcut: workers storing runs of one file at once may each see room and exceed
-                // its share by their runs; lock the whole map while checking if that matters.
-                let room = self.cache.max_file_bytes.saturating_sub(file.allocated()) / CHUNK_SIZE;
-                let chunks = (d - c + 1).min(room);
-                if chunks > 0 && file.store(c, chunks, &bytes).is_err() {
-                    self.cache.failed_write();
-                }
-                let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
+        for (c, bytes) in &fetched {
+            let start = c * CHUNK_SIZE;
+            let (from, to) = (offset.max(start), end.min(start + bytes.len() as u64));
+            if from < to {
                 buffer[(from - offset) as usize..(to - offset) as usize]
                     .copy_from_slice(&bytes[(from - start) as usize..(to - start) as usize]);
-                for chunk in c..=d {
-                    downloaded[(chunk - first) as usize] = true;
-                }
+            }
+            // a widened run reaches beyond the read
+            let d = c + (bytes.len() as u64).div_ceil(CHUNK_SIZE) - 1;
+            for chunk in (*c).max(first)..=d.min(last) {
+                downloaded[(chunk - first) as usize] = true;
             }
         }
 
@@ -641,13 +680,108 @@ impl Handle {
         len
     }
 
+    /// The run of missing chunks `a..=b`, widened to multiples of the fetch size as far as the
+    /// chunks before and after it are missing, too: one request then also brings what the next
+    /// reads would ask for one by one.
+    fn widen(&self, file: &CacheFile, a: u64, b: u64) -> (u64, u64) {
+        let n = self.fetch_chunks;
+        if n <= 1 {
+            return (a, b);
+        }
+        let low = a / n * n;
+        let high = ((b / n + 1) * n - 1).min((self.size - 1) / CHUNK_SIZE);
+        let before = if low < a {
+            file.present(low, a - 1)
+        } else {
+            Vec::new()
+        };
+        let after = if b < high {
+            file.present(b + 1, high)
+        } else {
+            Vec::new()
+        };
+        let missing = |byte: &&u8| **byte != 1;
+        (
+            a - before.iter().rev().take_while(missing).count() as u64,
+            b + after.iter().take_while(missing).count() as u64,
+        )
+    }
+
+    /// Downloads what is still missing of the runs `wanted` (ascending, apart) and stores it:
+    /// under locks on their map bytes, so that other workers missing the same chunks wait and
+    /// then read them. Several runs are downloaded in one round, which the remote file systems
+    /// do in parallel. Returns the downloaded runs by their first chunk.
+    fn fetch(&self, file: &CacheFile, wanted: &[(u64, u64)]) -> Result<Vec<(u64, Vec<u8>)>, ()> {
+        // ascending, so workers that want the same runs never wait for each other in a circle
+        let _locks: Vec<_> = wanted
+            .iter()
+            .map(|&(a, b)| file.lock(a, b - a + 1, self.cache.lock_wait))
+            .collect();
+        let mut missing = Vec::new();
+        for &(a, b) in wanted {
+            let now = file.present(a, b);
+            let still = runs(now.len(), |i| now[i] != 1);
+            let count = still.iter().map(|(c, d)| d - c + 1).sum::<u64>();
+            self.cache
+                .waited
+                .fetch_add(b - a + 1 - count, Ordering::Relaxed);
+            missing.extend(still.into_iter().map(|(c, d)| (a + c, a + d)));
+        }
+        let mut fetched: Vec<(u64, Vec<u8>)> = missing
+            .iter()
+            .map(|&(c, d)| {
+                let len = d * CHUNK_SIZE + self.chunk_len(d) - c * CHUNK_SIZE;
+                (c, vec![0_u8; len as usize])
+            })
+            .collect();
+        self.inner_read_runs(&mut fetched)?;
+        for ((c, bytes), &(_, d)) in fetched.iter().zip(&missing) {
+            self.cache.misses.fetch_add(d - c + 1, Ordering::Relaxed);
+            // as many chunks as the file's share still holds; the rest is served, not stored.
+            // shortcut: workers storing runs of one file at once may each see room and exceed
+            // its share by their runs; lock the whole map while checking if that matters.
+            let room = self.cache.max_file_bytes.saturating_sub(file.allocated()) / CHUNK_SIZE;
+            let chunks = (d - c + 1).min(room);
+            if chunks > 0 && file.store(*c, chunks, bytes).is_err() {
+                self.cache.failed_write();
+            }
+        }
+        Ok(fetched)
+    }
+
+    /// Downloads the missing chunks of the byte ranges `(offset, length)` that a driver is about
+    /// to read, all in one round: the reads then find them in the cache. Not for a file near its
+    /// share, whose chunks would not be stored and so be downloaded twice.
+    fn prefetch(&self, ranges: &[(u64, u64)]) {
+        let Some(file) = &self.file else { return };
+        let mut wanted = Vec::new();
+        for &(offset, len) in ranges {
+            let end = offset.saturating_add(len).min(self.size);
+            if offset >= end {
+                continue;
+            }
+            let (first, last) = (offset / CHUNK_SIZE, (end - 1) / CHUNK_SIZE);
+            let present = file.present(first, last);
+            wanted.extend(
+                runs(present.len(), |i| present[i] != 1)
+                    .into_iter()
+                    .map(|(a, b)| self.widen(file, first + a, first + b)),
+            );
+        }
+        let wanted = merge(wanted);
+        let bytes = wanted.iter().map(|(a, b)| (b - a + 1) * CHUNK_SIZE).sum();
+        if self.cache.max_file_bytes.saturating_sub(file.allocated()) >= bytes {
+            // a failure shows again in the read that needs the bytes
+            let _ = self.fetch(file, &wanted);
+        }
+    }
+
     fn chunk_len(&self, index: u64) -> u64 {
         CHUNK_SIZE.min(self.size - index * CHUNK_SIZE)
     }
 
-    /// Reads exactly `buffer.len()` bytes at `start` from the inner file, which it opens first if
-    /// this handle has not yet.
-    fn inner_read(&self, start: u64, buffer: &mut [u8]) -> Result<(), ()> {
+    /// The inner file, which it opens first if this handle has not yet.
+    fn inner(&self) -> Result<*mut gdal_sys::VSILFILE, ()> {
         if self.inner.get().is_null() {
             // SAFETY: a valid path; the handle is closed in `close`. The size is known, so the open
             // need not download the file's start (`GDAL_INGESTED_BYTES_AT_OPEN`, at least one chunk)
@@ -659,7 +793,12 @@ impl Handle {
             }
             self.inner.set(inner);
         }
-        let inner = self.inner.get();
+        Ok(self.inner.get())
+    }
+
+    /// Reads exactly `buffer.len()` bytes at `start` from the inner file.
+    fn inner_read(&self, start: u64, buffer: &mut [u8]) -> Result<(), ()> {
+        let inner = self.inner()?;
         // SAFETY: `inner` is open until `close`, and `buffer` holds `buffer.len()` bytes
         let got = unsafe {
             if gdal_sys::VSIFSeekL(inner, start, 0 /* SEEK_SET */) != 0 {
@@ -669,6 +808,48 @@ impl Handle {
         };
         (got == buffer.len()).then_some(()).ok_or(())
     }
+
+    /// Fills the buffers of `runs`, each from its first chunk on, from the inner file: several in
+    /// one multi-range read.
+    fn inner_read_runs(&self, runs: &mut [(u64, Vec<u8>)]) -> Result<(), ()> {
+        if let [(c, bytes)] = runs {
+            return self.inner_read(*c * CHUNK_SIZE, bytes);
+        }
+        if runs.is_empty() {
+            return Ok(());
+        }
+        let inner = self.inner()?;
+        let offsets: Vec<u64> = runs.iter().map(|(c, _)| c * CHUNK_SIZE).collect();
+        let sizes: Vec<usize> = runs.iter().map(|(_, bytes)| bytes.len()).collect();
+        let mut data: Vec<*mut c_void> = runs
+            .iter_mut()
+            .map(|(_, bytes)| bytes.as_mut_ptr().cast())
+            .collect();
+        // SAFETY: `inner` is open until `close`; each buffer holds its size
+        let result = unsafe {
+            gdal_sys::VSIFReadMultiRangeL(
+                c_int::try_from(runs.len()).map_err(|_| ())?,
+                data.as_mut_ptr(),
+                offsets.as_ptr(),
+                sizes.as_ptr(),
+                inner,
+            )
+        };
+        (result == 0).then_some(()).ok_or(())
+    }
+}
+
+/// Runs `(first, last)` sorted, with those that overlap or touch joined.
+fn merge(mut runs: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
+    runs.sort_unstable();
+    let mut out: Vec<(u64, u64)> = Vec::new();
+    for (a, b) in runs {
+        match out.last_mut() {
+            Some((_, last)) if a <= *last + 1 => *last = (*last).max(b),
+            _ => out.push((a, b)),
+        }
+    }
+    out
 }
 
 /// The runs `(first, last)` of consecutive indices below `len` that `pick` selects.
@@ -699,21 +880,53 @@ fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// The link through which workers share the version of a remote file: a SHA-256 of key and inner
 /// path.
 fn version_link(cache: &ByteCache, key: &str, inner: &[u8]) -> PathBuf {
+    cache.directory.join(format!(
+        "{}.{VERSION_EXTENSION}",
+        hex(&file_hash(key, inner))
+    ))
+}
+
+/// A SHA-256 of key and inner path.
+fn file_hash(key: &str, inner: &[u8]) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(key.as_bytes());
     hash.update([0]);
     hash.update(inner);
-    cache
-        .directory
-        .join(format!("{}.{VERSION_EXTENSION}", hex(&hash.finalize())))
+    hash.finalize().into()
+}
+
+/// Held by the one worker that asks the remote file system for the version of a file, so that
+/// workers that open a file nobody knows at the same time ask once: the others wait and take the
+/// version from its link. Without the lock, e.g. after waiting [`ByteCacheConfig::lock_wait`], a
+/// worker asks itself.
+struct VersionLock<'a> {
+    _process: std::sync::MutexGuard<'a, ()>,
+    _workers: Option<ChunkLock<'a>>,
+}
+
+impl<'a> VersionLock<'a> {
+    fn wait(cache: &'a ByteCache, key: &str, inner: &CStr) -> Self {
+        let process = lock(&cache.asking);
+        // one of 2^20 bytes per file; files that share a byte only wait for each other
+        let hash = file_hash(key, inner.to_bytes());
+        let byte = u64::from(u32::from_be_bytes([0, hash[0], hash[1], hash[2]]) >> 4);
+        let workers = cache
+            .version_locks
+            .as_ref()
+            .and_then(|file| ChunkLock::wait(file, byte, 1, cache.lock_wait));
+        Self {
+            _process: process,
+            _workers: workers,
+        }
+    }
 }
 
 /// The version of a remote file that this or another worker checked less than
-/// [`VERSION_CHECK_INTERVAL`] ago.
+/// [`ByteCacheConfig::version_check`] ago.
 fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
     let id = (key.to_string(), inner.to_bytes().to_vec());
     if let Some((version, checked)) = lock(&cache.versions).get(&id)
-        && checked.elapsed() < VERSION_CHECK_INTERVAL
+        && checked.elapsed() < cache.version_trust
     {
         return Some(version.clone());
     }
@@ -724,7 +937,7 @@ fn known(cache: &ByteCache, key: &str, inner: &CStr) -> Option<Version> {
         .ok()?
         .elapsed()
         .ok()?;
-    if age >= VERSION_CHECK_INTERVAL {
+    if age >= cache.version_trust {
         return None;
     }
     let target = std::fs::read_link(&link).ok()?;
@@ -834,7 +1047,13 @@ unsafe extern "C" fn open(
     let Ok(inner) = CString::new(inner) else {
         return std::ptr::null_mut();
     };
-    let (version, handle) = match known(cache, key, &inner) {
+    let mut version_lock = None;
+    let known = known(cache, key, &inner).or_else(|| {
+        // another worker may ask for the version right now: wait for it and its answer
+        version_lock = Some(VersionLock::wait(cache, key, &inner));
+        self::known(cache, key, &inner)
+    });
+    let (version, handle) = match known {
         Some(version) => (version, std::ptr::null_mut()),
         None => {
             // SAFETY: a valid path and buffer; the handle is closed in `close` or below. Opened as
@@ -870,6 +1089,7 @@ unsafe extern "C" fn open(
             checked
         }
     };
+    drop(version_lock);
     let size = version.size;
     let file = CacheFile::open(&cache.directory, &version.stem, size)
         .inspect_err(|_| cache.failed_write())
@@ -883,6 +1103,7 @@ unsafe extern "C" fn open(
         position: 0,
         eof: false,
         touched: Instant::now(),
+        fetch_chunks: cache.fetch_chunks,
     }))
     .cast()
 }
@@ -926,7 +1147,12 @@ unsafe extern "C" fn stat(
     };
     // `VSIStatBufL` is `stat64` on Linux, opaque in the bindings
     let buffer = stat_buf.cast::<libc::stat64>();
-    if let Some(version) = known(cache, key, &inner) {
+    let mut version_lock = None;
+    let known = known(cache, key, &inner).or_else(|| {
+        version_lock = Some(VersionLock::wait(cache, key, &inner));
+        self::known(cache, key, &inner)
+    });
+    if let Some(version) = known {
         // SAFETY: GDAL passes a buffer for one stat
         unsafe {
             let stat_buf = buffer;
@@ -1033,7 +1259,10 @@ unsafe extern "C" fn read_multi_range(
     sizes: *const usize,
 ) -> c_int {
     let h = unsafe { handle(file) };
-    for i in 0..usize::try_from(ranges).unwrap_or(0) {
+    let ranges = usize::try_from(ranges).unwrap_or(0);
+    // SAFETY: GDAL passes `ranges` offsets and sizes
+    h.prefetch(&unsafe { byte_ranges(ranges, offsets, sizes) });
+    for i in 0..ranges {
         // SAFETY: GDAL passes `ranges` buffers, offsets and sizes
         let (buffer, offset, size) = unsafe { (*data.add(i), *offsets.add(i), *sizes.add(i)) };
         if size == 0 {
@@ -1045,6 +1274,30 @@ unsafe extern "C" fn read_multi_range(
         }
     }
     0
+}
+
+/// The ranges a driver is about to read: their missing chunks are downloaded in one round.
+unsafe extern "C" fn advise_read(
+    file: *mut c_void,
+    ranges: c_int,
+    offsets: *const gdal_sys::vsi_l_offset,
+    sizes: *const usize,
+) {
+    let h = unsafe { handle(file) };
+    // SAFETY: GDAL passes `ranges` offsets and sizes
+    h.prefetch(&unsafe { byte_ranges(usize::try_from(ranges).unwrap_or(0), offsets, sizes) });
+}
+
+/// # Safety
+/// `offsets` and `sizes` must hold `ranges` values.
+unsafe fn byte_ranges(
+    ranges: usize,
+    offsets: *const gdal_sys::vsi_l_offset,
+    sizes: *const usize,
+) -> Vec<(u64, u64)> {
+    (0..ranges)
+        .map(|i| unsafe { (*offsets.add(i), *sizes.add(i) as u64) })
+        .collect()
 }
 
 unsafe extern "C" fn eof(file: *mut c_void) -> c_int {
@@ -1095,6 +1348,9 @@ mod tests {
                 size_bytes: 1 << 30,
                 max_file_bytes: TEST_FILE_CAP,
                 lock_wait: TEST_LOCK_WAIT,
+                version_check: Duration::from_secs(60),
+                fetch_bytes: CHUNK_SIZE,
+                file_extensions: vec!["tif".into()],
             })
             .unwrap();
             (dir, cache)
@@ -1171,6 +1427,7 @@ mod tests {
             position: 0,
             eof: false,
             touched: Instant::now(),
+            fetch_chunks: 1,
         }
     }
 
@@ -1557,6 +1814,52 @@ mod tests {
         );
     }
 
+    /// Workers that open a file nobody knows at the same time: one asks for its version, the
+    /// others wait for the answer.
+    #[test]
+    #[serial_test::serial]
+    fn it_asks_once_for_a_version_that_several_open_at_once() {
+        let _ = cache();
+        // slow answers, so that the opens overlap
+        let server = super::test_range_server::RangeServer::start(
+            test_data("raster/landcover"),
+            Duration::from_millis(200),
+        );
+        let remote = PathBuf::from(server.vsicurl_path("landcover.tif"));
+        for (name, value) in [
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif"),
+            ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
+            ("GDAL_HTTP_NETRC", "NO"),
+        ] {
+            gdal::config::set_config_option(name, value).unwrap();
+        }
+        let open = |n: u64| {
+            let path = CString::new(wrap(&remote, &key(n)).unwrap().to_str().unwrap()).unwrap();
+            // SAFETY: a valid path; closed at once
+            unsafe {
+                let file = gdal_sys::VSIFOpenL(path.as_ptr(), c"rb".as_ptr());
+                assert!(!file.is_null());
+                gdal_sys::VSIFCloseL(file);
+            }
+        };
+        open(13);
+        let (alone, _) = server.totals();
+        assert!(alone > 0);
+
+        // another key, so nobody knows the version; GDAL's own knowledge of the file is gone
+        unsafe { gdal_sys::VSICurlClearCache() };
+        std::thread::scope(|scope| {
+            for _ in 0..3 {
+                scope.spawn(|| open(14));
+            }
+        });
+        assert_eq!(
+            server.totals().0,
+            2 * alone,
+            "asked once more, not three times"
+        );
+    }
+
     /// The inner directory's listing, so that drivers find sibling files by one listing.
     #[test]
     fn it_lists_the_inner_directory() {
@@ -1781,6 +2084,84 @@ mod tests {
         let mut handle = handle_on(&path, 20, 10);
         assert_eq!(handle.read_at(u64::MAX, &mut [0_u8; 8]), 0);
         close(&handle);
+    }
+
+    #[test]
+    fn it_downloads_whole_fetch_sizes_around_a_missing_chunk() {
+        let len = 40 * CHUNK_SIZE as usize + 5;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 21, len as u64);
+        let read = |handle: &mut Handle, chunk: u64| {
+            let mut buffer = [0_u8; 100];
+            let offset = chunk * CHUNK_SIZE + 7;
+            assert_eq!(handle.read_at(offset, &mut buffer), 100);
+            assert_eq!(buffer[..], bytes[offset as usize..offset as usize + 100]);
+        };
+        let cached = |handle: &Handle| -> Vec<u64> {
+            let map = handle.file.as_ref().unwrap().present(0, 40);
+            (0..=40).filter(|&i| map[i as usize] == 1).collect()
+        };
+
+        read(&mut handle, 19); // one chunk, as the fetch size is one
+        assert_eq!(cached(&handle), [19]);
+
+        handle.fetch_chunks = 16;
+        read(&mut handle, 21); // its multiple is 16..=31, of which 19 is cached
+        assert_eq!(cached(&handle), (19..=31).collect::<Vec<_>>());
+        read(&mut handle, 39); // the last multiple ends with the file
+        assert_eq!(cached(&handle), (19..=40).collect::<Vec<_>>());
+        close(&handle);
+    }
+
+    #[test]
+    fn it_downloads_the_missing_runs_of_one_read_together() {
+        let len = 6 * CHUNK_SIZE as usize;
+        let (_dir, path, bytes) = file(len);
+        let mut handle = handle_on(&path, 22, len as u64);
+        let mut one = [0_u8; 10];
+        assert_eq!(handle.read_at(2 * CHUNK_SIZE, &mut one), 10); // chunk 2 is cached
+
+        // chunks 1 and 3 are missing around it
+        let mut buffer = vec![0_u8; 3 * CHUNK_SIZE as usize];
+        assert_eq!(handle.read_at(CHUNK_SIZE, &mut buffer), buffer.len());
+        assert_eq!(
+            buffer[..],
+            bytes[CHUNK_SIZE as usize..4 * CHUNK_SIZE as usize]
+        );
+        assert_eq!(
+            handle.file.as_ref().unwrap().present(0, 5),
+            [0, 1, 1, 1, 0, 0]
+        );
+
+        // ranges a driver announces are there before it reads them
+        handle.prefetch(&[(0, 10), (5 * CHUNK_SIZE + 3, 10)]);
+        assert_eq!(
+            handle.file.as_ref().unwrap().present(0, 5),
+            [1, 1, 1, 1, 0, 1]
+        );
+        close(&handle);
+    }
+
+    #[test]
+    fn it_merges_runs() {
+        assert_eq!(
+            merge(vec![(8, 9), (0, 3), (2, 5), (6, 6), (11, 12)]),
+            [(0, 6), (8, 9), (11, 12)]
+        );
+    }
+
+    #[test]
+    fn it_caches_only_files_with_a_listed_extension() {
+        let extensions = ["tif".to_string(), "jp2".to_string()];
+        let cached = |path: &str| has_extension(Path::new(path), &extensions);
+
+        assert!(cached("/vsis3/bucket/scene/B04.tif"));
+        assert!(cached("/vsis3/bucket/scene/B04.JP2"));
+        assert!(cached("/vsicurl/https://host/a.tif?token=x.nc&b=c/d"));
+        assert!(!cached("/vsis3/bucket/cube.nc"));
+        assert!(!cached("/vsicurl/https://host/a.nc?format=.tif"));
+        assert!(!cached("/vsis3/bucket.tif/scene"));
+        assert!(!cached("/vsis3/bucket/tif"));
     }
 
     #[test]

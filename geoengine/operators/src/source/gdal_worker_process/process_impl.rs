@@ -321,11 +321,11 @@ impl GdalDatasetHolder {
         }
     }
 
-    /// The path GDAL opens: remote files through the byte cache if it is on, keyed by the
-    /// parameters that decide which bytes the dataset may read.
+    /// The path GDAL opens: remote files with one of the cache's extensions through the byte cache
+    /// if it is on, keyed by the parameters that decide which bytes the dataset may read.
     fn path_for_open(&self, dataset_params: &GdalDatasetParameters) -> std::path::PathBuf {
         let path = dataset_params.file_path_for_open();
-        if self.byte_cache.is_none() {
+        if !self.byte_cache.is_some_and(|cache| cache.caches(&path)) {
             return path;
         }
         // collision-resistant: the parameters, credentials included, come partly from users
@@ -1694,6 +1694,9 @@ mod tests {
                         size_bytes: 1 << 30,
                         max_file_bytes: 1 << 28,
                         lock_wait: std::time::Duration::from_secs(10),
+                        version_check: std::time::Duration::from_secs(60),
+                        fetch_bytes: 64 * 1024,
+                        file_extensions: vec!["tif".into()],
                     })
                     .expect("the cache installs");
                 (dir, cache)
