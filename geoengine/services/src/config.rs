@@ -661,6 +661,8 @@ pub struct ByteCacheSettings {
     pub version_check_seconds: u64,
     /// the least a worker downloads for missing chunks, in multiples of 64
     pub fetch_kb: u64,
+    /// extensions of the remote files read through the cache; other files are read directly
+    pub file_extensions: Vec<String>,
 }
 
 impl Default for ByteCacheSettings {
@@ -672,6 +674,7 @@ impl Default for ByteCacheSettings {
             lock_wait_seconds: 10,
             version_check_seconds: 60,
             fetch_kb: 1024,
+            file_extensions: vec!["tif".into(), "tiff".into(), "jp2".into()],
         }
     }
 }
@@ -766,6 +769,7 @@ impl From<GdalProcessPoolWorkerConfig>
                         config.byte_cache.version_check_seconds,
                     ),
                     fetch_bytes: config.byte_cache.fetch_kb * 1024,
+                    file_extensions: config.byte_cache.file_extensions,
                 }
             }),
         }
@@ -1246,6 +1250,7 @@ mod tests {
                     lock_wait: std::time::Duration::from_secs(10),
                     version_check: std::time::Duration::from_secs(60),
                     fetch_bytes: 1024 * 1024,
+                    file_extensions: vec!["tif".into(), "tiff".into(), "jp2".into()],
                 }
             )
         );

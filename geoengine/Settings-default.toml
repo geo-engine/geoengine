@@ -374,6 +374,9 @@ version_check_seconds = 60
 # views in a bench of JP2 views over S3 at 100 ms per request; larger sizes save more requests but
 # make workers wait longer for each other's downloads.
 fetch_kb = 1024
+# Extensions of the remote files read through the cache. Its chunks pay off for formats read in
+# blocks, like COG and JP2; other files, e.g. NetCDF, are read directly.
+file_extensions = ["tif", "tiff", "jp2"]
 
 [data]
 volumes = { test_data = "test_data/" }

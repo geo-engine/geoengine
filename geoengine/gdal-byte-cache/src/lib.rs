@@ -123,6 +123,9 @@ pub struct ByteCacheConfig {
     /// The least a worker downloads for missing chunks: it widens a missing run to multiples of
     /// this size, as far as the chunks around it are missing too. More bytes, fewer requests.
     pub fetch_bytes: u64,
+    /// Extensions of the remote files read through the cache, without the dot and in any case,
+    /// e.g. `tif` and `jp2`. Other files, e.g. NetCDF, are read directly.
+    pub file_extensions: Vec<String>,
 }
 
 /// Chunk counters of a process since the last [`ByteCache::take_counts`].
@@ -160,6 +163,8 @@ pub struct ByteCache {
     version_trust: Duration,
     /// [`ByteCacheConfig::fetch_bytes`] in chunks, at least 1
     fetch_chunks: u64,
+    /// [`ByteCacheConfig::file_extensions`]
+    file_extensions: Vec<String>,
     hits: AtomicU64,
     misses: AtomicU64,
     waited: AtomicU64,
@@ -183,6 +188,12 @@ impl ByteCache {
             waited: self.waited.swap(0, Ordering::Relaxed),
             write_failures: self.write_failures.swap(0, Ordering::Relaxed),
         }
+    }
+
+    /// Whether the worker reads `path` through the cache: its extension is one of
+    /// [`ByteCacheConfig::file_extensions`]. [`wrap`] decides whether it is a remote file.
+    pub fn caches(&self, path: &Path) -> bool {
+        has_extension(path, &self.file_extensions)
     }
 
     /// Forgets the versions of the remote file `inner` (e.g. `/vsicurl/https://...`), so that the
@@ -293,6 +304,7 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         lock_wait: config.lock_wait,
         version_trust: config.version_check,
         fetch_chunks: (config.fetch_bytes / CHUNK_SIZE).max(1),
+        file_extensions: config.file_extensions.clone(),
         hits: AtomicU64::new(0),
         misses: AtomicU64::new(0),
         waited: AtomicU64::new(0),
@@ -354,6 +366,20 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
 pub fn wrap(path: &Path, key: &str) -> Option<PathBuf> {
     let path = path.to_str()?;
     (is_cache_stem(key) && is_remote(path)).then(|| PathBuf::from(format!("{PREFIX}{key}{path}")))
+}
+
+/// Whether the file name of `path` ends in one of `extensions`, ignoring case and a URL's query.
+fn has_extension(path: &Path, extensions: &[String]) -> bool {
+    let Some(path) = path.to_str() else {
+        return false;
+    };
+    let path = path.split(['?', '#']).next().unwrap_or(path);
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        extensions
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(extension))
+    })
 }
 
 fn is_remote(path: &str) -> bool {
@@ -1331,6 +1357,7 @@ mod tests {
                 lock_wait: TEST_LOCK_WAIT,
                 version_check: Duration::from_secs(60),
                 fetch_bytes: CHUNK_SIZE,
+                file_extensions: vec!["tif".into()],
             })
             .unwrap();
             (dir, cache)
@@ -2128,6 +2155,20 @@ mod tests {
             merge(vec![(8, 9), (0, 3), (2, 5), (6, 6), (11, 12)]),
             [(0, 6), (8, 9), (11, 12)]
         );
+    }
+
+    #[test]
+    fn it_caches_only_files_with_a_listed_extension() {
+        let extensions = ["tif".to_string(), "jp2".to_string()];
+        let cached = |path: &str| has_extension(Path::new(path), &extensions);
+
+        assert!(cached("/vsis3/bucket/scene/B04.tif"));
+        assert!(cached("/vsis3/bucket/scene/B04.JP2"));
+        assert!(cached("/vsicurl/https://host/a.tif?token=x.nc&b=c/d"));
+        assert!(!cached("/vsis3/bucket/cube.nc"));
+        assert!(!cached("/vsicurl/https://host/a.nc?format=.tif"));
+        assert!(!cached("/vsis3/bucket.tif/scene"));
+        assert!(!cached("/vsis3/bucket/tif"));
     }
 
     #[test]
