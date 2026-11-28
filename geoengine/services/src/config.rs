@@ -671,7 +671,7 @@ impl Default for ByteCacheSettings {
             directory: "gdal-byte-cache".into(),
             lock_wait_seconds: 10,
             version_check_seconds: 60,
-            fetch_kb: 64,
+            fetch_kb: 1024,
         }
     }
 }
@@ -1245,7 +1245,7 @@ mod tests {
                     max_file_bytes: 2 * 1024 * 1024 / 100 * 25,
                     lock_wait: std::time::Duration::from_secs(10),
                     version_check: std::time::Duration::from_secs(60),
-                    fetch_bytes: 64 * 1024,
+                    fetch_bytes: 1024 * 1024,
                 }
             )
         );
