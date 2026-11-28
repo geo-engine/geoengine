@@ -124,7 +124,7 @@ pub struct ByteCacheConfig {
     /// this size, as far as the chunks around it are missing too. More bytes, fewer requests.
     pub fetch_bytes: u64,
     /// Extensions of the remote files read through the cache, without the dot and in any case,
-    /// e.g. `tif` and `jp2`. Other files, e.g. NetCDF, are read directly.
+    /// e.g. `tif` and `jp2`. Other files, e.g. `NetCDF`, are read directly.
     pub file_extensions: Vec<String>,
 }
 
@@ -371,11 +371,8 @@ fn has_extension(path: &Path, extensions: &[String]) -> bool {
     };
     let path = path.split(['?', '#']).next().unwrap_or(path);
     let name = path.rsplit('/').next().unwrap_or(path);
-    name.rsplit_once('.').is_some_and(|(_, extension)| {
-        extensions
-            .iter()
-            .any(|e| e.eq_ignore_ascii_case(extension))
-    })
+    name.rsplit_once('.')
+        .is_some_and(|(_, extension)| extensions.iter().any(|e| e.eq_ignore_ascii_case(extension)))
 }
 
 fn is_remote(path: &str) -> bool {
