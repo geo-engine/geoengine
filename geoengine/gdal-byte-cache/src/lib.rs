@@ -333,12 +333,8 @@ pub fn install(config: &ByteCacheConfig) -> std::io::Result<&'static ByteCache> 
         (*callbacks).tell = Some(tell);
         (*callbacks).seek = Some(seek);
         (*callbacks).read = Some(read);
-        // shortcut: a switch for the bench that decides whether the GeoTIFF driver reads better
-        // with multi-range reads (one thread decodes) or without (it advises its reads, then
-        // decodes with its threads); remove it with the losing side.
-        if std::env::var_os("GEOENGINE_BYTE_CACHE_NO_MULTI_RANGE").is_none() {
-            (*callbacks).read_multi_range = Some(read_multi_range);
-        }
+        // COG reads were as fast with multi-range reads as with advised reads and threaded decoding
+        (*callbacks).read_multi_range = Some(read_multi_range);
         (*callbacks).advise_read = Some(advise_read);
         (*callbacks).eof = Some(eof);
         (*callbacks).close = Some(close);
